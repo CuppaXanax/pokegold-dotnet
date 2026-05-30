@@ -31,8 +31,13 @@ type PlayerState =
       SrcY: int
       /// Frames elapsed in the current motion (0 .. its duration).
       Progress: int
-      /// Completed translation steps so far (walks and hops). Not used for the leg
-      /// animation — that reads off Progress — but handy for step-driven events.
+      /// Free-running leg-animation tick, mirroring GSC's `OBJECT_STEP_FRAME`: it
+      /// advances once per frame the player runs a step/bump action and is *not*
+      /// reset between tiles (so the legs alternate smoothly and a held bump keeps
+      /// marching). Standing/Turning hold it still. Drives the walk-cycle phase.
+      AnimFrame: int
+      /// Completed translation steps so far (walks and hops). Used to pick the lead
+      /// foot for a ledge hop; the walk/bump phase comes from AnimFrame instead.
       StepCount: int
       /// Set true for exactly the one frame a wall-bump begins, so a future audio
       /// system can play the bump SFX. Transient; always false at rest.
@@ -67,11 +72,12 @@ module Player =
     [<Literal>]
     let TurnFrames = 8
 
-    /// Frames a wall-bump's in-place march runs for: a full stand–step–stand–step
-    /// leg cycle at half walk speed (8 frames per pose), matching GSC's
-    /// `SetFacingBumpAction` (`OBJECT_STEP_FRAME >> 3`).
+    /// Frames a wall-bump's in-place march locks input for — one step's worth, so
+    /// holding into a wall re-bumps each cycle. The leg cadence itself is half a
+    /// walk's (GSC `SetFacingBumpAction` shifts the free-running counter by 3 where
+    /// the walk shifts by 2); that comes from AnimFrame, not this duration.
     [<Literal>]
-    let BumpFrames = 32
+    let BumpFrames = StepFrames
 
     /// GSC's 16-entry ledge-hop vertical offset table (px, negative = up). The
     /// sprite rises to a −12 px apex, holds there, then lands flat — replacing a
@@ -101,6 +107,7 @@ module Player =
           SrcX = cx
           SrcY = cy
           Progress = 0
+          AnimFrame = 0
           StepCount = 0
           Bumped = false }
 

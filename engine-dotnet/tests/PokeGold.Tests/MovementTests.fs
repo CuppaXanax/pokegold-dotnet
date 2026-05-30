@@ -283,57 +283,70 @@ let ``walking into a wall bumps in place and pulses the SFX hook once`` () =
             Assert.False(p2.Bumped)
 
 [<Fact>]
-let ``a held bump animates a half-speed stand-step-stand-step leg cycle`` () =
-    // GSC's wall-bump runs the same 4-phase leg animation as a walk — stand, step,
-    // stand, step — but at half speed (a pose every 8 frames, vs 4 for a walk; see
-    // SetFacingBumpAction's `OBJECT_STEP_FRAME >> 3`). So across one BumpFrames
-    // cycle the drawn pose must hold for 8-frame blocks and return to the neutral
-    // standing pose between the two strides.
-    let map, coll, _ = start ()
+let ``walking cycles neutral and stride every half-step, alternating the foot`` () =
+    // GSC's free-running leg counter shows the neutral pose then a stride each tile,
+    // alternating the lead foot tile to tile. At our 16-frame tile a phase lasts 8
+    // frames (AnimFrame >> 3). Sample the drawn pose as the counter advances.
+    let walk af =
+        Animation.frameAndFlip
+            { Player.create 5 5 with
+                Facing = Down
+                Motion = Walking
+                AnimFrame = af }
 
-    match findLedge map coll with
-    | None -> failwith "no usable ledge found on Azalea Town"
-    | Some((cx, cy), _) ->
-        let allowed = Collision.tryLedge (Movement.collisionIdAtCell map coll cx cy) |> Option.get
+    let poses = [ for af in 0 .. 31 -> walk af ]
 
-        let blockedNonLedge =
-            [ Down; Up; Left; Right ]
-            |> List.tryFind (fun d2 ->
-                let dx, dy = delta d2
-                not (List.contains d2 allowed)
-                && not (Movement.cellWalkable map coll (cx + dx) (cy + dy)))
+    // Four 8-frame phases over two tiles, each holding one pose.
+    let blocks = poses |> List.chunkBySize 8
+    Assert.Equal(4, List.length blocks)
 
-        match blockedNonLedge with
-        | None -> () // this ledge has no plain blocked neighbour to bump
-        | Some d2 ->
-            let p0 = { Player.create cx cy with Facing = d2 }
+    for b in blocks do
+        Assert.Equal(1, b |> List.distinct |> List.length)
 
-            // Sample the drawn pose every frame across one full bump cycle
-            // (Progress 0..BumpFrames-1, all held in the Bumping motion).
-            let mutable p = p0
+    match blocks |> List.map List.head with
+    | [ neutralA; strideA; neutralB; strideB ] ->
+        // Even phases are the neutral standing-down pose...
+        Assert.Equal<int * bool>((0, false), neutralA)
+        Assert.Equal<int * bool>(neutralA, neutralB)
+        // ...odd phases are a stride, and the lead foot mirrors on the second.
+        Assert.Equal<int * bool>((3, false), strideA)
+        Assert.Equal<int * bool>((3, true), strideB)
+    | _ -> failwith "expected four animation phases over two tiles"
 
-            let poses =
-                [ for _ in 1 .. Player.BumpFrames do
-                      p <- Movement.step map coll (press d2) p
-                      yield Animation.frameAndFlip p ]
+[<Fact>]
+let ``a wall-bump marches the legs at half walk speed`` () =
+    // SetFacingBumpAction shifts the free-running counter one more bit than the walk
+    // (AnimFrame >> 4 vs >> 3), so each bump pose holds for 16 frames — twice a
+    // walk's 8 — i.e. the legs march in place at half speed.
+    let bump af =
+        Animation.frameAndFlip
+            { Player.create 5 5 with
+                Facing = Down
+                Motion = Bumping
+                AnimFrame = af }
 
-            // Four 8-frame phases: each holds a single pose (half walk speed).
-            let blocks = poses |> List.chunkBySize 8
-            Assert.Equal(4, List.length blocks)
+    let poses = [ for af in 0 .. 63 -> bump af ]
 
-            for b in blocks do
-                Assert.Equal(1, b |> List.distinct |> List.length)
+    // The walk holds a pose for 8 frames; the bump must hold for 16.
+    let walkRun =
+        [ for af in 0 .. 31 ->
+              Animation.frameAndFlip
+                  { Player.create 5 5 with
+                      Facing = Down
+                      Motion = Walking
+                      AnimFrame = af } ]
+        |> List.chunkBySize 8
 
-            let reps = blocks |> List.map List.head
+    let bumpBlocks = poses |> List.chunkBySize 16
+    Assert.Equal(List.length walkRun, List.length bumpBlocks)
 
-            match reps with
-            | [ stand0; step1; stand2; step3 ] ->
-                // The legs return to the same neutral pose between strides...
-                Assert.Equal<int * bool>(stand0, stand2)
-                // ...and each stride is a distinct, stepping pose.
-                Assert.NotEqual<int * bool>(stand0, step1)
-                Assert.NotEqual<int * bool>(stand2, step3)
-            | _ -> failwith "expected exactly four animation phases"
+    for b in bumpBlocks do
+        Assert.Equal(1, b |> List.distinct |> List.length)
+
+    // Both the neutral and stride poses appear across the half-speed cycle.
+    let distinct = poses |> List.distinct
+    Assert.Contains((0, false), distinct)
+    Assert.Contains((3, false), distinct)
 
 [<Fact>]
 let ``the ledge-hop arc rises to a 12px apex and lands flat (GSC table)`` () =
