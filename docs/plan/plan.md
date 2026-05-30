@@ -110,6 +110,83 @@ Bottom-up: something on screen early; each milestone exercises the next. Sizing 
 - **Risks:** matching the original's grid-step cadence/feel. *Mitigation:* tune step duration in
   frames against video reference.
 
+#### M4 addendum — locomotion taxonomy & ledge hops
+
+The base M4 above covers *walk + face + block-on-solid*. The disassembly's player
+movement, however, is a small state machine over the collision permission table: the
+high nybble of a tile's `COLL_*` id selects a **movement behavior**, not just
+"passable / solid." Captured here so later milestones don't rediscover it. Source of
+truth: `engine/overworld/player_movement.asm` (`DoPlayerMovement`), the permission
+scan `GetMovementPermissions` (`home/map.asm`), `constants/collision_constants.asm`,
+and `data/collision/collision_permissions.asm`.
+
+**Player states** (`wPlayerState`): `NORMAL`, `BIKE`, `SKATE` (ice), `SURF`,
+`SURF_PIKA`. **Step types** (animation + distance): `STEP_SLOW`, `STEP_WALK`,
+`STEP_BIKE` (fast), `STEP_LEDGE` (2-tile hop), `STEP_ICE` (slide), `STEP_TURN`,
+`STEP_BACK_LEDGE`, `STEP_WALK_IN_PLACE`.
+
+**Permission-tile behaviors** (high nybble groups):
+- **Plain:** `LAND_TILE`/`WATER_TILE`/`WALL_TILE` — walk, surf, block *(have)*.
+- **Ledges** (`$a0-$a7`, `HI_NYBBLE_LEDGES`): `HOP_DOWN/LEFT/RIGHT` (+ diagonals;
+  `UP` variants unused) — one-way hop, allowed only if facing matches a per-ledge
+  mask; plays `SFX_JUMP_OVER_LEDGE`, runs `STEP_LEDGE` (2-tile arc + shadow).
+- **Grass:** `TALL_GRASS` ($18), `LONG_GRASS` ($14) — walkable; hook for wild
+  encounter check + rustle (encounter system itself is M6/M9).
+- **Ice:** `ICE` ($23) — forced-continue in last direction (`STEP_ICE` slide).
+- **Water features:** `WHIRLPOOL` ($24), `WATERFALL` ($33), `CURRENT_*` ($38-$3b) —
+  force movement in a fixed direction (surf-state only).
+- **Conveyors:** `WALK_*` ($41-$44, alt $50-$53) force-walk; `BRAKE_*` stop.
+- **Directional one-way walls** (`$b0-$b7`) and **buoys** (`$c0-$c7`).
+- **Entrances** gated to approach-from-above: `DOOR` ($71), `STAIRCASE` ($7a),
+  `CAVE` ($7b); `LADDER` ($72) is visual-only walkable.
+- **Warps:** directional `WARP_CARPET_*` ($70/$76/$78/$7e), `WARP_PANEL` ($7c),
+  `PIT` ($60) — trigger a warp/teleport.
+- **Talk-through walls** (`WALL_TILE | TALK`, `$90-$9f`): `COUNTER`, `PC`, `TV`,
+  `BOOKSHELF`, `MART_SHELF`, `WINDOW`, … — solid but interactable.
+- **Field-move gates:** `CUT_TREE` ($12), `HEADBUTT_TREE` ($15) — solid until the
+  matching field move; strength boulders are objects, not tiles.
+
+**In scope for M4 (this addendum) — ledge hops only:**
+- **Deliverables:** detect ledge tiles by the `HI_NYBBLE_LEDGES` ($a0) group on the
+  *destination* cell; a facing→allow mask; a `STEP_LEDGE` state that hops **two
+  cells** in the faced direction with a parabolic arc, ignoring collision on the
+  intermediate (ledge) cell. Hop SFX deferred to M8 — silent hop is acceptable.
+- **Acceptance:** standing above a south ledge and pressing Down hops two cells
+  south and lands; pressing into that ledge from any other facing is blocked;
+  left/right ledges behave symmetrically.
+
+**Rubber-duck findings (verified against the disassembly + our code):**
+- **Ledge tiles are `LAND_TILE` permission**, not wall (confirmed in
+  `collision_permissions.asm`). So our existing `isWalkable` returns *true* for
+  them — the real game blocks normal entry via `GetMovementPermissions`/`wTilePermissions`,
+  then `.TryStep` bumps and `.TryJump` catches it. **Implication:** in `GameCore` the
+  ledge check must run *before* the normal walkable test, and a ledge cell is only
+  enterable by hopping in an allowed facing; from any other facing it's solid.
+- **Hops are always cardinal.** The ledge_table (`player_movement.asm:383-390`) maps a
+  ledge id's low nybble (0-7) to a *facing mask*, and the hop runs in the player's
+  walking direction (`jump_step DOWN/UP/LEFT/RIGHT`). Diagonal ledge ids ($a4-$a7)
+  only permit **two approach facings** (e.g. `FACE_RIGHT | FACE_DOWN`); they never
+  produce diagonal movement. So all 8 ids are handled by one mask table — no diagonal
+  movement, nothing to defer. Mask table (low nybble → allowed facings):
+  `0→R, 1→L, 2→U, 3→D, 4→{R,D}, 5→{D,L}, 6→{U,R}, 7→{U,L}`.
+- **Data already supports this:** `Collision.BlockColl` keeps the raw `COLL_*` id per
+  quadrant. Add a pure accessor `collisionIdAt coll blockId qx qy` plus
+  `tryLedge : byte -> Direction list option`; no parser changes.
+- **Movement reuse:** existing interpolation uses `(cellX - srcX)`, so setting
+  `cellX = srcX + 2·dx` covers a 2-cell hop for free; add a `hopping` flag for a
+  `-sin(π·t)` vertical arc and a longer step duration. Landing tile is **not**
+  re-validated (mirrors the original). Shadow sprite deferred (minor).
+- **Testability:** add an optional start-cell arg to `GameCore` so a test can place
+  the player above a real Azalea ledge (`johto_modern` does contain ledge tiles) and
+  assert a 2-cell hop; plus pure `Collision` unit tests for ledge-id detection + mask.
+
+**Out of scope (catalogued above, deferred):** surfing & water-force tiles, ice
+slide, bike speed, conveyors/one-way walls/buoys, doors/stairs/warps (→ overworld
+events / M9+), grass encounters (→ M6/M9), field-move gates, NPC collision.
+
+Rubber-duck review: **passed** (findings folded in above).
+
+
 ### M5 — Text engine  · L
 - **Deliverables:** font tiles; text-box rendering; the **text script language** as a DU
   (`TX_*` commands + inline tokens) with an interpreter; typewriter output, line break, scroll,
