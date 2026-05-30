@@ -171,6 +171,28 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
 
     let cmds = song.Commands
 
+    // The APU (sound chip) backend. The sequencer below writes its register-level
+    // parameters each frame; the APU turns them into band-limited PCM.
+    let apu =
+        chans
+        |> Array.map (fun c ->
+            match c.Kind with
+            | Wave -> ApuWave
+            | Noise -> ApuNoise
+            | _ -> ApuPulse)
+        |> fun kinds -> Apu(sampleRate, kinds)
+
+    /// Snapshot one channel's current driver state into its APU voice. `eff` is the
+    /// effective 11-bit period (pulse/wave) after this frame's pitch effects.
+    let writeVoice (i: int) (c: Chan) (eff: int) (dacOn: bool) =
+        let panL = c.PanL > 0.0
+        let panR = c.PanR > 0.0
+        match c.Kind with
+        | Pulse1
+        | Pulse2 -> apu.SetPulse(i, dacOn, eff, c.Duty, int (c.EnvVol + 0.5), panL, panR)
+        | Wave -> apu.SetWave(i, dacOn && c.WaveVol > 0.0, eff, c.WaveTable, c.WaveVol, panL, panR)
+        | Noise -> apu.SetNoise(i, dacOn, c.NoiseFreq, c.NoiseWidth7, int (c.EnvVol + 0.5), panL, panR)
+
     // Decode a GB noise polynomial byte (NR43) into an LFSR clock frequency.
     let noiseParams (nr43: int) : float * bool =
         let s = (nr43 >>> 4) &&& 0xF
@@ -427,9 +449,10 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
             c.VibRateCount <- c.VibRateCount - 1
             0
 
-    /// Advance every channel by one 60 Hz frame and recompute its sampler Hz.
+    /// Advance every channel by one 60 Hz frame and write its APU register snapshot.
     let stepFrame () =
-        for c in chans do
+        for i in 0 .. chans.Length - 1 do
+            let c = chans.[i]
             if c.Active then
                 if c.FramesLeft > 0 then c.FramesLeft <- c.FramesLeft - 1
 
@@ -456,11 +479,14 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                     c.DutyPattern <- ((c.DutyPattern <<< 2) ||| (c.DutyPattern >>> 6)) &&& 0xFF
                     c.Duty <- (c.DutyPattern &&& 0xC0) >>> 6
 
-                // Fold per-frame pitch effects into an effective period → Hz.
-                if c.Kind <> Noise then
-                    let eff = c.BasePeriod + c.PitchOffset + vibratoOffset c
-                    let clamped = max 1 (min 2047 eff)
-                    c.Freq <- AudioData.periodToHz clamped
+                // Fold per-frame pitch effects into the effective period and hand the
+                // channel's register state to the APU.
+                let eff =
+                    if c.Kind = Noise then 0
+                    else max 1 (min 2047 (c.BasePeriod + c.PitchOffset + vibratoOffset c))
+                writeVoice i c eff c.On
+            else
+                writeVoice i c 0 false
 
         if loop && Array.forall (fun (c: Chan) -> not c.Active) chans then
             song.Channels
@@ -470,44 +496,6 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 c.Active <- true
                 c.CallStack.Clear()
                 c.Loops.Clear())
-
-    /// One voice's instantaneous sample in [-1, 1].
-    let voiceSample (c: Chan) : float =
-        if not c.On then 0.0
-        else
-            match c.Kind with
-            | Pulse1
-            | Pulse2 ->
-                if c.EnvVol <= 0.0 then 0.0
-                else
-                    let amp = c.EnvVol / 15.0
-                    let duty = [| 0.125; 0.25; 0.5; 0.75 |].[c.Duty]
-                    if c.Phase < duty then amp else -amp
-            | Wave ->
-                if c.WaveVol <= 0.0 then 0.0
-                else
-                    let i = int (c.Phase * 32.0) &&& 31
-                    (float c.WaveTable.[i] / 7.5 - 1.0) * c.WaveVol
-            | Noise ->
-                if c.EnvVol <= 0.0 then 0.0
-                else
-                    let amp = c.EnvVol / 15.0
-                    let bit = (~~~c.Lfsr) &&& 1
-                    if bit = 1 then amp else -amp
-
-    /// Advance a voice's oscillator phase by one output sample. The wave channel
-    /// runs an octave below a pulse channel for the same period register.
-    let advancePhase (c: Chan) =
-        match c.Kind with
-        | Noise ->
-            c.NoiseAcc <- c.NoiseAcc + c.NoiseFreq / float sampleRate
-            while c.NoiseAcc >= 1.0 do
-                c.NoiseAcc <- c.NoiseAcc - 1.0
-                let x = (c.Lfsr ^^^ (c.Lfsr >>> 1)) &&& 1
-                c.Lfsr <- (c.Lfsr >>> 1) ||| (x <<< 14)
-                if c.NoiseWidth7 then c.Lfsr <- (c.Lfsr &&& ~~~0x40) ||| (x <<< 6)
-        | Wave -> c.Phase <- (c.Phase + (c.Freq * 0.5) / float sampleRate) % 1.0
-        | _ -> c.Phase <- (c.Phase + c.Freq / float sampleRate) % 1.0
 
     let mutable sampleAcc = 0.0
 
@@ -523,16 +511,5 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 stepFrame ()
                 sampleAcc <- sampleAcc + samplesPerFrame
 
-            let mutable l = 0.0
-            let mutable r = 0.0
-            for c in chans do
-                if c.On then
-                    let s = voiceSample c
-                    l <- l + s * c.PanL
-                    r <- r + s * c.PanR
-                advancePhase c
-
+            apu.RenderOne(buffer, offset + n * 2, gain)
             sampleAcc <- sampleAcc - 1.0
-            let idx = offset + n * 2
-            buffer.[idx] <- buffer.[idx] + float32 (l * gain)
-            buffer.[idx + 1] <- buffer.[idx + 1] + float32 (r * gain)

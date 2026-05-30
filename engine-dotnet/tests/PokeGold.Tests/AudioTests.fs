@@ -146,3 +146,34 @@ let ``the note-period table is faithful to the GB formula`` () =
     Assert.Equal(1575, p)
     Assert.InRange(p, 1, 2047)
     Assert.InRange(AudioData.periodToHz p, 275.0, 279.0)
+
+/// Render a window and return the interleaved stereo buffer.
+let private renderBuf (player: SongPlayer) (frames: int) : float32[] =
+    let buf : float32[] = Array.zeroCreate (frames * 2)
+    player.Render(buf, 0, frames, 1.0)
+    buf
+
+[<Fact>]
+let ``the analog high-pass filter removes the DAC idle DC offset`` () =
+    // A steady pulse note rides on a negative DC pedestal at the DAC (a "low"
+    // sample maps to analog -1.0). A faithful APU's CGB high-pass must center the
+    // waveform, so the mean of a sustained tone settles near zero.
+    let song =
+        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundRet |] [| 1, 0 |]
+    let buf = renderBuf (SongPlayer(song, false, 44100)) 16000
+    // Skip the onset transient; average the left channel over the steady tail.
+    let tail = buf.[8000..] |> Array.mapi (fun i s -> i, s) |> Array.filter (fun (i, _) -> i % 2 = 0) |> Array.map snd
+    let mean = Array.average tail
+    Assert.InRange(mean, -0.05f, 0.05f)
+
+[<Fact>]
+let ``the band-limited pulse is not a raw two-level square`` () =
+    // A naive square emits only +amp / -amp. The band-limited APU (oversampling +
+    // FIR decimation) produces a continuum of intermediate values around each edge,
+    // which is exactly what removes the aliasing "harshness".
+    let song =
+        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundRet |] [| 1, 0 |]
+    let buf = renderBuf (SongPlayer(song, false, 44100)) 8000
+    let distinct = buf |> Array.filter (fun s -> s <> 0.0f) |> Array.distinct |> Array.length
+    Assert.True(distinct > 16, $"expected a band-limited continuum, got {distinct} distinct levels")
+

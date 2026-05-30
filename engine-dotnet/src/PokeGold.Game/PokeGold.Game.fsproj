@@ -49,6 +49,7 @@
     <Compile Include="Audio\AudioData.fs" />
     <Compile Include="Audio\SoundCommand.fs" />
     <Compile Include="Audio\SongParser.fs" />
+    <Compile Include="Audio\Apu.fs" />
     <Compile Include="Audio\Synth.fs" />
     <Compile Include="Audio\AudioEngine.fs" />
     <!-- Text:charmap-encoded streams + the typewriter box state machine. -->
