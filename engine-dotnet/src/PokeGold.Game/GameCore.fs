@@ -108,11 +108,15 @@ type GameCore() =
         let walking = moving
         let foot = walking && stepCount % 2 = 1
 
+        // Side walking can't alternate the foot by mirroring (that would flip the
+        // facing), so it steps between the walk-side and stand-side poses instead.
+        let sideFrame = if walking && stepCount % 2 = 0 then 5 else 2
+
         match facing with
         | Down -> (if walking then 3 else 0), foot
         | Up -> (if walking then 4 else 1), foot
-        | Left -> (if walking then 5 else 2), false
-        | Right -> (if walking then 5 else 2), true
+        | Left -> sideFrame, false
+        | Right -> sideFrame, true
 
     /// The framebuffer the host should present after each Tick.
     member _.Framebuffer = framebuffer
