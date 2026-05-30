@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 /// Game Boy screen geometry. The game core renders into a framebuffer of this
 /// fixed size; the host is responsible for presenting it scaled to the window.

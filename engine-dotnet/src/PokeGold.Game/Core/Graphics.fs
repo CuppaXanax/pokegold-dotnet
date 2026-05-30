@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 /// Drawing primitives that compose decoded tiles onto the framebuffer.
 module Graphics =

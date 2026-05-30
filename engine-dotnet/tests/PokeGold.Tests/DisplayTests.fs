@@ -2,6 +2,7 @@ module PokeGold.Tests.DisplayTests
 
 open Xunit
 open PokeGold.Game
+open PokeGold.Game.Core
 
 [<Fact>]
 let ``framebuffer has 160x144 RGBA pixels`` () =
@@ -34,7 +35,7 @@ let ``SetPixel writes the addressed pixel and ignores out-of-range`` () =
 
 [<Fact>]
 let ``Tick advances the frame counter`` () =
-    let core = GameCore()
+    let core = Game()
     Assert.Equal(0UL, core.Frame)
     core.Tick(Buttons.none)
     core.Tick(Buttons.none)

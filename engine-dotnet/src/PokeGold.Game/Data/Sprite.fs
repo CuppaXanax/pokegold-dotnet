@@ -1,4 +1,6 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Data
+
+open PokeGold.Game.Core
 
 /// The player's overworld sprite: six 16×16 frames decoded from a pret sprite
 /// PNG (16 px wide, 96 px tall). The frames, top to bottom, are:
@@ -45,19 +47,3 @@ module Sprite =
     /// Load a named pret overworld sprite (gfx/sprites/<name>.png).
     let loadNamed (name: string) : Sprite =
         ofTiles (Image.loadTiles $"gfx/sprites/{name}.png")
-
-    /// Draw a frame into `fb` with its top-left at (x, y), looking colors up in
-    /// `palette`. Index 0 is transparent (skipped). When `hflip` is set the frame
-    /// is mirrored horizontally, which turns the left-facing frames into
-    /// right-facing ones.
-    let draw (fb: Framebuffer) (palette: Palette) (sprite: Sprite) (frame: int) (x: int) (y: int) (hflip: bool) =
-        let px = sprite.Frames.[frame]
-
-        for r in 0..15 do
-            for c in 0..15 do
-                let sc = if hflip then 15 - c else c
-                let idx = int px.[r * Size + sc]
-
-                if idx <> 0 && idx < palette.Colors.Length then
-                    let col = palette.Colors.[idx]
-                    fb.SetPixel(x + c, y + r, col.R, col.G, col.B, col.A)

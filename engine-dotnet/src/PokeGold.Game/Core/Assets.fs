@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 open System.IO
 

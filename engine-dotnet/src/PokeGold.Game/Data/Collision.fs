@@ -1,7 +1,8 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Data
 
 open System
 open System.Text.RegularExpressions
+open PokeGold.Game.Core
 
 /// Walkability derived directly from the disassembly's collision data.
 ///

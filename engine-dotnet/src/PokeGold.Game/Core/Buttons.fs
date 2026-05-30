@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 /// The Game Boy button set for one frame of input. The host fills this from the
 /// keyboard (or a gamepad) and passes it to the game core each tick; the core

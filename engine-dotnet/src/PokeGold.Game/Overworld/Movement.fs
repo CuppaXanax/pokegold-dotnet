@@ -1,0 +1,87 @@
+namespace PokeGold.Game.Overworld
+
+open PokeGold.Game.Core
+open PokeGold.Game.Data
+
+/// The player-movement system: a pure function from (map, collision, input,
+/// player) to the next player state. Collision is checked on the 16-px cell grid
+/// and input is ignored mid-step (one grid step at a time), exactly matching the
+/// GSC overworld feel.
+module Movement =
+
+    let private delta (dir: Direction) : int * int =
+        match dir with
+        | Down -> 0, 1
+        | Up -> 0, -1
+        | Left -> -1, 0
+        | Right -> 1, 0
+
+    /// Whether the 16-px cell (cx, cy) can be walked on foot.
+    let cellWalkable (map: GameMap) (coll: Collision) (cx: int) (cy: int) : bool =
+        let cellsW = map.Width * 2
+        let cellsH = map.Height * 2
+
+        if cx < 0 || cy < 0 || cx >= cellsW || cy >= cellsH then
+            false
+        else
+            let blockId = int (Map.blockAt map (cx / 2) (cy / 2))
+            Collision.isWalkable coll blockId (cx % 2) (cy % 2)
+
+    /// The first walkable cell found spiralling out from the map center — used to
+    /// place the player when no explicit spawn is given.
+    let findStartCell (map: GameMap) (coll: Collision) : int * int =
+        let cellsW = map.Width * 2
+        let cellsH = map.Height * 2
+        let cx0, cy0 = cellsW / 2, cellsH / 2
+
+        let candidates =
+            seq {
+                for r in 0 .. (max cellsW cellsH) do
+                    for dy in -r .. r do
+                        for dx in -r .. r do
+                            if abs dx = r || abs dy = r then
+                                yield cx0 + dx, cy0 + dy
+            }
+
+        candidates
+        |> Seq.tryFind (fun (cx, cy) -> cellWalkable map coll cx cy)
+        |> Option.defaultValue (cx0, cy0)
+
+    /// Advance the player by one frame, consuming this frame's button state.
+    let step (map: GameMap) (coll: Collision) (buttons: Buttons) (p: PlayerState) : PlayerState =
+        if p.Moving then
+            let progress = p.Progress + 1
+
+            if progress >= Player.StepFrames then
+                { p with
+                    Moving = false
+                    Progress = 0
+                    StepCount = p.StepCount + 1 }
+            else
+                { p with Progress = progress }
+        else
+            let dir =
+                if buttons.Down then Some Down
+                elif buttons.Up then Some Up
+                elif buttons.Left then Some Left
+                elif buttons.Right then Some Right
+                else None
+
+            match dir with
+            | Some d ->
+                // Facing follows the input immediately, even when blocked.
+                let p = { p with Facing = d }
+                let dx, dy = delta d
+                let tx, ty = p.CellX + dx, p.CellY + dy
+
+                if cellWalkable map coll tx ty then
+                    { p with
+                        SrcX = p.CellX
+                        SrcY = p.CellY
+                        CellX = tx
+                        CellY = ty
+                        Moving = true
+                        Progress = 0 }
+                else
+                    p
+            | None -> p

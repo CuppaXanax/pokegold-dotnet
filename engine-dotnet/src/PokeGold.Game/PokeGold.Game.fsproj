@@ -8,19 +8,36 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Display.fs" />
-    <Compile Include="Assets.fs" />
-    <Compile Include="Palette.fs" />
-    <Compile Include="Tile.fs" />
-    <Compile Include="Image.fs" />
-    <Compile Include="Graphics.fs" />
-    <Compile Include="Tileset.fs" />
-    <Compile Include="Map.fs" />
-    <Compile Include="MapRenderer.fs" />
-    <Compile Include="Collision.fs" />
-    <Compile Include="Sprite.fs" />
-    <Compile Include="Buttons.fs" />
-    <Compile Include="GameCore.fs" />
+    <!-- Core: framebuffer, assets, palettes, tiles, primitives, input. -->
+    <Compile Include="Core\Display.fs" />
+    <Compile Include="Core\Assets.fs" />
+    <Compile Include="Core\Palette.fs" />
+    <Compile Include="Core\Tile.fs" />
+    <Compile Include="Core\Image.fs" />
+    <Compile Include="Core\Graphics.fs" />
+    <Compile Include="Core\Direction.fs" />
+    <Compile Include="Core\Buttons.fs" />
+    <!-- Data: typed game data loaded from the disassembly + an asset cache. -->
+    <Compile Include="Data\Tileset.fs" />
+    <Compile Include="Data\Map.fs" />
+    <Compile Include="Data\Collision.fs" />
+    <Compile Include="Data\Sprite.fs" />
+    <Compile Include="Data\Content.fs" />
+    <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
+    <Compile Include="Overworld\Player.fs" />
+    <Compile Include="Overworld\Movement.fs" />
+    <Compile Include="Overworld\Camera.fs" />
+    <Compile Include="Overworld\Animation.fs" />
+    <Compile Include="Overworld\OverworldState.fs" />
+    <!-- Render: draw typed state into the framebuffer. -->
+    <Compile Include="Render\MapRenderer.fs" />
+    <Compile Include="Render\SpriteRenderer.fs" />
+    <Compile Include="Render\OverworldRenderer.fs" />
+    <!-- Scenes: the scene-stack abstraction and the overworld scene. -->
+    <Compile Include="Scenes\Scene.fs" />
+    <Compile Include="Scenes\OverworldScene.fs" />
+    <!-- Top-level game: asset cache + scene stack. -->
+    <Compile Include="Game.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 /// A single RGBA color, byte-per-channel, matching the framebuffer's R,G,B,A
 /// memory order.

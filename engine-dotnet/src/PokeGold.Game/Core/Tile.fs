@@ -1,4 +1,4 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Core
 
 /// An 8×8 tile of 2-bit color indices (0..3), stored row-major (64 entries).
 /// The indices are looked up in a Palette at draw time.

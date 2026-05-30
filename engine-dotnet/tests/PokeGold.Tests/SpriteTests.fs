@@ -1,7 +1,9 @@
 module PokeGold.Tests.SpriteTests
 
 open Xunit
-open PokeGold.Game
+open PokeGold.Game.Core
+open PokeGold.Game.Data
+open PokeGold.Game.Render
 
 [<Fact>]
 let ``player sprite loads as six 16x16 frames`` () =
@@ -28,7 +30,7 @@ let ``sprite draw is transparent on index 0 and opaque elsewhere`` () =
 
     let fb = Framebuffer()
     fb.Clear(0uy, 0uy, 0uy, 255uy)
-    Sprite.draw fb palette sprite 0 0 0 false
+    SpriteRenderer.draw fb palette sprite 0 0 0 false
 
     // (0,0) got index 1 (white); (1,0) stayed cleared (index 0 transparent).
     Assert.Equal(255uy, fb.Pixels.[0])
@@ -46,7 +48,7 @@ let ``hflip mirrors the frame horizontally`` () =
 
     let fb = Framebuffer()
     fb.Clear(0uy, 0uy, 0uy, 255uy)
-    Sprite.draw fb palette sprite 0 0 0 true
+    SpriteRenderer.draw fb palette sprite 0 0 0 true
 
     // Flipped, the set pixel lands at column 15 of row 0.
     Assert.Equal(255uy, fb.Pixels.[15 * 4])

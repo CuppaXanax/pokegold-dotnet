@@ -4,7 +4,7 @@ open System
 open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
 open Microsoft.Xna.Framework.Input
-open PokeGold.Game
+open PokeGold.Game.Core
 
 /// MonoGame DesktopGL shell. Owns the window, the fixed-step frame loop, and the
 /// presentation of the game core's 160x144 framebuffer scaled to the window with
@@ -16,7 +16,8 @@ type HostGame() as this =
     let DefaultScale = 4
 
     let graphics = new GraphicsDeviceManager(this)
-    let game = GameCore()
+    // Fully qualified: the unqualified `Game` here is MonoGame's base class.
+    let game = PokeGold.Game.Game()
 
     let mutable spriteBatch : SpriteBatch = null
     let mutable screen : Texture2D = null

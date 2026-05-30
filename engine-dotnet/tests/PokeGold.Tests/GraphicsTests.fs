@@ -1,7 +1,7 @@
 module PokeGold.Tests.GraphicsTests
 
 open Xunit
-open PokeGold.Game
+open PokeGold.Game.Core
 
 [<Fact>]
 let ``rgb555 expands 5-bit channels to 8-bit, opaque`` () =

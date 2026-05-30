@@ -1,7 +1,8 @@
 module PokeGold.Tests.AssetTests
 
 open Xunit
-open PokeGold.Game
+open PokeGold.Game.Core
+open PokeGold.Game.Data
 
 // These tests load real repository assets via the engine's loaders and
 // spot-check counts/sizes/known bytes against the source files.

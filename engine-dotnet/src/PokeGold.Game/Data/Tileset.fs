@@ -1,4 +1,6 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Data
+
+open PokeGold.Game.Core
 
 /// A metatile ("block"): a 4×4 arrangement of tile ids, the unit a map is built
 /// from. A block is 32×32 pixels (4 tiles × 8 px).

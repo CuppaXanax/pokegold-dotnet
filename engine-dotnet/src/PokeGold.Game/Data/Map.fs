@@ -1,4 +1,6 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Data
+
+open PokeGold.Game.Core
 
 /// A map: a grid of block ids of a given size. Each block id indexes a
 /// `Block` in the map's tileset.

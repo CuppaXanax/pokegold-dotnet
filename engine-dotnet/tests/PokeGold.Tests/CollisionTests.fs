@@ -1,7 +1,7 @@
 module PokeGold.Tests.CollisionTests
 
 open Xunit
-open PokeGold.Game
+open PokeGold.Game.Data
 
 // Collision is parsed from the disassembly: collision_constants.asm (COLL ids and
 // permission bases), collision_permissions.asm (id → permission), and the

@@ -1,4 +1,7 @@
-namespace PokeGold.Game
+namespace PokeGold.Game.Render
+
+open PokeGold.Game.Core
+open PokeGold.Game.Data
 
 /// Renders a map onto the framebuffer by expanding each block into its 4×4 tiles
 /// and drawing them through a palette. A camera offset (in pixels) selects which
