@@ -67,9 +67,12 @@ module SongParser =
         let env a b = Envelope.ofArgs (i a) (i b)
 
         match mn with
-        | "note" | "drum_note" ->
+        | "note" ->
             let p = match List.tryItem 0 args with Some s -> pitchOf s | None -> 0
             Some(RCmd(Note(p, i 1)))
+        | "drum_note" ->
+            // On the noise channel the first arg is a numeric drum index, not a note symbol.
+            Some(RCmd(Note(i 0, i 1)))
         | "rest" -> Some(RCmd(Rest(i 0)))
         | "square_note" -> Some(RCmd(SquareNote(i 0, env 1 2, i 3)))
         | "noise_note" -> Some(RCmd(NoiseNoteCmd { Length = i 0; Env = env 1 2; Freq = i 3 }))

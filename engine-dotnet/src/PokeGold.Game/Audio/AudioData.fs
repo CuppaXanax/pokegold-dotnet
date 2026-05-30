@@ -4,23 +4,44 @@ open System
 open System.Globalization
 open PokeGold.Game.Core
 
-/// A volume envelope, as written in the audio script (`volume_envelope`,
-/// `note_type`, `square_note`/`noise_note`). The script encodes the sweep with a
-/// signed second argument: a positive value fades the note *out* over `Period`
-/// engine steps, a negative value fades it *in*. `Period = 0` holds the volume.
-type Envelope =
-    { InitialVolume: int // 0..15
-      Increase: bool
-      Period: int } // 0..7
+/// A `volume_envelope`/`note_type`/`square_note`/`noise_note` argument pair, kept
+/// verbatim as the two macro arguments (`volume_envelope X, Y`). The two values
+/// mean different things per channel, so we store the raw pair and decode at the
+/// use site:
+///  - Pulse/noise: `Volume` (0..15) is the starting volume; `Sweep` is a signed
+///    fade — positive fades *out* over `|Sweep|` engine steps, negative fades in,
+///    0 holds. (The macro encodes a negative sweep as the NRx2 increase bit.)
+///  - Wave (ch3): `Sweep`'s low nibble selects the waveform (0..9) and `Volume`'s
+///    low two bits select the NR32 output level (0=mute,1=100%,2=50%,3=25%).
+type Envelope = { Volume: int; Sweep: int }
 
 module Envelope =
-    /// Decode an envelope from the script's two arguments (volume, signed sweep).
-    let ofArgs (volume: int) (sweep: int) : Envelope =
-        { InitialVolume = volume
-          Increase = sweep < 0
-          Period = abs sweep }
+    /// Keep the two script arguments verbatim (volume, signed sweep).
+    let ofArgs (volume: int) (sweep: int) : Envelope = { Volume = volume; Sweep = sweep }
 
-    let silent = { InitialVolume = 0; Increase = false; Period = 0 }
+    let silent = { Volume = 0; Sweep = 0 }
+
+    // ---- Pulse/noise interpretation (NRx2 volume envelope) --------------------
+
+    /// Starting volume 0..15.
+    let initialVolume (e: Envelope) : int = e.Volume
+    /// True if the note fades *in* (negative sweep = NRx2 increase bit).
+    let increase (e: Envelope) : bool = e.Sweep < 0
+    /// Envelope step period 0..7 (0 = hold).
+    let period (e: Envelope) : int = abs e.Sweep
+
+    // ---- Wave (ch3) interpretation -------------------------------------------
+
+    /// Which of the 10 waveforms this selects (the sweep arg's low nibble).
+    let waveformIndex (e: Envelope) : int = e.Sweep &&& 0xF
+    /// The NR32 output-level scale: the volume arg's low two bits pick
+    /// mute/100%/50%/25% (engine: `(byte & $f0) << 1` into NR32 bits 6-5).
+    let waveVolume (e: Envelope) : float =
+        match e.Volume &&& 3 with
+        | 1 -> 1.0
+        | 2 -> 0.5
+        | 3 -> 0.25
+        | _ -> 0.0
 
 /// One drum voice in a drumkit: a short noise note (length in 16ths, an envelope,
 /// and the raw GB noise polynomial byte that sets its timbre/pitch).
@@ -73,18 +94,26 @@ module AudioData =
             let mn, args = splitLine line
             if mn = "dw" && not args.IsEmpty then Some(parseInt args.Head) else None)
 
-    /// Frequency in Hz of a note at the given GSC octave (1..8) and pitch (1..12),
-    /// faithful to engine.asm GetFrequency: take the table value for the pitch,
-    /// shift right by (7 - octave), keep 11 bits, then apply the GB square formula
-    /// `131072 / (2048 - period)`.
-    let noteFrequency (octave: int) (pitch: int) : float =
-        if pitch <= 0 || pitch >= frequencyTable.Length then 0.0
+    /// The 11-bit GB frequency register value for a note at the given GSC octave
+    /// (1..8) and pitch (1..12), faithful to engine.asm GetFrequency: take the
+    /// table value, shift right by (7 - octave), keep 11 bits.
+    let notePeriod (octave: int) (pitch: int) : int =
+        if pitch <= 0 || pitch >= frequencyTable.Length then 0
         else
             let raw = frequencyTable.[pitch]
             let shift = 7 - octave
             let shifted = if shift >= 0 then raw >>> shift else raw <<< (-shift)
-            let period = shifted &&& 0x7FF
-            if period >= 2048 then 0.0 else 131072.0 / float (2048 - period)
+            shifted &&& 0x7FF
+
+    /// Audible Hz of a pulse channel playing the given 11-bit period register
+    /// value: the GB square formula `131072 / (2048 - period)`.
+    let periodToHz (period: int) : float =
+        if period <= 0 || period >= 2048 then 0.0 else 131072.0 / float (2048 - period)
+
+    /// Frequency in Hz of a note at the given GSC octave (1..8) and pitch (1..12)
+    /// on a pulse channel.
+    let noteFrequency (octave: int) (pitch: int) : float =
+        periodToHz (notePeriod octave pitch)
 
     // ---- audio/wave_samples.asm : 32-step 4-bit waveforms ----------------------
 

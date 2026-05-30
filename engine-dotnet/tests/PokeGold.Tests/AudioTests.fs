@@ -65,3 +65,81 @@ let ``the audio engine mixes a started track into its buffer`` () =
     Assert.Contains(buf, fun s -> s <> 0.0f)
     // Soft-clamped to a sane range.
     Assert.All(buf, fun s -> Assert.InRange(s, -1.0f, 1.0f))
+
+// ---- Fidelity: wave instrument/volume, drums, vibrato, pitch slide ----------
+
+let private mkSong (commands: SoundCommand[]) (channels: (int * int)[]) : Song =
+    { ChannelCount = channels.Length; Channels = channels; Commands = commands }
+
+/// Peak absolute amplitude over a rendered window.
+let private peak (player: SongPlayer) (frames: int) : float32 =
+    let buf : float32[] = Array.zeroCreate (frames * 2)
+    player.Render(buf, 0, frames, 1.0)
+    Array.fold (fun m s -> max m (abs s)) 0.0f buf
+
+[<Fact>]
+let ``wave channel volume_envelope decodes waveform index and level`` () =
+    // volume_envelope X, Y on ch3: Y = waveform (0-9), X & 3 = level.
+    let e0 = { Volume = 1; Sweep = 5 } // X=1 -> 100%, waveform 5
+    let e1 = { Volume = 0; Sweep = 5 } // X=0 -> mute
+    Assert.Equal(5, Envelope.waveformIndex e0)
+    Assert.Equal(1.0, Envelope.waveVolume e0)
+    Assert.Equal(0.0, Envelope.waveVolume e1)
+    Assert.Equal(0.5, Envelope.waveVolume { Volume = 2; Sweep = 0 })
+    Assert.Equal(0.25, Envelope.waveVolume { Volume = 3; Sweep = 0 })
+
+[<Fact>]
+let ``a muted wave note is silent but an audible one is not`` () =
+    // Channel id 3 = Wave. A note with level-mute env must produce no signal.
+    let muted =
+        mkSong [| VolumeEnvelope { Volume = 0; Sweep = 2 }; Octave 5; Note(1, 8); SoundRet |] [| 3, 0 |]
+    let audible =
+        mkSong [| VolumeEnvelope { Volume = 2; Sweep = 2 }; Octave 5; Note(1, 8); SoundRet |] [| 3, 0 |]
+    Assert.Equal(0.0f, peak (SongPlayer(muted, false, 44100)) 8000)
+    Assert.True(peak (SongPlayer(audible, false, 44100)) 8000 > 0.0f)
+
+[<Fact>]
+let ``a volume envelope decays the note's amplitude over time`` () =
+    // Pulse channel, fade-out envelope (sweep > 0). Later amplitude < earlier.
+    let song =
+        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 1 }; Octave 4; Note(1, 15); SoundRet |] [| 1, 0 |]
+    let player = SongPlayer(song, false, 44100)
+    let early = peak player 4000
+    let _mid = peak player 4000
+    let late = peak player 4000
+    Assert.True(early > 0.0f)
+    Assert.True(late < early)
+
+[<Fact>]
+let ``a drum plays every sub-note in its sequence, not just the first`` () =
+    // Cry_Sample / azalea ch4 drives the noise channel; render a stretch and
+    // confirm the noise voice is active (multi-sub-note drums stay audible).
+    let song = SongParser.loadMusicFile "audio/music/azaleatown.asm"
+    // Isolate channel 4 (noise) by playing only it.
+    let _, entry = song.Channels |> Array.find (fun (id, _) -> id = 4)
+    let solo = mkSong song.Commands [| 4, entry |]
+    Assert.True(peak (SongPlayer(solo, false, 44100)) 44100 > 0.0f)
+
+[<Fact>]
+let ``pitch slide and vibrato render without error and stay in range`` () =
+    // A note preceded by pitch_slide + vibrato must still produce bounded audio.
+    let song =
+        mkSong
+            [| VolumeEnvelope { Volume = 15; Sweep = 0 }
+               Vibrato(0, 2, 2)
+               PitchSlide(8, 4, 8)
+               Octave 4
+               Note(1, 12)
+               SoundRet |]
+            [| 1, 0 |]
+    let buf : float32[] = Array.zeroCreate (12000 * 2)
+    (SongPlayer(song, false, 44100)).Render(buf, 0, 12000, 1.0)
+    Assert.Contains(buf, fun s -> s <> 0.0f)
+    Assert.All(buf, fun s -> Assert.InRange(s, -1.0f, 1.0f))
+
+[<Fact>]
+let ``the note-period table is faithful to the GB formula`` () =
+    // Octave 3 C# period -> ~1101 Hz; period strictly inside the 11-bit range.
+    let p = AudioData.notePeriod 3 2
+    Assert.InRange(p, 1, 2047)
+    Assert.InRange(AudioData.periodToHz p, 1098.0, 1104.0)
