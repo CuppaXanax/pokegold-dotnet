@@ -50,12 +50,17 @@ def on(rows, f, n):
 
 
 def agreement(k):
-    """Count frames where every channel's period agrees, for oracle vs ours[+k]."""
+    """Count frames where every channel's period agrees, for oracle vs ours[+k].
+    Only frames where the oracle is actually sounding a note on some channel count
+    — otherwise a long all-rest intro (every period 0) matches trivially at every
+    offset and the correlator locks onto a spurious k."""
     score = 0
     for f in range(len(orac)):
         g = f + k
         if g >= len(ours):
             break
+        if not any(period(orac, f, n) > 0 for n in range(1, NCH + 1)):
+            continue
         if all(period(orac, f, n) == period(ours, g, n) for n in range(1, NCH + 1)):
             score += 1
     return score
