@@ -283,10 +283,12 @@ let ``walking into a wall bumps in place and pulses the SFX hook once`` () =
             Assert.False(p2.Bumped)
 
 [<Fact>]
-let ``a held bump animates at walk speed (one pose per cycle, alternating)`` () =
-    // Regression: the bump must hold a single foot-pose for the whole BumpFrames
-    // cycle and only alternate between cycles — same cadence as a real walk. A
-    // pose that toggled mid-cycle would animate the legs at double speed.
+let ``a held bump animates a half-speed stand-step-stand-step leg cycle`` () =
+    // GSC's wall-bump runs the same 4-phase leg animation as a walk — stand, step,
+    // stand, step — but at half speed (a pose every 8 frames, vs 4 for a walk; see
+    // SetFacingBumpAction's `OBJECT_STEP_FRAME >> 3`). So across one BumpFrames
+    // cycle the drawn pose must hold for 8-frame blocks and return to the neutral
+    // standing pose between the two strides.
     let map, coll, _ = start ()
 
     match findLedge map coll with
@@ -306,22 +308,32 @@ let ``a held bump animates at walk speed (one pose per cycle, alternating)`` () 
         | Some d2 ->
             let p0 = { Player.create cx cy with Facing = d2 }
 
-            // Sample the drawn pose every frame across two full bump cycles.
+            // Sample the drawn pose every frame across one full bump cycle
+            // (Progress 0..BumpFrames-1, all held in the Bumping motion).
             let mutable p = p0
 
             let poses =
-                [ for _ in 1 .. (Player.BumpFrames * 2) do
+                [ for _ in 1 .. Player.BumpFrames do
                       p <- Movement.step map coll (press d2) p
                       yield Animation.frameAndFlip p ]
 
-            let cycle1 = poses |> List.take Player.BumpFrames |> List.distinct
-            let cycle2 = poses |> List.skip Player.BumpFrames |> List.distinct
+            // Four 8-frame phases: each holds a single pose (half walk speed).
+            let blocks = poses |> List.chunkBySize 8
+            Assert.Equal(4, List.length blocks)
 
-            // Exactly one pose held per cycle...
-            Assert.Equal(1, List.length cycle1)
-            Assert.Equal(1, List.length cycle2)
-            // ...and the two cycles differ (the foot alternated, i.e. it animated).
-            Assert.NotEqual<int * bool>(List.head cycle1, List.head cycle2)
+            for b in blocks do
+                Assert.Equal(1, b |> List.distinct |> List.length)
+
+            let reps = blocks |> List.map List.head
+
+            match reps with
+            | [ stand0; step1; stand2; step3 ] ->
+                // The legs return to the same neutral pose between strides...
+                Assert.Equal<int * bool>(stand0, stand2)
+                // ...and each stride is a distinct, stepping pose.
+                Assert.NotEqual<int * bool>(stand0, step1)
+                Assert.NotEqual<int * bool>(stand2, step3)
+            | _ -> failwith "expected exactly four animation phases"
 
 [<Fact>]
 let ``the ledge-hop arc rises to a 12px apex and lands flat (GSC table)`` () =

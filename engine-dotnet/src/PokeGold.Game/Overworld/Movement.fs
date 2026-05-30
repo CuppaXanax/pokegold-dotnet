@@ -124,24 +124,23 @@ module Movement =
                             Progress = 0
                             Bumped = true }
         | motion ->
-            // A motion is in progress; input is locked until it finishes. A walk
-            // or hop translates the player; a bump holds position but still counts
-            // as one step of walk-cadence (it's walking in place) so the legs
-            // alternate per cycle instead of racing. Turns don't advance cadence.
+            // A motion is in progress; input is locked until it finishes. A walk or
+            // hop translates the player; a turn or bump holds position. The leg
+            // animation is read straight off Progress (see Animation), so StepCount
+            // only needs to tally real steps taken.
             let progress = p.Progress + 1
 
             if progress >= Player.stepDuration p then
-                let advancesCadence =
+                let translated =
                     match motion with
                     | Walking
-                    | Hopping
-                    | Bumping -> true
+                    | Hopping -> true
                     | _ -> false
 
                 { p with
                     Motion = Standing
                     Progress = 0
-                    StepCount = (if advancesCadence then p.StepCount + 1 else p.StepCount)
+                    StepCount = (if translated then p.StepCount + 1 else p.StepCount)
                     Bumped = false }
             else
                 { p with

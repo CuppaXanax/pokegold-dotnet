@@ -31,7 +31,8 @@ type PlayerState =
       SrcY: int
       /// Frames elapsed in the current motion (0 .. its duration).
       Progress: int
-      /// Completed steps so far (drives the walk-cycle phase).
+      /// Completed translation steps so far (walks and hops). Not used for the leg
+      /// animation — that reads off Progress — but handy for step-driven events.
       StepCount: int
       /// Set true for exactly the one frame a wall-bump begins, so a future audio
       /// system can play the bump SFX. Transient; always false at rest.
@@ -66,10 +67,11 @@ module Player =
     [<Literal>]
     let TurnFrames = 8
 
-    /// Frames a wall-bump's in-place walk cycle runs before it can repeat (and
-    /// re-pulse the SFX hook), matching one normal step.
+    /// Frames a wall-bump's in-place march runs for: a full stand–step–stand–step
+    /// leg cycle at half walk speed (8 frames per pose), matching GSC's
+    /// `SetFacingBumpAction` (`OBJECT_STEP_FRAME >> 3`).
     [<Literal>]
-    let BumpFrames = StepFrames
+    let BumpFrames = 32
 
     /// GSC's 16-entry ledge-hop vertical offset table (px, negative = up). The
     /// sprite rises to a −12 px apex, holds there, then lands flat — replacing a
