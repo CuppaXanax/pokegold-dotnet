@@ -84,6 +84,9 @@ let ``input is locked mid-step (one step per StepFrames held)`` () =
     | None -> failwith "no walkable direction from start"
     | Some(dir, (dx, dy)) ->
         let map, coll, p0 = start ()
+        // Face the walk direction first so this exercises step-locking, not the
+        // turn-in-place that a fresh direction would trigger.
+        let p0 = { p0 with Facing = dir }
         // Hold for two step-periods: should advance exactly two cells, not more.
         let p = run map coll dir (StepFrames * 2 + 2) p0
         Assert.Equal(p0.CellX + dx * 2, p.CellX)
@@ -195,3 +198,109 @@ let ``a blocked non-ledge direction does not hop`` () =
             Assert.Equal(cx, p.CellX)
             Assert.Equal(cy, p.CellY)
             Assert.False(p.Hopping)
+
+// --- Turn-in-place & wall-bump (Q1) ------------------------------------------
+
+[<Fact>]
+let ``tapping a direction you don't face turns in place without moving`` () =
+    // Player starts facing Down; pressing Up should pivot to face Up but stay put.
+    let map, coll, p0 = start ()
+    let p = run map coll Up (Player.TurnFrames - 1) p0
+    Assert.Equal(Up, p.Facing) // facing follows input immediately
+    Assert.Equal(p0.CellX, p.CellX) // but the cell never changes during a turn
+    Assert.Equal(p0.CellY, p.CellY)
+    Assert.False(p.Moving)
+    Assert.Equal<Motion>(Turning, p.Motion)
+
+[<Fact>]
+let ``a turn costs extra frames before the first step`` () =
+    // Find a direction that is walkable from the start cell but isn't the initial
+    // facing, so the held press must turn before it can step.
+    let map, coll, _ = start ()
+
+    let walkableNonFacing =
+        [ Up, (0, -1); Left, (-1, 0); Right, (1, 0) ]
+        |> List.tryFind (fun (d, (dx, dy)) ->
+            let _, _, p0 = start ()
+            let faced = { p0 with Facing = d }
+            let p = run map coll d StepFrames faced
+            (p.CellX - p0.CellX, p.CellY - p0.CellY) = (dx, dy))
+
+    match walkableNonFacing with
+    | None -> () // start cell only opens downward; nothing to assert here
+    | Some(d, _) ->
+        // Frames until the cell first changes (a step begins) when holding d.
+        let framesUntilMove faced =
+            let _, _, p0 = start ()
+            let p0 = if faced then { p0 with Facing = d } else p0
+            let mutable p = p0
+            let mutable n = 0
+
+            while (p.CellX, p.CellY) = (p0.CellX, p0.CellY) && n < 1000 do
+                p <- Movement.step map coll (press d) p
+                n <- n + 1
+
+            n
+
+        // A pre-faced player steps on frame one; a fresh-facing player must first
+        // spend the turn — exactly TurnFrames + 1 extra frames (the +1 is the turn
+        // init frame) before the same step begins.
+        Assert.Equal(1, framesUntilMove true)
+        Assert.Equal(1 + Player.TurnFrames + 1, framesUntilMove false)
+
+[<Fact>]
+let ``walking into a wall bumps in place and pulses the SFX hook once`` () =
+    let map, coll, _ = start ()
+
+    match findLedge map coll with
+    | None -> failwith "no usable ledge found on Azalea Town"
+    | Some((cx, cy), _) ->
+        let allowed = Collision.tryLedge (Movement.collisionIdAtCell map coll cx cy) |> Option.get
+
+        let blockedNonLedge =
+            [ Down; Up; Left; Right ]
+            |> List.tryFind (fun d2 ->
+                let dx, dy = delta d2
+                not (List.contains d2 allowed)
+                && not (Movement.cellWalkable map coll (cx + dx) (cy + dy)))
+
+        match blockedNonLedge with
+        | None -> () // this ledge has no plain blocked neighbour to bump
+        | Some d2 ->
+            let p0 = { Player.create cx cy with Facing = d2 }
+
+            // First frame of the bump: no movement, but the SFX hook fires.
+            let p1 = Movement.step map coll (press d2) p0
+            Assert.Equal(cx, p1.CellX)
+            Assert.Equal(cy, p1.CellY)
+            Assert.False(p1.Moving)
+            Assert.False(p1.Hopping)
+            Assert.True(p1.Bumped)
+            Assert.Equal<Motion>(Bumping, p1.Motion)
+
+            // The hook pulses once per cycle, not every frame it's held.
+            let p2 = Movement.step map coll (press d2) p1
+            Assert.False(p2.Bumped)
+
+[<Fact>]
+let ``the ledge-hop arc rises to a 12px apex and lands flat (GSC table)`` () =
+    // A horizontal hop keeps the row fixed, so worldPixel's vertical offset is the
+    // GSC arc table exactly. Drive a synthetic hop and sample every frame.
+    let hopAt progress =
+        { Player.create 5 5 with
+            Facing = Right
+            Motion = Hopping
+            SrcX = 5
+            SrcY = 5
+            CellX = 7
+            CellY = 5
+            Progress = progress }
+
+    let baseline = 5 * Player.CellPixels
+
+    let lifts =
+        [ for f in 0 .. Player.HopFrames - 1 -> baseline - snd (Player.worldPixel (hopAt f)) ]
+
+    Assert.Equal(12, List.max lifts) // −12 px apex
+    Assert.Equal(4, List.head lifts) // already lifted 4 px on the first frame
+    Assert.Equal(0, List.last lifts) // lands flat on the baseline
