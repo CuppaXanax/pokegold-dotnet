@@ -15,6 +15,7 @@
     <Compile Include="TextTests.fs" />
     <Compile Include="BattleTests.fs" />
     <Compile Include="SaveTests.fs" />
+    <Compile Include="AudioTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

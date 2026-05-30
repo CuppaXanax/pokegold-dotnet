@@ -44,7 +44,14 @@
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
     <Compile Include="Save\SaveFile.fs" />
-    <!-- Text: charmap-encoded streams + the typewriter box state machine. -->
+    <!-- Audio: parse the GSC sound script, sequence + software-synth the 4 GB
+         channels to PCM (pure, no MonoGame; the host owns the sound device). -->
+    <Compile Include="Audio\AudioData.fs" />
+    <Compile Include="Audio\SoundCommand.fs" />
+    <Compile Include="Audio\SongParser.fs" />
+    <Compile Include="Audio\Synth.fs" />
+    <Compile Include="Audio\AudioEngine.fs" />
+    <!-- Text:charmap-encoded streams + the typewriter box state machine. -->
     <Compile Include="Text\TextStream.fs" />
     <Compile Include="Text\TextBox.fs" />
     <!-- Battle: immutable battlers + Gen-2 damage, effect commands, turn loop. -->

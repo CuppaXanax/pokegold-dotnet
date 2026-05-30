@@ -243,7 +243,7 @@ Rubber-duck review: **passed** (findings folded in above).
 - **Depends on:** M4 (state to save); grows as systems are added.
 - **Risks:** schema churn as state grows. *Mitigation:* version the format from day one.
 
-### M8 — Audio  · L
+### M8 — Audio  · L  ✅ (full 4-channel synth)
 - **Deliverables:** high-level audio engine — channel model + the **audio script language**
   interpreter — feeding `DynamicSoundEffectInstance` in the Host; one BGM and a couple SFX.
 - **Acceptance:** the slice map's BGM plays and loops; a menu/selection SFX triggers on input.
@@ -251,6 +251,11 @@ Rubber-duck review: **passed** (findings folded in above).
   exploration.
 - **Risks:** synthesizing the 4 GB channels (pulse/wave/noise) and tempo correctly.
   *Mitigation:* start with one pulse channel + a single track; expand.
+- **Done:** pure `Audio/` subsystem in PokeGold.Game (AudioData, SoundCommand, SongParser,
+  Synth, AudioEngine) parses the GSC script from `.asm` at the macro level, sequences it on a
+  60 Hz frame clock, and software-synths all four channels (2 pulse, wave, noise/LFSR) to float
+  PCM. Host `HostAudio.fs` pumps a `DynamicSoundEffectInstance` (44100 Hz stereo). Azalea Town
+  BGM loops on overworld load; `Sfx_Menu` fires on the A/Start edge. 7 new tests (78 total).
 
 ### M9+ — Full game (breadth to 100%)
 

@@ -22,6 +22,7 @@ type HostGame() as this =
     let mutable spriteBatch : SpriteBatch = null
     let mutable screen : Texture2D = null
     let mutable prevKb : KeyboardState = Unchecked.defaultof<KeyboardState>
+    let mutable hostAudio : HostAudio = Unchecked.defaultof<HostAudio>
 
     do
         this.Content.RootDirectory <- "Content"
@@ -41,6 +42,8 @@ type HostGame() as this =
     override _.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         screen <- new Texture2D(this.GraphicsDevice, Display.Width, Display.Height, false, SurfaceFormat.Color)
+        hostAudio <- new HostAudio(game)
+        hostAudio.Start()
 
     override _.Update(_gameTime: GameTime) =
         let kb = Keyboard.GetState()
@@ -66,6 +69,8 @@ type HostGame() as this =
         if pressed Keys.F5 then game.Save()
         if pressed Keys.F9 then game.Load()
         prevKb <- kb
+
+        hostAudio.Update()
 
         base.Update(_gameTime)
 

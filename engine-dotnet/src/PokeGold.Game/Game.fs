@@ -3,6 +3,7 @@ namespace PokeGold.Game
 open System.Collections.Generic
 open PokeGold.Game.Core
 open PokeGold.Game.Data
+open PokeGold.Game.Audio
 open PokeGold.Game.Save
 open PokeGold.Game.Scenes
 
@@ -16,9 +17,10 @@ open PokeGold.Game.Scenes
 type Game() =
     let framebuffer = Framebuffer()
     let content = Content()
+    let audio = AudioEngine(44100)
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
-    let mutable overworld = OverworldScene.Load content
+    let mutable overworld = OverworldScene.Load(content, audio)
 
     do scenes.Push(overworld :> Scene)
 
@@ -41,8 +43,15 @@ type Game() =
     /// restored overworld. No-op when there's no readable save.
     member this.Load() =
         match SaveFile.tryRead () with
-        | Some save -> this.ResetTo(OverworldScene.OfSave(content, save))
+        | Some save -> this.ResetTo(OverworldScene.OfSave(content, audio, save))
         | None -> ()
+
+    /// The sample rate of the audio mix the host should request.
+    member _.AudioSampleRate = audio.SampleRate
+
+    /// Fill `buffer` with the next `nFrames` interleaved stereo sample-frames
+    /// (range [-1, 1]). The host converts these to its device's PCM format.
+    member _.MixAudio(buffer: float32[], nFrames: int) = audio.Mix(buffer, nFrames)
 
     /// Advance the game by one frame, consuming this frame's button state.
     member _.Tick(buttons: Buttons) =

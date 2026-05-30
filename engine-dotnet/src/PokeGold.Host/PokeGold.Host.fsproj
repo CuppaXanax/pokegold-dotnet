@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="HostAudio.fs" />
     <Compile Include="HostGame.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
