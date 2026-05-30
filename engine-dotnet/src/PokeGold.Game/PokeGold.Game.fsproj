@@ -17,11 +17,13 @@
     <Compile Include="Core\Graphics.fs" />
     <Compile Include="Core\Direction.fs" />
     <Compile Include="Core\Buttons.fs" />
+    <Compile Include="Core\Charmap.fs" />
     <!-- Data: typed game data loaded from the disassembly + an asset cache. -->
     <Compile Include="Data\Tileset.fs" />
     <Compile Include="Data\Map.fs" />
     <Compile Include="Data\Collision.fs" />
     <Compile Include="Data\Sprite.fs" />
+    <Compile Include="Data\Font.fs" />
     <Compile Include="Data\Content.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
@@ -29,12 +31,17 @@
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
+    <!-- Text: charmap-encoded streams + the typewriter box state machine. -->
+    <Compile Include="Text\TextStream.fs" />
+    <Compile Include="Text\TextBox.fs" />
     <!-- Render: draw typed state into the framebuffer. -->
     <Compile Include="Render\MapRenderer.fs" />
     <Compile Include="Render\SpriteRenderer.fs" />
     <Compile Include="Render\OverworldRenderer.fs" />
+    <Compile Include="Render\TextRenderer.fs" />
     <!-- Scenes: the scene-stack abstraction and the overworld scene. -->
     <Compile Include="Scenes\Scene.fs" />
+    <Compile Include="Scenes\TextBoxScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Top-level game: asset cache + scene stack. -->
     <Compile Include="Game.fs" />

@@ -38,7 +38,9 @@ type Game() =
             scenes.Pop() |> ignore
             scenes.Push s
 
-        // Render the active scene. Transparent overlays (e.g. menus over the
-        // overworld) can later render the stack bottom-to-top; for now the top
-        // scene fills the screen.
-        scenes.Peek().Render(framebuffer)
+        // Render the scene stack bottom-to-top so overlays (text boxes, menus)
+        // layer over the scenes beneath them. The overworld fills the screen and
+        // sits at the bottom; a text box on top draws only its six-row box.
+        let stack = scenes.ToArray() // index 0 = top
+        for i in stack.Length - 1 .. -1 .. 0 do
+            stack.[i].Render(framebuffer)

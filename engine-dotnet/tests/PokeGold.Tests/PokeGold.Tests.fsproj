@@ -12,6 +12,7 @@
     <Compile Include="CollisionTests.fs" />
     <Compile Include="SpriteTests.fs" />
     <Compile Include="MovementTests.fs" />
+    <Compile Include="TextTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@ type Content() =
     let collisions = Dictionary<string, Collision>()
     let sprites = Dictionary<string, Sprite>()
     let maps = Dictionary<string, GameMap>()
+    let mutable font : Font option = None
 
     let getOrAdd (cache: Dictionary<string, 'a>) (key: string) (load: unit -> 'a) : 'a =
         match cache.TryGetValue key with
@@ -34,3 +35,12 @@ type Content() =
     /// The map at a repo-relative `.blk` path (cached by path).
     member _.Map(width: int, height: int, relative: string) : GameMap =
         getOrAdd maps relative (fun () -> Map.load width height relative)
+
+    /// The text font, loaded once and cached.
+    member _.Font : Font =
+        match font with
+        | Some f -> f
+        | None ->
+            let f = Font.load ()
+            font <- Some f
+            f
