@@ -283,6 +283,47 @@ let ``walking into a wall bumps in place and pulses the SFX hook once`` () =
             Assert.False(p2.Bumped)
 
 [<Fact>]
+let ``a held bump animates at walk speed (one pose per cycle, alternating)`` () =
+    // Regression: the bump must hold a single foot-pose for the whole BumpFrames
+    // cycle and only alternate between cycles — same cadence as a real walk. A
+    // pose that toggled mid-cycle would animate the legs at double speed.
+    let map, coll, _ = start ()
+
+    match findLedge map coll with
+    | None -> failwith "no usable ledge found on Azalea Town"
+    | Some((cx, cy), _) ->
+        let allowed = Collision.tryLedge (Movement.collisionIdAtCell map coll cx cy) |> Option.get
+
+        let blockedNonLedge =
+            [ Down; Up; Left; Right ]
+            |> List.tryFind (fun d2 ->
+                let dx, dy = delta d2
+                not (List.contains d2 allowed)
+                && not (Movement.cellWalkable map coll (cx + dx) (cy + dy)))
+
+        match blockedNonLedge with
+        | None -> () // this ledge has no plain blocked neighbour to bump
+        | Some d2 ->
+            let p0 = { Player.create cx cy with Facing = d2 }
+
+            // Sample the drawn pose every frame across two full bump cycles.
+            let mutable p = p0
+
+            let poses =
+                [ for _ in 1 .. (Player.BumpFrames * 2) do
+                      p <- Movement.step map coll (press d2) p
+                      yield Animation.frameAndFlip p ]
+
+            let cycle1 = poses |> List.take Player.BumpFrames |> List.distinct
+            let cycle2 = poses |> List.skip Player.BumpFrames |> List.distinct
+
+            // Exactly one pose held per cycle...
+            Assert.Equal(1, List.length cycle1)
+            Assert.Equal(1, List.length cycle2)
+            // ...and the two cycles differ (the foot alternated, i.e. it animated).
+            Assert.NotEqual<int * bool>(List.head cycle1, List.head cycle2)
+
+[<Fact>]
 let ``the ledge-hop arc rises to a 12px apex and lands flat (GSC table)`` () =
     // A horizontal hop keeps the row fixed, so worldPixel's vertical offset is the
     // GSC arc table exactly. Drive a synthetic hop and sample every frame.
