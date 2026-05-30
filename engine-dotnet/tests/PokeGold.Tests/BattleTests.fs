@@ -4,11 +4,11 @@ open Xunit
 open PokeGold.Game.Data
 open PokeGold.Game.Battle
 
-// --- Data-loader tests (parsing the disassembly in place) ---------------------
+// --- Data-table tests (baked at build time by PokeGold.DataGen) ---------------
 
 [<Fact>]
 let ``species loader decodes Cyndaquil's base stats and types`` () =
-    let c = Species.load "cyndaquil"
+    let c = Species.byName "CYNDAQUIL"
     Assert.Equal(39, c.Hp)
     Assert.Equal(52, c.Attack)
     Assert.Equal(43, c.Defense)
@@ -41,6 +41,18 @@ let ``type chart returns Gen-2 matchup multipliers`` () =
     Assert.Equal(5, TypeChart.multiplier (v "FIRE") (v "WATER")) // not very
     Assert.Equal(0, TypeChart.multiplier (v "NORMAL") (v "GHOST")) // immune
     Assert.Equal(10, TypeChart.multiplier (v "NORMAL") (v "WATER")) // neutral
+
+[<Fact>]
+let ``generated tables bake the full national dex and move list`` () =
+    // The build-time generator must cover every species and move, not just the
+    // demo set — guards against a partial or stale generation.
+    Assert.Equal(251, Species.all.Count)
+    Assert.Equal(251, Moves.all.Count)
+    // 10 physical + CURSE_TYPE + 8 special = 19 named type ids.
+    Assert.True(Species.all.ContainsKey "BULBASAUR")
+    Assert.True(Species.all.ContainsKey "CELEBI")
+    Assert.Equal(1, (Species.byName "BULBASAUR").Dex)
+    Assert.Equal(251, (Species.byName "CELEBI").Dex)
 
 // --- Damage formula: worked examples (no crit, fixed roll) --------------------
 
@@ -156,9 +168,9 @@ let ``the real demo encounter resolves with loaded data`` () =
     // Drives the actual scripted battle (real species, moves, types) to a result,
     // exercising the data loaders, effect interpreter, and turn loop together.
     let player =
-        BattleMon.ofSpecies (Species.load "cyndaquil") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+        BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
 
-    let enemy = BattleMon.ofSpecies (Species.load "pidgey") 3 [ Moves.byName "TACKLE" ]
+    let enemy = BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
 
     let mutable state = Battle.create player enemy 0x1234u
     let mutable turns = 0

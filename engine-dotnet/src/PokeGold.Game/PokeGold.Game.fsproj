@@ -18,13 +18,19 @@
     <Compile Include="Core\Direction.fs" />
     <Compile Include="Core\Buttons.fs" />
     <Compile Include="Core\Charmap.fs" />
-    <!-- Data: typed game data loaded from the disassembly + an asset cache. -->
+    <!-- Data: typed game data + an asset cache. Tabular game data (species,
+         moves, type chart) is generated at build time by PokeGold.DataGen into
+         Data\Generated\ and baked into this assembly; see the GenerateGameData
+         target below. -->
     <Compile Include="Data\Tileset.fs" />
     <Compile Include="Data\Map.fs" />
     <Compile Include="Data\Collision.fs" />
     <Compile Include="Data\Sprite.fs" />
     <Compile Include="Data\Font.fs" />
-    <Compile Include="Data\AsmConstants.fs" />
+    <Compile Include="Data\Schema.fs" />
+    <Compile Include="Data\Generated\TypeChart.Generated.fs" />
+    <Compile Include="Data\Generated\Species.Generated.fs" />
+    <Compile Include="Data\Generated\Moves.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
@@ -61,5 +67,42 @@
   <ItemGroup>
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
   </ItemGroup>
+
+  <!-- Build-order only: ensure the generator is compiled before we run it. Its
+       assembly is never referenced at runtime (ReferenceOutputAssembly=false). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\PokeGold.DataGen\PokeGold.DataGen.fsproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The disassembly tables that feed code generation (target Inputs) and the
+       generated F# sources they produce (target Outputs). $(RepoRoot) resolves
+       to the repository root three levels above this project. -->
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildThisFileDirectory)..\..\..\</RepoRoot>
+    <GeneratedDataDir>$(MSBuildThisFileDirectory)Data\Generated</GeneratedDataDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <GameDataInput Include="$(RepoRoot)constants\type_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)data\types\type_matchups.asm" />
+    <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
+    <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
+  </ItemGroup>
+
+  <!-- Regenerate the baked data tables whenever a source table changes (or the
+       generated files are missing). Runs before the F# compile so the generated
+       sources are present for CoreCompile. Incremental via Inputs/Outputs. -->
+  <Target Name="GenerateGameData"
+          BeforeTargets="CoreCompile"
+          Inputs="@(GameDataInput)"
+          Outputs="@(GeneratedDataOutput)">
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)..\..\tools\PokeGold.DataGen\PokeGold.DataGen.fsproj&quot; -c $(Configuration) -- &quot;$(GeneratedDataDir)&quot;" />
+  </Target>
 
 </Project>

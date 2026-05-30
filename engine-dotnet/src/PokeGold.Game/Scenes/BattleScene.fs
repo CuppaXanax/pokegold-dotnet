@@ -20,9 +20,9 @@ type BattleScene(font: Font, initial: BattleState) =
     /// Build the demo encounter: the player's CYNDAQUIL vs a wild PIDGEY.
     static member StartDemo(content: Content) : BattleScene =
         let player =
-            BattleMon.ofSpecies (Species.load "cyndaquil") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+            BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
 
-        let enemy = BattleMon.ofSpecies (Species.load "pidgey") 3 [ Moves.byName "TACKLE" ]
+        let enemy = BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
         BattleScene(content.Font, Battle.create player enemy 0x1234u)
 
     interface Scene with
