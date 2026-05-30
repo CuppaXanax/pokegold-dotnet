@@ -98,7 +98,11 @@ type internal Chan =
 /// ordinary oscillators driven by the live period register.
 type SongPlayer(song: Song, loop: bool, sampleRate: int) =
 
-    let framesPerSecond = 60.0
+    // The GSC sound engine ticks once per Game Boy frame. The hardware frame rate
+    // is the CPU clock (4194304 Hz) divided by the cycles per frame (70224), i.e.
+    // ~59.7275 Hz, NOT a round 60 Hz. Using 60 makes playback ~0.45% fast, which
+    // drifts audibly out of sync with a true-speed reference over a song's length.
+    let framesPerSecond = 4194304.0 / 70224.0
     let samplesPerFrame = float sampleRate / framesPerSecond
 
     let wave0 =
