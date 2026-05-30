@@ -27,6 +27,17 @@ module Movement =
             let blockId = int (Map.blockAt map (cx / 2) (cy / 2))
             Collision.isWalkable coll blockId (cx % 2) (cy % 2)
 
+    /// The raw collision id of the 16-px cell (cx, cy); out-of-range reads as 0.
+    let collisionIdAtCell (map: GameMap) (coll: Collision) (cx: int) (cy: int) : byte =
+        let cellsW = map.Width * 2
+        let cellsH = map.Height * 2
+
+        if cx < 0 || cy < 0 || cx >= cellsW || cy >= cellsH then
+            0uy
+        else
+            let blockId = int (Map.blockAt map (cx / 2) (cy / 2))
+            Collision.collisionIdAt coll blockId (cx % 2) (cy % 2)
+
     /// The first walkable cell found spiralling out from the map center — used to
     /// place the player when no explicit spawn is given.
     let findStartCell (map: GameMap) (coll: Collision) : int * int =
@@ -52,11 +63,12 @@ module Movement =
         if p.Moving then
             let progress = p.Progress + 1
 
-            if progress >= Player.StepFrames then
+            if progress >= Player.stepDuration p then
                 { p with
                     Moving = false
                     Progress = 0
-                    StepCount = p.StepCount + 1 }
+                    StepCount = p.StepCount + 1
+                    Hopping = false }
             else
                 { p with Progress = progress }
         else
@@ -81,7 +93,26 @@ module Movement =
                         CellX = tx
                         CellY = ty
                         Moving = true
-                        Progress = 0 }
+                        Progress = 0
+                        Hopping = false }
                 else
-                    p
+                    // Forward step is blocked: if the player stands on a ledge that
+                    // permits a hop in this facing, vault two cells over it (the
+                    // landing cell is not re-validated — faithful to GSC `.TryJump`).
+                    let onLedge =
+                        Collision.tryLedge (collisionIdAtCell map coll p.CellX p.CellY)
+                        |> Option.map (List.contains d)
+                        |> Option.defaultValue false
+
+                    if onLedge then
+                        { p with
+                            SrcX = p.CellX
+                            SrcY = p.CellY
+                            CellX = p.CellX + 2 * dx
+                            CellY = p.CellY + 2 * dy
+                            Moving = true
+                            Progress = 0
+                            Hopping = true }
+                    else
+                        p
             | None -> p

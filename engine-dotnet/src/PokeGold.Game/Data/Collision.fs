@@ -32,6 +32,10 @@ module Collision =
     [<Literal>]
     let CellSize = 16
 
+    /// High nybble that marks a ledge (`HI_NYBBLE_LEDGES`, collision_constants.asm).
+    [<Literal>]
+    let LedgeHiNybble = 0xA0
+
     /// Evaluate a tiny RGBDS constant expression supporting `|`, `<<`, hex
     /// (`$xx`/`0xxx`), decimal, and previously-defined names.
     let private evalExpr (consts: Map<string, int>) (expr: string) : int =
@@ -151,3 +155,27 @@ module Collision =
     /// Whether a block quadrant can be walked on foot (land, not water/wall).
     let isWalkable (coll: Collision) (blockId: int) (qx: int) (qy: int) : bool =
         permissionAt coll blockId qx qy = coll.Land
+
+    /// The raw `COLL_*` id for a block quadrant (no TALK masking, no permission
+    /// lookup) — needed to inspect special-behavior tiles such as ledges. An
+    /// out-of-range block reads as `COLL_FLOOR` (0), which is simply "not special".
+    let collisionIdAt (coll: Collision) (blockId: int) (qx: int) (qy: int) : byte =
+        if blockId < 0 || blockId >= coll.BlockColl.Length then 0uy
+        else coll.BlockColl.[blockId].[qy * 2 + qx]
+
+    /// If `collId` is a ledge tile, the facings from which a hop over it is
+    /// allowed (one cardinal facing, or two for the diagonal ledge ids); `None`
+    /// for any non-ledge tile. Mirrors `player_movement.asm`'s `ledge_table`:
+    /// low nybble 0→R 1→L 2→U 3→D 4→{R,D} 5→{D,L} 6→{U,R} 7→{U,L}.
+    let tryLedge (collId: byte) : Direction list option =
+        if (int collId &&& 0xF0) <> LedgeHiNybble then None
+        else
+            match int collId &&& 0x07 with
+            | 0 -> Some [ Right ]
+            | 1 -> Some [ Left ]
+            | 2 -> Some [ Up ]
+            | 3 -> Some [ Down ]
+            | 4 -> Some [ Right; Down ]
+            | 5 -> Some [ Down; Left ]
+            | 6 -> Some [ Up; Right ]
+            | _ -> Some [ Up; Left ]

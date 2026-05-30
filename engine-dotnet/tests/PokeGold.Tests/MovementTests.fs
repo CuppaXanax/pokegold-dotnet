@@ -88,3 +88,110 @@ let ``input is locked mid-step (one step per StepFrames held)`` () =
         let p = run map coll dir (StepFrames * 2 + 2) p0
         Assert.Equal(p0.CellX + dx * 2, p.CellX)
         Assert.Equal(p0.CellY + dy * 2, p.CellY)
+
+// --- Ledge hops (M4 addendum) -------------------------------------------------
+
+let private HopFrames = Player.HopFrames
+
+let private delta dir =
+    match dir with
+    | Down -> 0, 1
+    | Up -> 0, -1
+    | Left -> -1, 0
+    | Right -> 1, 0
+
+[<Fact>]
+let ``tryLedge decodes the ledge mask table`` () =
+    // Low nybble of HI_NYBBLE_LEDGES ($a0) selects the allowed approach facings.
+    Assert.Equal<Direction list option>(Some [ Right ], Collision.tryLedge 0xa0uy)
+    Assert.Equal<Direction list option>(Some [ Left ], Collision.tryLedge 0xa1uy)
+    Assert.Equal<Direction list option>(Some [ Up ], Collision.tryLedge 0xa2uy)
+    Assert.Equal<Direction list option>(Some [ Down ], Collision.tryLedge 0xa3uy)
+    Assert.Equal<Direction list option>(Some [ Right; Down ], Collision.tryLedge 0xa4uy)
+    Assert.Equal<Direction list option>(Some [ Down; Left ], Collision.tryLedge 0xa5uy)
+    Assert.Equal<Direction list option>(Some [ Up; Right ], Collision.tryLedge 0xa6uy)
+    Assert.Equal<Direction list option>(Some [ Up; Left ], Collision.tryLedge 0xa7uy)
+
+[<Fact>]
+let ``tryLedge ignores non-ledge tiles`` () =
+    Assert.Equal<Direction list option>(None, Collision.tryLedge 0x00uy) // floor
+    Assert.Equal<Direction list option>(None, Collision.tryLedge 0x07uy) // wall
+    Assert.Equal<Direction list option>(None, Collision.tryLedge 0xb0uy) // side wall
+
+/// Find a real ledge on Azalea Town whose forward cell is blocked and whose
+/// two-cell landing is in-bounds. Returns (cell, hop direction).
+let private findLedge map coll =
+    let cellsW = map.Width * 2
+    let cellsH = map.Height * 2
+
+    seq {
+        for cy in 0 .. cellsH - 1 do
+            for cx in 0 .. cellsW - 1 do
+                match Collision.tryLedge (Movement.collisionIdAtCell map coll cx cy) with
+                | Some dirs ->
+                    for d in dirs do
+                        let dx, dy = delta d
+                        let lx, ly = cx + 2 * dx, cy + 2 * dy
+                        // Forward blocked (so .TryStep fails) and landing in-bounds.
+                        if
+                            not (Movement.cellWalkable map coll (cx + dx) (cy + dy))
+                            && lx >= 0
+                            && ly >= 0
+                            && lx < cellsW
+                            && ly < cellsH
+                        then
+                            yield (cx, cy), d
+                | None -> ()
+    }
+    |> Seq.tryHead
+
+[<Fact>]
+let ``standing on a ledge, pressing its direction hops two cells`` () =
+    let map, coll, _ = start ()
+
+    match findLedge map coll with
+    | None -> failwith "no usable ledge found on Azalea Town"
+    | Some((cx, cy), d) ->
+        let dx, dy = delta d
+        let p0 = { Player.create cx cy with Facing = d }
+
+        // Mid-hop the player is marked Hopping and lifted by the arc.
+        let mid = run map coll d (HopFrames / 2) p0
+        Assert.True(mid.Hopping)
+        Assert.True(mid.Moving)
+
+        let p = run map coll d (HopFrames + 1) p0
+        Assert.Equal(cx + 2 * dx, p.CellX)
+        Assert.Equal(cy + 2 * dy, p.CellY)
+        Assert.False(p.Hopping)
+        Assert.False(p.Moving)
+
+[<Fact>]
+let ``a hop takes longer than a normal step`` () =
+    Assert.True(Player.HopFrames > Player.StepFrames)
+
+[<Fact>]
+let ``a blocked non-ledge direction does not hop`` () =
+    let map, coll, _ = start ()
+
+    match findLedge map coll with
+    | None -> failwith "no usable ledge found on Azalea Town"
+    | Some((cx, cy), d) ->
+        // Pick a direction the ledge does NOT permit and whose forward is blocked.
+        let allowed = Collision.tryLedge (Movement.collisionIdAtCell map coll cx cy) |> Option.get
+
+        let blockedNonLedge =
+            [ Down; Up; Left; Right ]
+            |> List.tryFind (fun d2 ->
+                let dx, dy = delta d2
+                not (List.contains d2 allowed)
+                && not (Movement.cellWalkable map coll (cx + dx) (cy + dy)))
+
+        match blockedNonLedge with
+        | None -> () // nothing to assert for this particular ledge
+        | Some d2 ->
+            let p0 = { Player.create cx cy with Facing = d2 }
+            let p = run map coll d2 HopFrames p0
+            Assert.Equal(cx, p.CellX)
+            Assert.Equal(cy, p.CellY)
+            Assert.False(p.Hopping)

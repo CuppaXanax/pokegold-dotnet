@@ -160,22 +160,31 @@ and `data/collision/collision_permissions.asm`.
 - **Field-move gates:** `CUT_TREE` ($12), `HEADBUTT_TREE` ($15) — solid until the
   matching field move; strength boulders are objects, not tiles.
 
-**In scope for M4 (this addendum) — ledge hops only:**
+**In scope for M4 (this addendum) — ledge hops only — ✅ IMPLEMENTED:**
 - **Deliverables:** detect ledge tiles by the `HI_NYBBLE_LEDGES` ($a0) group on the
-  *destination* cell; a facing→allow mask; a `STEP_LEDGE` state that hops **two
-  cells** in the faced direction with a parabolic arc, ignoring collision on the
-  intermediate (ledge) cell. Hop SFX deferred to M8 — silent hop is acceptable.
-- **Acceptance:** standing above a south ledge and pressing Down hops two cells
-  south and lands; pressing into that ledge from any other facing is blocked;
-  left/right ledges behave symmetrically.
+  player's **current** cell (the tile being stood on, *not* the destination); a
+  facing→allow mask; a `STEP_LEDGE` state that hops **two cells** in the faced
+  direction with a parabolic arc, not re-validating the landing cell. Hop SFX
+  deferred to M8 — silent hop is acceptable.
+- **Acceptance:** standing on a south ledge and pressing Down hops two cells south
+  and lands; pressing into that ledge from any other facing is blocked; left/right
+  ledges behave symmetrically. (Covered by `MovementTests.fs` ledge tests.)
 
 **Rubber-duck findings (verified against the disassembly + our code):**
-- **Ledge tiles are `LAND_TILE` permission**, not wall (confirmed in
-  `collision_permissions.asm`). So our existing `isWalkable` returns *true* for
-  them — the real game blocks normal entry via `GetMovementPermissions`/`wTilePermissions`,
-  then `.TryStep` bumps and `.TryJump` catches it. **Implication:** in `GameCore` the
-  ledge check must run *before* the normal walkable test, and a ledge cell is only
-  enterable by hopping in an allowed facing; from any other facing it's solid.
+- **The ledge is on the tile the player STANDS on, not the destination.**
+  `wPlayerTileCollision` = collision of the player's current cell
+  (`home/map.asm` `GetMovementPermissions`), and `.TryJump`
+  (`player_movement.asm:354-391`) reads *that* tile. Dispatch order is `.TryStep`
+  (normal walk) **then** `.TryJump`: the hop only fires once the forward step is
+  blocked (the cell ahead of a ledge is a wall in real maps). **Implication:** in
+  `Movement.step` the ledge check runs in the *else* branch, after the normal
+  `cellWalkable` test fails — not before it.
+- **Ledge tiles are `LAND_TILE` permission**, so the player walks *onto* the ledge
+  tile normally (it looks like ordinary ground), then a second press in the hop
+  direction vaults over the cliff below it. `.CheckHiNybble` only matches
+  `SIDE_WALLS`/`SIDE_BUOYS`, so `.MovementPermissionsData` does **not** apply to
+  ledges — standing on a ledge imposes no special directional permission; the hop
+  is driven purely by (current tile is ledge) + (forward blocked) + (facing in mask).
 - **Hops are always cardinal.** The ledge_table (`player_movement.asm:383-390`) maps a
   ledge id's low nybble (0-7) to a *facing mask*, and the hop runs in the player's
   walking direction (`jump_step DOWN/UP/LEFT/RIGHT`). Diagonal ledge ids ($a4-$a7)
@@ -184,15 +193,15 @@ and `data/collision/collision_permissions.asm`.
   movement, nothing to defer. Mask table (low nybble → allowed facings):
   `0→R, 1→L, 2→U, 3→D, 4→{R,D}, 5→{D,L}, 6→{U,R}, 7→{U,L}`.
 - **Data already supports this:** `Collision.BlockColl` keeps the raw `COLL_*` id per
-  quadrant. Add a pure accessor `collisionIdAt coll blockId qx qy` plus
-  `tryLedge : byte -> Direction list option`; no parser changes.
+  quadrant. Added pure accessors `Collision.collisionIdAt coll blockId qx qy` and
+  `Collision.tryLedge : byte -> Direction list option`; no parser changes.
 - **Movement reuse:** existing interpolation uses `(cellX - srcX)`, so setting
-  `cellX = srcX + 2·dx` covers a 2-cell hop for free; add a `hopping` flag for a
-  `-sin(π·t)` vertical arc and a longer step duration. Landing tile is **not**
-  re-validated (mirrors the original). Shadow sprite deferred (minor).
-- **Testability:** add an optional start-cell arg to `GameCore` so a test can place
-  the player above a real Azalea ledge (`johto_modern` does contain ledge tiles) and
-  assert a 2-cell hop; plus pure `Collision` unit tests for ledge-id detection + mask.
+  `CellX = SrcX + 2·dx` covers a 2-cell hop for free; added a `Hopping` flag for a
+  `sin(π·t)` vertical arc and a longer `HopFrames` (32 = 2× `StepFrames`) duration.
+  Landing tile is **not** re-validated (mirrors the original). Shadow sprite deferred.
+- **Testability:** `Player.create cx cy` already lets tests place the player on any
+  cell. The ledge tests scan the real Azalea map for a ledge, place the player on it,
+  and assert a 2-cell hop; plus pure `Collision` unit tests for ledge-id detection + mask.
 
 **Out of scope (catalogued above, deferred):** surfing & water-force tiles, ice
 slide, bike speed, conveyors/one-way walls/buoys, doors/stairs/warps (→ overworld
