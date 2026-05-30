@@ -11,6 +11,7 @@ open PokeGold.Game.Render
 type OverworldScene(content: Content, initial: OverworldState) =
     let mutable state = initial
     let mutable prevA = false
+    let mutable prevStart = false
 
     /// A real Azalea Town sign/NPC text, demonstrating the M5 text engine end to
     /// end: literal glyphs, `<LINE>`, `<CONT>` (scroll), `<PARA>` (clear), `<DONE>`.
@@ -24,10 +25,15 @@ type OverworldScene(content: Content, initial: OverworldState) =
     interface Scene with
         member _.Update(buttons: Buttons) : Transition =
             let aPressed = buttons.A && not prevA
+            let startPressed = buttons.Start && not prevStart
             prevA <- buttons.A
+            prevStart <- buttons.Start
 
+            // Pressing Start (while standing still) starts a scripted wild battle.
+            if startPressed && not state.Player.Moving then
+                Push(BattleScene.StartDemo(content) :> Scene)
             // Pressing A while standing still opens a sample speech box.
-            if aPressed && not state.Player.Moving then
+            elif aPressed && not state.Player.Moving then
                 Push(TextBoxScene.Of(content, OverworldScene.DemoText) :> Scene)
             else
                 state <- OverworldState.tick buttons state

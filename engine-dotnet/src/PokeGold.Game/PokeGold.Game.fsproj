@@ -24,6 +24,10 @@
     <Compile Include="Data\Collision.fs" />
     <Compile Include="Data\Sprite.fs" />
     <Compile Include="Data\Font.fs" />
+    <Compile Include="Data\AsmConstants.fs" />
+    <Compile Include="Data\TypeChart.fs" />
+    <Compile Include="Data\Species.fs" />
+    <Compile Include="Data\Moves.fs" />
     <Compile Include="Data\Content.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
@@ -34,14 +38,21 @@
     <!-- Text: charmap-encoded streams + the typewriter box state machine. -->
     <Compile Include="Text\TextStream.fs" />
     <Compile Include="Text\TextBox.fs" />
+    <!-- Battle: immutable battlers + Gen-2 damage, effect commands, turn loop. -->
+    <Compile Include="Battle\BattleMon.fs" />
+    <Compile Include="Battle\Damage.fs" />
+    <Compile Include="Battle\Effects.fs" />
+    <Compile Include="Battle\Battle.fs" />
     <!-- Render: draw typed state into the framebuffer. -->
     <Compile Include="Render\MapRenderer.fs" />
     <Compile Include="Render\SpriteRenderer.fs" />
     <Compile Include="Render\OverworldRenderer.fs" />
     <Compile Include="Render\TextRenderer.fs" />
+    <Compile Include="Render\BattleRenderer.fs" />
     <!-- Scenes: the scene-stack abstraction and the overworld scene. -->
     <Compile Include="Scenes\Scene.fs" />
     <Compile Include="Scenes\TextBoxScene.fs" />
+    <Compile Include="Scenes\BattleScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Top-level game: asset cache + scene stack. -->
     <Compile Include="Game.fs" />
