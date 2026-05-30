@@ -282,7 +282,7 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                     else
                         startDrum c drum (noteFrames c length)
                 else
-                    let p = AudioData.notePeriod (c.Octave + c.TransposeOct) (pitch + c.TransposePitch)
+                    let p = AudioData.notePeriod (c.Octave - c.TransposeOct) (pitch + c.TransposePitch)
                     startPitchedNote c p (noteFrames c length)
             | Rest length ->
                 c.FramesLeft <- max 1 (noteFrames c length)
@@ -316,10 +316,13 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 c.DutyLoop <- false
                 advance c (guard - 1)
             | DutyCyclePattern (a, b, cc, d) ->
-                // Pack the four 2-bit duties; rotate one per frame (duty[0] first).
-                c.DutyPattern <- ((a &&& 3) <<< 6) ||| ((b &&& 3) <<< 4) ||| ((cc &&& 3) <<< 2) ||| (d &&& 3)
+                // Pack the four 2-bit duties [a b c d]. GSC seeds the pattern with a
+                // rotate-right-2 (rrca rrca) so the first per-frame rotate-left lands
+                // back on duty a; the duty then cycles a,b,c,d,... one step per frame.
+                let packed = ((a &&& 3) <<< 6) ||| ((b &&& 3) <<< 4) ||| ((cc &&& 3) <<< 2) ||| (d &&& 3)
+                c.DutyPattern <- ((packed >>> 2) ||| (packed <<< 6)) &&& 0xFF
                 c.DutyLoop <- true
-                c.Duty <- a &&& 3
+                c.Duty <- (c.DutyPattern &&& 0xC0) >>> 6
                 advance c (guard - 1)
             | VolumeEnvelope e -> c.Env <- e; advance c (guard - 1)
             | ToggleNoise kit ->
@@ -441,6 +444,13 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 stepSweep c
 
                 if c.FramesLeft <= 0 then advance c 1024
+
+                // GSC's HandleTrackVibrato rotates the duty-cycle pattern one step per
+                // frame (rlca rlca) and takes the top 2 bits as this frame's duty — a
+                // ~15 Hz PWM shimmer that brightens the pulse timbre.
+                if c.DutyLoop then
+                    c.DutyPattern <- ((c.DutyPattern <<< 2) ||| (c.DutyPattern >>> 6)) &&& 0xFF
+                    c.Duty <- (c.DutyPattern &&& 0xC0) >>> 6
 
                 // Fold per-frame pitch effects into an effective period → Hz.
                 if c.Kind <> Noise then

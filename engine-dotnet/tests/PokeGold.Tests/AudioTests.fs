@@ -30,9 +30,11 @@ let ``Sfx_Menu parses as a single noise channel`` () =
 
 [<Fact>]
 let ``the note-frequency table matches the GB square formula`` () =
-    // Octave 3, C# is ~1101 Hz on hardware (engine.asm GetFrequency).
+    // Written octave 3, C#: GSC stores the octave inverted (engine octave 8-3=5)
+    // and GetFrequency arithmetic-shifts the table value right by 7-5=2, giving
+    // period 1575 -> ~277 Hz on hardware.
     let hz = AudioData.noteFrequency 3 2
-    Assert.InRange(hz, 1098.0, 1104.0)
+    Assert.InRange(hz, 275.0, 279.0)
 
 [<Fact>]
 let ``sequencing a song yields non-silent PCM`` () =
@@ -139,7 +141,8 @@ let ``pitch slide and vibrato render without error and stay in range`` () =
 
 [<Fact>]
 let ``the note-period table is faithful to the GB formula`` () =
-    // Octave 3 C# period -> ~1101 Hz; period strictly inside the 11-bit range.
+    // Written octave 3 C# -> period 1575 (~277 Hz); strictly inside the 11-bit range.
     let p = AudioData.notePeriod 3 2
+    Assert.Equal(1575, p)
     Assert.InRange(p, 1, 2047)
-    Assert.InRange(AudioData.periodToHz p, 1098.0, 1104.0)
+    Assert.InRange(AudioData.periodToHz p, 275.0, 279.0)

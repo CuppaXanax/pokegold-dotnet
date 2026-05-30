@@ -95,14 +95,19 @@ module AudioData =
             if mn = "dw" && not args.IsEmpty then Some(parseInt args.Head) else None)
 
     /// The 11-bit GB frequency register value for a note at the given GSC octave
-    /// (1..8) and pitch (1..12), faithful to engine.asm GetFrequency: take the
-    /// table value, shift right by (7 - octave), keep 11 bits.
+    /// (1..8, as written in the .asm) and pitch (1..12), faithful to engine.asm
+    /// GetFrequency. The note macro stores the octave inverted (engine octave =
+    /// 8 - written), so the table value is arithmetic-shifted right by
+    /// (7 - engineOctave) = (written - 1). The table holds 16-bit "negative"
+    /// frequencies ($f8xx..$fdxx); GSC sign-propagates them (sra/rr) before keeping
+    /// the low 11 bits, so we sign-extend to match.
     let notePeriod (octave: int) (pitch: int) : int =
         if pitch <= 0 || pitch >= frequencyTable.Length then 0
         else
             let raw = frequencyTable.[pitch]
-            let shift = 7 - octave
-            let shifted = if shift >= 0 then raw >>> shift else raw <<< (-shift)
+            let signed = if raw >= 0x8000 then raw - 0x10000 else raw
+            let shift = octave - 1
+            let shifted = if shift >= 0 then signed >>> shift else signed <<< (-shift)
             shifted &&& 0x7FF
 
     /// Audible Hz of a pulse channel playing the given 11-bit period register
