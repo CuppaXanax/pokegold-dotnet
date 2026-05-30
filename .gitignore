@@ -32,3 +32,8 @@
 *.sn*
 *.sa*
 *.sg1
+
+# High-level port capture artifacts
+/captures/
+tools/**/bin/
+tools/**/obj/
