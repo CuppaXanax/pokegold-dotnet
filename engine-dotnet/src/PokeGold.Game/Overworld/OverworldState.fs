@@ -7,7 +7,9 @@ open PokeGold.Game.Data
 /// the current camera. All immutable; scenes hold one of these and replace it
 /// each frame via the pure Overworld systems.
 type OverworldState =
-    { Map: GameMap
+    { /// Stable identifier of the loaded map, used to rebuild it on load.
+      MapId: string
+      Map: GameMap
       Tileset: Tileset
       Collision: Collision
       Sprite: Sprite
@@ -36,14 +38,13 @@ module OverworldState =
               Palette.rgb555 13 13 15
               Palette.rgb555 2 2 3 ]
 
-    /// Build an overworld for an already-loaded map/tileset/collision/sprite,
-    /// placing the player on the first walkable cell from the map center.
-    let create (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) : OverworldState =
-        let sx, sy = Movement.findStartCell map coll
-        let player = Player.create sx sy
+    /// Build an overworld around an already-loaded map, placing the player with
+    /// the given placement function (start cell vs a saved cell/facing).
+    let private build (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (player: PlayerState) : OverworldState =
         let camX, camY = Camera.follow map player
 
-        { Map = map
+        { MapId = mapId
+          Map = map
           Tileset = tileset
           Collision = coll
           Sprite = sprite
@@ -53,13 +54,41 @@ module OverworldState =
           CamX = camX
           CamY = camY }
 
+    /// Build an overworld for an already-loaded map/tileset/collision/sprite,
+    /// placing the player on the first walkable cell from the map center.
+    let create (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) : OverworldState =
+        let sx, sy = Movement.findStartCell map coll
+        build mapId map tileset coll sprite (Player.create sx sy)
+
+    /// Build an overworld for an already-loaded map, placing the player at an
+    /// explicit cell and facing (used to restore a saved position).
+    let createAt (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (cellX: int) (cellY: int) (facing: Direction) : OverworldState =
+        build mapId map tileset coll sprite (Player.createFacing cellX cellY facing)
+
+    /// Asset spec for a known map id: the loaders needed to (re)build it. Adding a
+    /// new map means adding a case here; save/load and the scene both go through it.
+    let private loadAssets (content: Content) (mapId: string) : GameMap * Tileset * Collision * Sprite =
+        match mapId with
+        | "AzaleaTown" ->
+            content.Map(20, 9, "maps/AzaleaTown.blk"),
+            content.Tileset "johto_modern",
+            content.Collision "johto_modern",
+            content.Sprite "chris"
+        | other -> failwithf "Unknown map id '%s'" other
+
+    /// Load a known map by id, placing the player on its first walkable cell.
+    let loadById (content: Content) (mapId: string) : OverworldState =
+        let map, tileset, coll, sprite = loadAssets content mapId
+        create mapId map tileset coll sprite
+
+    /// Load a known map by id, placing the player at an explicit cell and facing
+    /// (used to restore a saved position).
+    let loadByIdAt (content: Content) (mapId: string) (cellX: int) (cellY: int) (facing: Direction) : OverworldState =
+        let map, tileset, coll, sprite = loadAssets content mapId
+        createAt mapId map tileset coll sprite cellX cellY facing
+
     /// Load the Azalea Town overworld through the shared asset cache.
-    let loadAzalea (content: Content) : OverworldState =
-        create
-            (content.Map(20, 9, "maps/AzaleaTown.blk"))
-            (content.Tileset "johto_modern")
-            (content.Collision "johto_modern")
-            (content.Sprite "chris")
+    let loadAzalea (content: Content) : OverworldState = loadById content "AzaleaTown"
 
     /// Advance the overworld by one frame of input (movement + camera follow).
     let tick (buttons: Buttons) (s: OverworldState) : OverworldState =

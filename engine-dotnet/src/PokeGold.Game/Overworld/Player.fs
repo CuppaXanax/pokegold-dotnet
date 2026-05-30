@@ -98,11 +98,11 @@ module Player =
         | Bumping -> BumpFrames
         | _ -> StepFrames
 
-    /// A player standing at cell (cx, cy) facing down, not moving.
-    let create (cx: int) (cy: int) : PlayerState =
+    /// A player standing at cell (cx, cy) facing the given direction, not moving.
+    let createFacing (cx: int) (cy: int) (facing: Direction) : PlayerState =
         { CellX = cx
           CellY = cy
-          Facing = Down
+          Facing = facing
           Motion = Standing
           SrcX = cx
           SrcY = cy
@@ -110,6 +110,9 @@ module Player =
           AnimFrame = 0
           StepCount = 0
           Bumped = false }
+
+    /// A player standing at cell (cx, cy) facing down, not moving.
+    let create (cx: int) (cy: int) : PlayerState = createFacing cx cy Down
 
     /// Sprite top-left in world pixels, interpolated during a step. A ledge hop
     /// adds GSC's tabled vertical arc so the sprite lifts to a −12 px apex, holds,

@@ -4,6 +4,7 @@ open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
 open PokeGold.Game.Render
+open PokeGold.Game.Save
 
 /// The walk-around-the-map scene. Owns a mutable OverworldState that the pure
 /// Overworld systems advance each frame; everything inside the state is
@@ -21,6 +22,13 @@ type OverworldScene(content: Content, initial: OverworldState) =
     /// Load the Azalea Town overworld scene through the shared asset cache.
     static member Load(content: Content) : OverworldScene =
         OverworldScene(content, OverworldState.loadAzalea content)
+
+    /// Restore an overworld scene from a save.
+    static member OfSave(content: Content, save: SaveData) : OverworldScene =
+        OverworldScene(content, SaveData.apply content save)
+
+    /// Snapshot this scene's persistable state for a save.
+    member _.Capture() : SaveData = SaveData.capture state
 
     interface Scene with
         member _.Update(buttons: Buttons) : Transition =

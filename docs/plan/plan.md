@@ -230,10 +230,16 @@ Rubber-duck review: **passed** (findings folded in above).
 - **Risks:** damage-formula edge cases (stat stages, type effectiveness, crit). *Mitigation:*
   table-driven unit tests with worked examples from the disassembly.
 
-### M7 — Save / load  · M
+### M7 — Save / load  · M  ✅ (scope-appropriate slice)
 - **Deliverables:** versioned own-format save (per D6) round-tripping party, position, event
   flags, and bag.
-- **Acceptance:** save, restart the process, load — game state is restored exactly.
+- **Status:** **Done for current scope.** A versioned **JSON** save (`SaveData { Version;
+  Overworld }`) round-trips the only player-owned state that exists today — map id + player
+  cell + facing — through `%LocalAppData%/PokeGold/pokegold.sav`. `Save/SaveData.fs`
+  (pure capture/apply) + `Save/SaveFile.fs` (System.Text.Json + IO, version-gated read).
+  Host **F5 = save / F9 = load**. Party/bag/event-flag fields join `SaveData` as those
+  systems land (M6+/M9/M11); the `Version` gate is the migration seam.
+- **Acceptance:** save, restart the process, load — game state is restored exactly. ✓
 - **Depends on:** M4 (state to save); grows as systems are added.
 - **Risks:** schema churn as state grows. *Mitigation:* version the format from day one.
 

@@ -21,6 +21,7 @@ type HostGame() as this =
 
     let mutable spriteBatch : SpriteBatch = null
     let mutable screen : Texture2D = null
+    let mutable prevKb : KeyboardState = Unchecked.defaultof<KeyboardState>
 
     do
         this.Content.RootDirectory <- "Content"
@@ -57,6 +58,15 @@ type HostGame() as this =
               Select = held [ Keys.RightShift; Keys.Back ] }
 
         game.Tick(buttons)
+
+        // Debug save/load. F5/F9 aren't Game Boy buttons, so they bypass the
+        // `Buttons` struct and call the game's host-facing save API directly, on
+        // the key-down edge. A real Start-menu SAVE arrives with menus (M11).
+        let pressed (k: Keys) = kb.IsKeyDown k && not (prevKb.IsKeyDown k)
+        if pressed Keys.F5 then game.Save()
+        if pressed Keys.F9 then game.Load()
+        prevKb <- kb
+
         base.Update(_gameTime)
 
     /// Compute the largest integer-scaled, centered destination rectangle that

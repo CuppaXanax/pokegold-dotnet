@@ -41,6 +41,9 @@
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
+    <!-- Save: versioned JSON save model + on-disk persistence. -->
+    <Compile Include="Save\SaveData.fs" />
+    <Compile Include="Save\SaveFile.fs" />
     <!-- Text: charmap-encoded streams + the typewriter box state machine. -->
     <Compile Include="Text\TextStream.fs" />
     <Compile Include="Text\TextBox.fs" />
