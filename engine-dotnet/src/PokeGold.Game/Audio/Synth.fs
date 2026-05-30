@@ -224,32 +224,38 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
         // Re-arm the hardware sweep counter for this note.
         c.SweepCount <- c.SweepPeriodFrames
 
-    /// Start a noise drum: load the selected drum's sub-note sequence and begin it.
+    /// Load the drum's current sub-note (its envelope + NR43 frequency) and arm its
+    /// frame counter, or silence the channel when the sequence is exhausted. A drum
+    /// sub-note plays `(len & 0xF) + 1` frames (GSC ReadNoiseSample).
+    let loadDrumSub (c: Chan) =
+        if c.DrumIdx < c.DrumNotes.Length then
+            let n = c.DrumNotes.[c.DrumIdx]
+            c.DrumIdx <- c.DrumIdx + 1
+            c.DrumSubLeft <- (n.Length &&& 0xF) + 1
+            let f, w7 = noiseParams n.Freq
+            c.NoiseFreq <- f
+            c.NoiseWidth7 <- w7
+            startEnv c n.Env
+            c.On <- true
+        else
+            c.On <- false
+
+    /// Start a noise drum: load the selected drum's sub-note sequence and trigger its
+    /// first sub-note immediately (GSC clears wNoiseSampleDelay so the first sample is
+    /// read on the same frame).
     let startDrum (c: Chan) (drum: NoiseNote list) (frames: int) =
         c.FramesLeft <- max 1 frames
         c.DrumNotes <- List.toArray drum
         c.DrumIdx <- 0
         c.DrumSubLeft <- 0
-        c.On <- not (List.isEmpty drum)
+        if List.isEmpty drum then c.On <- false else loadDrumSub c
 
     /// Advance the noise drum sub-sequence by one frame (independent of the main
-    /// note timer): each sub-note plays `(len & 0xF) + 1` frames with its own
-    /// envelope and NR43 frequency, until the sequence is exhausted.
+    /// note timer): when the current sub-note's frames run out, load the next, until
+    /// the sequence is exhausted.
     let stepDrum (c: Chan) =
         if c.DrumSubLeft > 0 then c.DrumSubLeft <- c.DrumSubLeft - 1
-
-        if c.DrumSubLeft <= 0 then
-            if c.DrumIdx < c.DrumNotes.Length then
-                let n = c.DrumNotes.[c.DrumIdx]
-                c.DrumIdx <- c.DrumIdx + 1
-                c.DrumSubLeft <- (n.Length &&& 0xF) + 1
-                let f, w7 = noiseParams n.Freq
-                c.NoiseFreq <- f
-                c.NoiseWidth7 <- w7
-                startEnv c n.Env
-                c.On <- true
-            else
-                c.On <- false
+        if c.DrumSubLeft <= 0 then loadDrumSub c
 
     /// Run commands for a channel until one consumes time (a note/rest) or the
     /// channel ends. Control commands are processed instantly.
@@ -267,9 +273,14 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                     let kit =
                         if c.Drumkit < AudioData.drumkits.Length then AudioData.drumkits.[c.Drumkit]
                         else [||]
-                    let idx = pitch - 1
-                    let drum = if idx >= 0 && idx < kit.Length then kit.[idx] else []
-                    startDrum c drum (noteFrames c length)
+                    // GSC seeks Drumkit[pitch] directly (the drum instrument index);
+                    // pitch 0 is a rest.
+                    let drum = if pitch >= 1 && pitch < kit.Length then kit.[pitch] else []
+                    if pitch = 0 then
+                        c.FramesLeft <- max 1 (noteFrames c length)
+                        c.On <- false
+                    else
+                        startDrum c drum (noteFrames c length)
                 else
                     let p = AudioData.notePeriod (c.Octave + c.TransposeOct) (pitch + c.TransposePitch)
                     startPitchedNote c p (noteFrames c length)
