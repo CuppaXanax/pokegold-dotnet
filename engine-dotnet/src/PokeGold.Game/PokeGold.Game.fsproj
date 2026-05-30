@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>PokeGold.Game</RootNamespace>
+    <AssemblyName>PokeGold.Game</AssemblyName>
+    <OtherFlags>$(OtherFlags) --nowarn:57</OtherFlags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Display.fs" />
+    <Compile Include="Assets.fs" />
+    <Compile Include="Palette.fs" />
+    <Compile Include="Tile.fs" />
+    <Compile Include="Image.fs" />
+    <Compile Include="Graphics.fs" />
+    <Compile Include="Tileset.fs" />
+    <Compile Include="Map.fs" />
+    <Compile Include="MapRenderer.fs" />
+    <Compile Include="Collision.fs" />
+    <Compile Include="Sprite.fs" />
+    <Compile Include="Buttons.fs" />
+    <Compile Include="GameCore.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+  </ItemGroup>
+
+</Project>

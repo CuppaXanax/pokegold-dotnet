@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PokeGold.Game/PokeGold.Game.fsproj" />
+    <Project Path="src/PokeGold.Host/PokeGold.Host.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PokeGold.Tests/PokeGold.Tests.fsproj" />
+  </Folder>
+</Solution>
