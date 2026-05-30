@@ -7,6 +7,17 @@ Target: **Pokémon Gold** (international English, game ID `AAUE`, SHA1
 `d8b8a3600a465308c9953dfa04f0081c05bdcb94`) reimplemented in **F#** on **MonoGame** (DesktopGL).
 Reference source is the `pret/pokegold` disassembly in this repo and the analysis in `docs/recon/`.
 
+**North star — 100%-able Gold.** The done state is the *complete game*, not a tech demo:
+a fresh save can be played start to finish and **fully completed** — all 16 badges (Johto +
+Kanto), the Elite Four, Red, Hall of Fame + credits, and a **completable National Pokédex**
+(all 251 obtainable within the implementation, including trade evolutions and event-only
+species — see D7–D9). Glitchless completion is the bar; glitch-category parity is a separate
+non-goal unless explicitly chosen.
+
+The milestones below build **bottom-up**: M0–M8 prove every subsystem once via a thin vertical
+slice (the fastest path to "it's a game"), then M9–M22 take each subsystem to **full breadth**
+until the north star is met. Slice first so we fail fast; then go wide.
+
 ---
 
 ## Decisions to resolve before/early (gate)
@@ -21,9 +32,12 @@ These shape multiple milestones. Each has a recommendation; confirm or override.
 | D4 | **Presentation** | integer scale / stretch | **Integer scale**, default 4× (640×576), nearest-neighbor, letterbox the rest |
 | D5 | **Content pipeline** | MGCB content pipeline / load raw assets ourselves | **Raw**: we synthesize `Texture2D` from decoded 2bpp + palettes; skip MGCB entirely |
 | D6 | **Save format** | GB SRAM-compatible / our own | **Our own** (versioned), no SRAM compatibility requirement |
+| D7 | **Link / trading** | real netcode / offline "trade terminal" / none | **Offline trade terminal** — a local mechanism that performs trades (and thus trade evolutions) without networking; real link is a non-goal. Needed so the Pokédex is completable single-player. |
+| D8 | **Pokédex-complete bar** | strict (all 251 self-obtainable) / pragmatic | **Pragmatic**: every species obtainable in-impl via normal capture, evolution (incl. trade-evo through D7), in-game trades, gifts, and event hooks (D9). Version exclusives sourced via the offline trade terminal. |
+| D9 | **Event-only species** (Celebi/GS Ball, roamers, Red Gyarados, Lugia/Ho-Oh, Suicune) | emulate Mobile/event / built-in unlocks | **Built-in unlocks** — implement the in-game triggers directly (no Mobile Adapter); GS Ball/Celebi event provided as a standard scripted event so the dex is completable. |
 
 > All decisions have working answers; D1 is resolved (parse repo assets directly — no ROM).
-> Revisit D2–D6 only if something forces it.
+> Revisit D2, D4–D9 only if something forces it.
 
 ## Asset & legal posture
 
@@ -223,21 +237,179 @@ Rubber-duck review: **passed** (findings folded in above).
 - **Risks:** synthesizing the 4 GB channels (pulse/wave/noise) and tempo correctly.
   *Mitigation:* start with one pulse channel + a single track; expand.
 
-### M9+ — Outward
-More maps and warps, overworld events/NPCs (event script DU), menus (party/bag/Pokédex), wild
-encounter tables, trainers. Each reuses the interpreters and renderer from M3–M8.
+### M9+ — Full game (breadth to 100%)
+
+M0–M8 prove every subsystem once on a thin slice. M9–M22 take each to full breadth until the
+**north star (100%-able Gold)** is met. Sizing stays rough; these are coarser than M0–M8 and will
+be split into sub-tasks as each is picked up. They cluster into four phases.
+
+#### Phase A — Overworld at scale
+
+##### M9 — Event & script engine  · XL
+- **Deliverables:** the **overworld script command language** as a DU + interpreter (the `pret`
+  `*_script` macros): NPC/sign text, triggers, item balls, give/take, `setflag`/`clearflag` event
+  flags and variables, script-driven warps and movement, `applymovement` actor paths, yes/no &
+  multi-choice prompts, money/item give, battle-from-script. Map event records (warps, coord
+  events, bg events, object events) parsed into typed values.
+- **Acceptance:** on a real map, talking to a scripted NPC runs its script (sets a flag, gives an
+  item, branches on the flag next time); stepping on a trigger fires once; an item ball is
+  collectable and doesn't respawn after save/reload.
+- **Depends on:** M5 (text), M4 (movement). **Risks:** command-set breadth. *Mitigation:* enumerate
+  the full command table from the disassembly; unit-test the interpreter against real script bytes.
+
+##### M10 — World assembly & NPC objects  · L
+- **Deliverables:** load **all 286 maps**; map connections/streaming and warp transitions between
+  maps; per-map tileset/palette/music binding; overworld **object/NPC sprites** with movement
+  patterns (`SPRITEMOVEDATA_*`), facing, animation, and player↔object collision; map-change music.
+- **Acceptance:** walk a connected region (e.g. New Bark → Route 29 → Cherrygrove) crossing map
+  borders with no seams; warps move between interior/exterior; NPCs wander and block the player and
+  can be talked to (via M9).
+- **Depends on:** M9, M3. **Risks:** connection/border math, object slot limits. *Mitigation:*
+  golden-image border tests; model the real object-engine slot rules.
+
+##### M11 — Menus & UI shell  · L
+- **Deliverables:** the windowing/menu framework, then the core menus: Start menu, **Party**
+  (summary, switch order), **Bag** (pockets, use/give/toss), **Pokémon summary** pages, **Pokédex**
+  (seen/own, area, search), **Options**, and the **Save** menu (drives M7). Field-move use from
+  menus (Cut/Surf/etc. dispatched to M17 gating).
+- **Acceptance:** open each menu over the overworld, navigate with the GB button set, use an item
+  on a Pokémon, reorder the party, and view a populated Pokédex entry; all render to tile accuracy.
+- **Depends on:** M5, M7. **Risks:** menu-state breadth. *Mitigation:* shared menu DU + interpreter;
+  build incrementally per menu.
+
+##### M12 — Town services & storage  · M
+- **Deliverables:** **Pokémon Center** healing + nurse script; **Poké Mart** buy/sell with the
+  money/economy; the **PC box storage system** (Bill's PC: deposit/withdraw/move across all boxes);
+  PC item storage; mailbox basics.
+- **Acceptance:** faint, heal at a Center to full; buy and sell items with correct prices and money
+  math; deposit/withdraw a Pokémon across boxes and have it persist through save/reload.
+- **Depends on:** M9, M11, M7. **Risks:** box-data volume/persistence. *Mitigation:* version box
+  schema (D6) from the start.
+
+#### Phase B — Battle to full coverage
+
+##### M13 — Complete battle mechanics  · XL
+- **Deliverables:** finish the **battle-effect command interpreter** to cover **every move effect**;
+  status conditions, stat stages, the full type chart, criticals, multi-turn/charge/recharge moves,
+  weather, flinch/recoil/drain/OHKO/etc.; **capture mechanics** (all balls + Gen-2 catch formula);
+  end-of-turn resolution order.
+- **Acceptance:** a table-driven suite of worked examples from the disassembly passes for damage,
+  status, stat-stage, type, crit, and catch-rate cases; a wild battle can be won, lost, fled, or
+  caught.
+- **Depends on:** M6. **Risks:** effect long-tail & ordering bugs. *Mitigation:* one unit test per
+  move effect id, sourced from the disassembly.
+
+##### M14 — Trainers & battle AI  · L
+- **Deliverables:** **trainer battles** (all trainer-class/party data), switching, multi-Pokémon
+  flow, item-in-battle, the **enemy AI** (move scoring + switch logic per the disassembly), battle
+  rewards (money, EXP split, EVs/stat-exp).
+- **Acceptance:** a scripted trainer battle plays out with AI choosing moves/switches, awards correct
+  money and EXP, and ends the encounter cleanly; double-checks against disassembly AI tables.
+- **Depends on:** M13, M9. **Risks:** AI fidelity. *Mitigation:* port the AI scoring tables directly;
+  spot-test decisions.
+
+##### M15 — Growth systems  · M
+- **Deliverables:** EXP curves & leveling, stat/stat-exp recalculation, **move learnsets** (level/
+  TM/HM/tutor), **evolution** (level, item, trade [via D7], happiness, time-of-day, stats),
+  held-item effects, friendship.
+- **Acceptance:** a Pokémon gains EXP, levels, learns a level-up move (with the "forget a move"
+  prompt), and evolves by each trigger type (incl. a trade-evo through the offline terminal).
+- **Depends on:** M13, M16 (data). **Risks:** evolution trigger coverage. *Mitigation:* enumerate
+  evolution methods from `evos_attacks`.
+
+#### Phase C — Content & progression
+
+##### M16 — Full game data  · L
+- **Deliverables:** all **251 species** (base stats, types, learnsets, evolutions, dex entries),
+  every **move** and **item**, the full type chart, and **all encounter tables** for every map
+  (grass/water/headbutt/rod, time-of-day and swarm variants).
+- **Acceptance:** data spot-checks across the whole tables (species count = 251, per-map encounter
+  slots, item/move counts) pass against the disassembly; encounters in any map draw from the right
+  table for the time of day.
+- **Depends on:** M2. **Risks:** volume/format edge cases. *Mitigation:* generated loaders + count
+  assertions per table.
+
+##### M17 — Johto story, gyms & field moves  · XL
+- **Deliverables:** the complete **Johto main-story scripts/cutscenes**; all **8 gym leaders +
+  badges**; **HM/field-move gating** (Cut, Surf, Strength, Whirlpool, Waterfall, Fly, Flash) wired
+  to overworld locomotion (extends the M4 addendum); rival fights and the **Team Rocket** arc
+  (Slowpoke Well, Radio Tower).
+- **Acceptance:** a continuous playthrough from New Bark through all 8 Johto badges is possible,
+  gated correctly by badges/HMs, with story events firing in order and persisting across saves.
+- **Depends on:** M9, M10, M14, M15, M16. **Risks:** script breadth & ordering. *Mitigation:* lean
+  on the M9 interpreter; track story flags explicitly.
+
+##### M18 — Elite Four, Hall of Fame & post-game unlock  · M
+- **Deliverables:** Victory Road, the **Elite Four + Champion** gauntlet, **Hall of Fame** record +
+  **credits**, and the post-game unlock (S.S. Aqua to Kanto, Pokémon expanded, etc.).
+- **Acceptance:** beat the Elite Four from a valid save, see Hall of Fame + credits, and land in the
+  post-game state with Kanto accessible.
+- **Depends on:** M17. **Risks:** Hall-of-Fame data persistence. *Mitigation:* version it into the
+  save (D6).
+
+##### M19 — Kanto  · XL
+- **Deliverables:** all **16 Kanto maps**, the **8 Kanto gyms/badges**, Kanto trainers/encounters,
+  rematches, the Power Plant/Cerulean Rocket events, and **Red** on Mt. Silver.
+- **Acceptance:** travel to Kanto, earn all 8 Kanto badges, and battle Red to completion; world,
+  encounters, and scripts behave as in Johto.
+- **Depends on:** M18. **Risks:** content volume. *Mitigation:* reuse M9/M10/M14 wholesale; it's
+  data + scripts, not new systems.
+
+#### Phase D — Gen-2 signature systems & the last mile
+
+##### M20 — Time & telephony  · L
+- **Deliverables:** **RTC day/night** clock and time-of-day tinting; time-based events &
+  encounters (incl. swarms, morning/day/night tables); the **phone** (register/receive calls,
+  rematches, gifts, tips); the **bug-catching contest**; **Radio** programs.
+- **Acceptance:** the clock advances day/night with correct palettes and encounter tables; a
+  registered trainer calls and offers a rematch; the bug contest runs on its schedule.
+- **Depends on:** M9, M16. **Risks:** RTC source-of-truth. *Mitigation:* drive from real wall clock;
+  make it test-injectable.
+
+##### M21 — Breeding, apricorns & diversions  · L
+- **Deliverables:** **Day-Care & breeding** (egg generation, inheritance, hatching); **berries**;
+  **apricorns + Kurt's custom Poké Balls**; the **Game Corner** (slots/prizes); **Mom's savings**;
+  and the **Ruins of Alph** puzzles (unlock Unown).
+- **Acceptance:** leave two compatible Pokémon at the Day-Care, receive and hatch an egg with
+  inherited moves; turn apricorns into balls via Kurt; Ruins of Alph puzzles unlock Unown.
+- **Depends on:** M15, M9. **Risks:** breeding-inheritance rules. *Mitigation:* port inheritance
+  tables from the disassembly; unit-test egg generation.
+
+##### M22 — Trading, events & Pokédex completion  · L
+- **Deliverables:** the **offline trade terminal** (D7) enabling trades + trade-evolutions and
+  version-exclusive sourcing; **in-game trades**; **event/legendary** triggers (D9) — roaming
+  beasts (Suicune story, Raikou/Entei), Lugia/Ho-Oh, Red Gyarados, the GS Ball/Celebi event; the
+  **Pokédex-complete** reward/flow.
+- **Acceptance:** **the National Pokédex can be completed** to all 251 within the implementation
+  (capture + evolve + trade-evo + in-game trade + events), and dex-completion triggers its reward.
+  This is the **project Definition of Done gate**.
+- **Depends on:** M15, M16, M17, M19. **Risks:** the "completable dex" constraint (trade-evos,
+  exclusives, events). *Mitigation:* D7–D9 make every species reachable single-player.
 
 ---
 
 ## Dependency graph
 
 ```
-M0 → M1 → M2 → M3 → M4 ─┐
-               │        ├→ M7
-               └→ M5 ───┤
-                        └→ M6
-M2 → M8
+Vertical slice (M0–M8):
+  M0 → M1 → M2 → M3 → M4 ─┐
+                 │        ├→ M7
+                 └→ M5 ───┤
+                          └→ M6
+  M2 → M8
+
+Full game (M9–M22):
+  M5,M4 → M9 ─┬→ M10 ┐
+              │       ├→ M17 → M18 → M19 ┐
+  M2 → M16 ───┼→ M15 ┤                   ├→ M22  (Definition of Done)
+  M6 → M13 → M14 ─────┘                  │
+  M7 → M11 → M12                         │
+  M9,M16 → M20                           │
+  M15,M9 → M21 ──────────────────────────┘
 ```
+Phase A (M9–M12) widens the overworld; Phase B (M13–M15) completes battle & growth; Phase C
+(M16–M19) is content & progression through Red; Phase D (M20–M22) adds Gen-2 systems and closes
+on a completable Pokédex.
 
 ## Risk register (top)
 
@@ -246,16 +418,31 @@ M2 → M8
 | F#+MonoGame tooling friction | Blocks M0 | Med | Reference DesktopGL NuGet directly from F# exe; spike in M0 |
 | Data-extraction strategy churn (D1) | Rework M2+ | Med | Decide D1 before M2; isolate behind a loader interface |
 | Gen-2 map/block model complexity | Slips M2/M3 | Med | Model only what the slice needs; golden-image tests |
-| Damage formula / battle edge cases | Subtle M6 bugs | High | Worked-example unit tests from disassembly |
+| Damage formula / battle edge cases | Subtle M6/M13 bugs | High | Worked-example unit tests from disassembly |
 | Audio synthesis fidelity | M8 sounds wrong | High | One channel/track first; iterate |
+| Script/event command long-tail | Story gaps, M9/M17 slip | High | Enumerate the full command table up front; test the interpreter on real script bytes |
+| Content volume (M16–M19, M21) | Long grind, data bugs | High | Generated loaders + per-table count/spot-check tests; reuse systems, add only data |
+| Completable-dex constraints (trade-evo, exclusives, events) | Blocks DoD-2 at M22 | Med | D7–D9: offline trade terminal + built-in event unlocks make every species single-player-reachable |
+| Save schema churn as state grows | Save/reload breakage | Med | Version the save from M7; migrate on load |
 
-## Definition of done (project, v-slice)
+## Definition of done
 
-A single contiguous slice is playable end to end: boot → walk one real map → read an NPC/sign
-→ enter and finish one wild battle → save and reload. Data in that slice is spot-checked against
-the disassembly; interpreters have unit tests; the slice renders to tile accuracy.
+Two gates, in order:
+
+**DoD-1 — Vertical slice (after M8).** A single contiguous slice is playable end to end: boot →
+walk one real map → read an NPC/sign → enter and finish one wild battle → save and reload. Data in
+that slice is spot-checked against the disassembly; interpreters have unit tests; the slice renders
+to tile accuracy. *(This proves the architecture — it is a checkpoint, not the finish line.)*
+
+**DoD-2 — 100%-able Gold (the north star, gated at M22).** From a fresh save the game can be
+**fully completed**: all 16 badges (Johto + Kanto), Elite Four + Champion, Hall of Fame + credits,
+Red on Mt. Silver, and a **completable National Pokédex** (all 251 obtainable in-impl per D7–D9).
+Throughout, save/reload preserves all state; story/event flags fire in the correct order;
+encounters, battles, and growth match the disassembly on a table-driven test suite. Glitchless
+completion is the bar.
 
 ## Tracking
 
-Milestones M0–M8 are mirrored as todos in the session database with dependencies. Update status
-there as work proceeds.
+Milestones M0–M22 are mirrored as todos in the session database with dependencies. Update status
+there as work proceeds. M0–M8 (vertical slice) are scoped tightly; M9–M22 (full game) are coarse
+and get split into sub-tasks as each is picked up.
