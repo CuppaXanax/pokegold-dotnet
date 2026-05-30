@@ -37,3 +37,7 @@
 /captures/
 tools/**/bin/
 tools/**/obj/
+
+# PyBoy oracle run artifacts (investigations)
+*.gbc.ram
+*.gbc.rtc

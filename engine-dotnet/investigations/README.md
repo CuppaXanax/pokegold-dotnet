@@ -56,11 +56,41 @@ dotnet fsi investigations/scripts/dump_trace.fsx audio/music/titlescreen.asm inv
 py  investigations/scripts/gate_seq.py                  # exit 0 = PASS
 ```
 
-### Gate 2 — APU (next)
+### Gate 2 — APU (DONE — found & fixed the high-pass bug)
 
-Feed the **golden** oracle trace straight into our `Apu.fs` (bypassing our
-sequencer) and render PCM. If it still sounds wrong, the bug is 100% in the APU and
-can be debugged as signal math against `wav/ref_title.wav`.
+Method: because Gate 1 proved our per-frame register stream is byte-identical to
+hardware (offset k=45: oracle frame f == our frame f+k), any difference in the
+*rendered audio* on a window where the registers are constant is caused ONLY by the
+APU (synthesis) stage. `capture_both.py` records the hardware PCM **and** the register
+trace from one aligned PyBoy run; `compare_chord.py` finds the longest steady chord
+window and compares the **per-stereo-side** magnitude spectra (LEFT = ch1+ch2,
+RIGHT = ch3+ch2 — titlescreen pans ch1 left, ch3 right, ch2 center, so each side's two
+fundamentals don't overlap and give a clean, normalization-free balance check).
+`score_apu.py` reduces that to one number (std of the per-partial log-ratios after
+removing a free overall gain — i.e. how well the harmonic *shape* matches).
+
+Finding: our analog DC-blocking high-pass had its corner at **~671 Hz** (the naive
+`pow(0.998943, 4194304/rate)` CGB charge factor). That sat *above* the 196–293 Hz note
+fundamentals and suppressed them, leaving the upper harmonics relatively too strong —
+the thin/sharp sound. Sweeping the corner (`POKEGOLD_APU_HPF_HZ`) against the hardware
+oracle: score 0.61 @671 Hz → 0.38 @≤150 Hz (plateau). Set the corner to a proper
+~30 Hz DC-blocker. Result vs hardware on the steady chord:
+
+| balance (fundamental ratio) | hardware | before | after |
+|---|---|---|---|
+| RIGHT ch3(wave)/ch2(pulse) | 1.064 | 0.709 | 1.010 |
+| LEFT  ch1/ch2              | 0.789 | 0.702 | 0.811 |
+
+After the fix the per-partial o/h ratios are uniform (~4.5×, i.e. just an overall gain),
+and we sit slightly *darker* than hardware (no harsh aliasing). Residual is the 75%-duty
+h4 null and the overlap-contaminated 586 Hz bin — not real defects.
+
+```powershell
+py  investigations/scripts/capture_both.py             # aligned hw PCM + trace
+dotnet fsi investigations/scripts/render_song.fsx audio/music/titlescreen.asm investigations/wav/our_title.wav 6
+py  investigations/scripts/compare_chord.py            # per-side harmonic table
+py  investigations/scripts/score_apu.py                # single shape score (lower=better)
+```
 
 ## Folders
 

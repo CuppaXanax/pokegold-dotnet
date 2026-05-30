@@ -94,10 +94,17 @@ type internal Apu(sampleRate: int, kinds: ApuKind[]) =
     let histR = Array.zeroCreate<float> taps
     let mutable histPos = 0
 
-    // --- Analog DC-blocking high-pass filter (per stereo side). CGB charge factor
-    // adapted from the 4.19 MHz hardware rate to our output rate. Removes the large
-    // DC offset that idle/quiet channels inject through their DACs. ---
-    let chargeFactor = Math.Pow(0.998943, 4194304.0 / float sampleRate)
+    // --- Analog DC-blocking high-pass filter (per stereo side). One-pole; its pole
+    // is the per-output-sample charge factor. This must sit FAR below the musical
+    // fundamentals (~tens of Hz) so it only removes the DAC's DC offset without
+    // eating bass — the naive 4.19 MHz-adapted CGB constant put the corner at
+    // ~670 Hz, which suppressed the 200-300 Hz note fundamentals. The corner (Hz)
+    // can be overridden via POKEGOLD_APU_HPF_HZ for empirical tuning. ---
+    let hpfHz =
+        match Environment.GetEnvironmentVariable "POKEGOLD_APU_HPF_HZ" with
+        | null | "" -> 30.0
+        | s -> (match Double.TryParse s with | true, v -> v | _ -> 30.0)
+    let chargeFactor = 1.0 - (2.0 * Math.PI * hpfHz / float sampleRate)
     let mutable capL = 0.0
     let mutable capR = 0.0
 

@@ -1,6 +1,6 @@
 // Render one song (full mix) from our synth to a 16-bit stereo WAV.
 // usage: dotnet fsi render_song.fsx <song.asm> <out.wav> <seconds>
-#r "src/PokeGold.Game/bin/Debug/net8.0/PokeGold.Game.dll"
+#r "../../src/PokeGold.Game/bin/Debug/net8.0/PokeGold.Game.dll"
 open System.IO
 open PokeGold.Game.Audio
 
