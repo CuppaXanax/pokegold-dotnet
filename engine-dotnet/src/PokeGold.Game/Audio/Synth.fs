@@ -19,6 +19,23 @@ module VoiceKind =
         | 2 -> Wave
         | _ -> Noise
 
+/// One channel's discrete driver state at a frame boundary, mirroring the GSC
+/// engine's WRAM `channel_struct` fields. Used by the audio verification gate to
+/// diff our sequencer against a real-hardware (PyBoy WRAM) capture, field-for-field.
+type SeqSnapshot =
+    { /// SOUND_CHANNEL_ON (channel active in the song).
+      On: bool
+      /// CHANNEL_FREQUENCY — the note's 11-bit base period register.
+      Period: int
+      /// CHANNEL_DUTY_CYCLE byte (duty index in bits 6-7).
+      DutyByte: int
+      /// CHANNEL_VOLUME_ENVELOPE — the NRx2 byte (vol<<4 | dir<<3 | period).
+      EnvByte: int
+      /// CHANNEL_OCTAVE.
+      Octave: int
+      /// CHANNEL_NOTE_DURATION — frames remaining on the current note (high byte). 
+      FramesLeft: int }
+
 /// Per-channel sequencer + voice runtime. One per channel in a playing song.
 ///
 /// Pitch is carried as the live 11-bit GB *period* register value (`BasePeriod`),
@@ -513,3 +530,22 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
 
             apu.RenderOne(buffer, offset + n * 2, gain)
             sampleAcc <- sampleAcc - 1.0
+
+    /// Advance the sequencer exactly one 60 Hz frame (no audio render) and snapshot
+    /// every channel's discrete driver state. The audio verification gate calls this
+    /// each frame to build a trace it diffs, field-for-field, against a real-hardware
+    /// WRAM capture — isolating the sequencer stage from the APU synthesis stage.
+    member _.DebugStepFrame() : SeqSnapshot[] =
+        stepFrame ()
+        chans
+        |> Array.map (fun c ->
+            let envByte =
+                ((c.Env.Volume &&& 0xF) <<< 4)
+                ||| (if c.Env.Sweep < 0 then 0x8 else 0)
+                ||| (abs c.Env.Sweep &&& 0x7)
+            { On = c.Active
+              Period = c.BasePeriod
+              DutyByte = (c.Duty &&& 0x3) <<< 6
+              EnvByte = envByte
+              Octave = c.Octave
+              FramesLeft = c.FramesLeft })
