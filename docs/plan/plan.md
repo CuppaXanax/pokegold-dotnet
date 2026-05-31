@@ -277,6 +277,89 @@ be split into sub-tasks as each is picked up. They cluster into four phases.
 - **Depends on:** M5 (text), M4 (movement). **Risks:** command-set breadth. *Mitigation:* enumerate
   the full command table from the disassembly; unit-test the interpreter against real script bytes.
 
+---
+
+#### M9 — Implementation Plan (verified against the disassembly)
+
+**Ground truth (read directly from the repo, not memory):**
+- The script VM lives in `engine/overworld/scripting.asm`. `ScriptCommandTable` (line 64) has
+  **162 commands**, opcodes `$00–$a1`, one `dw Script_*` each. The `*_command` constants and arg
+  layouts are in `macros/scripts/events.asm` (1016 lines).
+- Real opcodes (verified, the explore agent's first guesses were wrong): `scall $00`, `sjump $03`,
+  `ifequal $06`, `ifnotequal $07`, `iffalse $08`, `iftrue $09`, `ifgreater $0a`, `ifless $0b`,
+  `special $0f`, `setval $15`, `readvar $1c`, `giveitem $1f` (item,qty), `takeitem $20`,
+  `checkitem $21`, `checkevent $31`, `clearevent $32`, `setevent $33`, `checkflag $34`,
+  `clearflag $35`, `setflag $36`, `warp $3c`, `opentext $47`, `closetext $49`, `writetext $4c`,
+  `yesorno $4e`, `jumptextfaceplayer $51`, `jumptext $52`, `waitbutton $53`, `promptbutton $54`,
+  `loadtrainer $5d`, `startbattle $5e`, `reloadmapafterbattle $5f`, `setlasttalked $67`,
+  `applymovement $68`, `faceplayer $6a`, `disappear $6d`, `appear $6e`, `playmusic $7e`,
+  `playsound $84`, `waitsfx $85`, `verbosegiveitem $9d`, `warpfacing $a1`, `end $90`.
+- Map events (`maps/AzaleaTown.asm`, macros in `macros/scripts/maps.asm`): four blocks —
+  `def_warp_events` (`warp_event x,y,destMap,destWarpId`), `def_coord_events`
+  (`coord_event x,y,sceneId,script`), `def_bg_events` (`bg_event x,y,type,script`),
+  `def_object_events` (`object_event x,y,SPRITE,MOVEDATA,radX,radY,timeStart,timeEnd,palette,
+  OBJECTTYPE,sightRange,script,eventFlag`). `eventFlag = -1` ⇒ always present.
+- Event flags: `constants/event_flags.asm` (`EVENT_*` indices into `wEventFlags` bitset);
+  bit get/set/clear via `home/flag.asm::FlagAction` (line 32). Engine flags (`ENGINE_*`, badges)
+  are a *separate* bitset via `setflag`/`checkflag`.
+- Suspension points: `writetext`/`jumptext` suspend until the textbox closes; `yesorno` until a
+  choice; `applymovement` until movement finishes; `startbattle` until the battle returns its
+  result into `wScriptVar`. `scall`/`sjump` use a script call-stack; `end` pops or stops.
+- Text seam already exists (M5): scripts hold a text pointer/label; `writetext` feeds the existing
+  `TextStream`/`TextBox`. Integration replaces `OverworldScene`'s hardcoded `DemoText` A-press.
+
+**Design — re-express, don't transcribe** (mirrors our Audio/Battle DU+interpreter pattern):
+- **Parse `.asm`, not bytecode.** A `ScriptParser` reads a map's `.asm` (like `SongParser` reads
+  audio `.asm`), producing `Map<Label, ScriptCommand list>` with jumps/calls referencing labels
+  symbolically. "The source is the spec."
+- **`ScriptCommand` DU** for the M9 slice (~35 commands, not all 162 — defer phone/trade/menu/
+  decoration/elevator to later milestones). Unknown opcodes parse to `Unsupported of name` so a
+  whole map still loads and we can see coverage gaps.
+- **Resumable VM.** `Script.step` runs commands until it hits a *yield*, returning a
+  `ScriptYield`: `ShowText label`, `AskYesNo`, `Move (objId, path)`, `StartBattle spec`,
+  `Warp dest`, `PlaySound id`, or `Finished`. The VM state is `{ Pc; Stack; }`; the scene handles
+  the yield (push textbox/battle, run movement) and calls `resume` with the result
+  (`YesNo bool`, `BattleResult`, `Unit`). This keeps the interpreter pure and total.
+- **`ScriptContext`** = the mutable world the VM reads/writes: `EventFlags` bitset, `EngineFlags`
+  bitset, `wScriptVar`, bag/money (thin slices), and object visibility. Lives beside
+  `OverworldState`.
+- **Event flags persist** via M7 save: extend `SaveData` with the `EventFlags` (+ engine flags)
+  bitset so a collected item ball / set event survives reload (the acceptance gate).
+
+**Sub-milestones (each = build + tests + green before next):**
+1. **M9.1 — Script DU + parser.** `Overworld/Script/ScriptCommand.fs` (the DU) +
+   `ScriptParser.fs` (`.asm` label-block → `ScriptCommand list`, symbolic jumps, `Unsupported`
+   fallback). Tests: parse `AzaleaTownGrampsScript` and Bugsy's script from the real map files;
+   assert exact command sequences.
+2. **M9.2 — Event/engine flag store + VM core.** `EventFlags.fs` (bitset get/set/clear keyed by
+   `EVENT_*`/`ENGINE_*` names from the constants) + `Script.fs` (`step`/`resume`, call-stack,
+   `iftrue/iffalse/ifequal`, `checkevent/setevent/clearevent`, `checkflag/setflag/clearflag`,
+   `setval/readvar`, `scall/sjump/end`). Tests: flag round-trips; a branch that takes the
+   `iftrue` path only after `setevent`; call/return nesting.
+3. **M9.3 — Map event records + parser.** `MapEvents.fs` (warp/coord/bg/object DUs) +
+   parse the four `def_*_events` blocks from a map `.asm`. Wire into `OverworldState` (objects →
+   NPC sprites with positions; gate visibility on `eventFlag`). Tests: AzaleaTown event counts &
+   first records match the file.
+4. **M9.4 — Overworld integration.** `OverworldScene` runs the VM: **A** while facing an
+   `object_event` runs its script (faceplayer→text→…); **stepping** onto a `coord_event` whose
+   scene matches fires it once; `writetext`/`yesorno` push the existing TextBox/choice scene and
+   resume on close; `verbosegiveitem`/`giveitem` add to the bag and set `wScriptVar`. Replaces the
+   hardcoded `DemoText`. Manual + scripted-input tests.
+5. **M9.5 — Warps + persistence.** `warp`/`warpfacing` switch maps (extend
+   `OverworldState.loadAssets` map table); collected item balls / set events persist through
+   `SaveData` (round-trip test = the **acceptance gate**).
+6. **M9.6 — Coverage pass + commit.** Run a parser sweep over all bundled map `.asm` files;
+   report `Unsupported` opcode frequency to size the next slice. Full `dotnet test` green; commit
+   per sub-milestone (author Xander, Copilot trailer).
+
+**Acceptance (unchanged, now testable):** talk to a scripted NPC → runs its script (sets a flag,
+gives an item, branches on the flag next time); a coord trigger fires once; an item ball is
+collectable and doesn't respawn after save/reload.
+
+**Out of scope for M9 (explicit defers):** phone/cellnum, trade, `_2dmenu`/`verticalmenu`/
+`loadmenu` complex menus, decorations, fruit trees, elevators, credits/hall-of-fame, `callasm`/
+`memcall` raw-ASM commands → these `Unsupported`-fallback now, picked up by M11/M12/M17+.
+
 ##### M10 — World assembly & NPC objects  · L
 - **Deliverables:** load **all 286 maps**; map connections/streaming and warp transitions between
   maps; per-map tileset/palette/music binding; overworld **object/NPC sprites** with movement
