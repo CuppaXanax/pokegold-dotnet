@@ -29,6 +29,12 @@ module WindowRenderer =
         Charmap.encode s
         |> Array.iteri (fun i code -> drawCode fb font palette (col + i) row code)
 
+    /// Draw the ▶ cursor glyph (tile code 0xED) at the given tile column/row.
+    /// Used by scenes that render multi-row slots (e.g. PartyScene) where
+    /// drawList's one-row-per-item assumption does not apply.
+    let drawCursor (fb: Framebuffer) (font: Font) (palette: Palette) (col: int) (row: int) =
+        drawCode fb font palette col row 0xEDuy
+
     /// Draw a vertical list of strings with the ▶ cursor glyph (0xED) on the
     /// selected row. `items` is the visible slice to render (call site is
     /// responsible for windowing via `MenuList`); `cursorIndex` is the index
