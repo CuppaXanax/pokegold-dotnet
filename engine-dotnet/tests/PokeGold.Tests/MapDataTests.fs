@@ -67,3 +67,22 @@ let ``the overworld sources its events from the baked table, not live asm`` () =
     Assert.Equal<ObjectEvent[]>(baked.Events.Objects, state.Events.Objects)
     Assert.Equal(baked.Script.Commands.Length, state.Script.Commands.Length)
     Assert.Equal<Map<string, string>>(baked.Text, state.Text)
+
+[<Fact>]
+let ``map music ids resolve to shipped song files`` () =
+    // M10.2 — per-map music binding. Every map's baked Meta.Music that maps to a
+    // shipped song must resolve through the generated MUSIC_* -> file table; the few
+    // that don't (MUSIC_NONE, songs not yet in the tree) are simply absent.
+    Assert.True(MusicData.byId.Count >= 90, sprintf "expected >=90 music bindings, got %d" MusicData.byId.Count)
+    Assert.Equal("audio/music/azaleatown.asm", MusicData.byId.["MUSIC_AZALEA_TOWN"])
+    Assert.Equal("audio/music/newbarktown.asm", MusicData.byId.["MUSIC_NEW_BARK_TOWN"])
+    // The naming exception: MUSIC_TITLE -> Music_TitleScreen -> titlescreen.asm.
+    Assert.Equal("audio/music/titlescreen.asm", MusicData.byId.["MUSIC_TITLE"])
+
+    // AzaleaTown's baked music id binds to a real song file.
+    let azalea =
+        match MapsData.byName "AzaleaTown" with
+        | Some m -> m
+        | None -> failwith "AzaleaTown missing"
+
+    Assert.True(MusicData.byId.ContainsKey azalea.Meta.Music)

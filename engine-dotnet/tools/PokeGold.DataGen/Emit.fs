@@ -92,12 +92,32 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private musicFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated `MUSIC_*` song id -> repo-relative music `.asm` file, for every") |> ignore
+        sb.AppendLine("/// song whose file ships in the tree. Built from the disassembly's parallel") |> ignore
+        sb.AppendLine("/// music_constants / music_pointers tables.") |> ignore
+        sb.AppendLine("module MusicData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byId : Map<string, string> =") |> ignore
+        sb.AppendLine("        Map.ofArray [|") |> ignore
+
+        for (id, file) in MusicParsers.bindings () do
+            sb.AppendLine(sprintf "            (\"%s\", \"%s\")" id file) |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.ToString()
+
     /// Generate all data files into `outDir`. Returns the list of (path, changed).
     let all (outDir: string) : (string * bool) list =
         [ "TypeChart.Generated.fs", typeChart ()
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
-          "Maps.Generated.fs", EmitMaps.render MapParsers.maps ]
+          "Maps.Generated.fs", EmitMaps.render MapParsers.maps
+          "Music.Generated.fs", musicFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)
             path, writeIfChanged path content)

@@ -421,6 +421,18 @@ live `.asm` to assert against the baked data). `OverworldState.fs` has zero
 `Assets.readText`. 130/130 tests green (new gate: loading AzaleaTown yields the exact
 baked Events/Script/Text; the no-op warp test repointed to a `.blk`-less map).
 
+**M10.2 — per-map music binding — DONE.** The overworld now plays each map's own
+BGM. Added a build-time `MUSIC_* → song-file` table (`Music.Generated.fs`, module
+`MusicData.byId`, 93 entries): `MusicParsers` zips the parallel `music_constants.asm`
+(ordered ids) and `audio/music_pointers.asm` (`dba Music_<Label>`) tables by index,
+then resolves each to `audio/music/<label>.asm`, filtering to shipped files. This
+pointer-table join is authoritative — a naive `MUSIC_X → x.asm` convention is wrong
+for ~24 songs (e.g. `MUSIC_TITLE → Music_TitleScreen → titlescreen.asm`).
+`OverworldScene.musicFor` resolves `MapsData.byName(mapId).Meta.Music` through
+`MusicData.byId`, returning `option` (no track for `MUSIC_NONE`/unshipped songs)
+instead of the old hard-coded `azaleatown.asm`. 131/131 tests green (new gate: ≥90
+bindings, the `MUSIC_TITLE` exception, and AzaleaTown's id resolves to a real file).
+
 ###### M10 addendum — inherited deferrals (from M4/M8) to enumerate here
 
 

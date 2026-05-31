@@ -32,6 +32,7 @@
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
+    <Compile Include="Data\Generated\Music.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
@@ -124,10 +125,13 @@
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)maps\*.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\music_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)audio\music_pointers.asm" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
   </ItemGroup>
 
   <!-- Regenerate the baked data tables whenever a source table changes (or the

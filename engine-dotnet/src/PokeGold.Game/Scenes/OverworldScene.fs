@@ -35,12 +35,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let spriteCache = Dictionary<string, Sprite option>()
 
     /// Start this map's background music as soon as the scene exists.
-    do sound.PlayMusic(OverworldScene.musicFor initial.MapId)
+    do
+        match OverworldScene.musicFor initial.MapId with
+        | Some path -> sound.PlayMusic path
+        | None -> ()
 
-    /// The repo-relative music file for a map id (the overworld BGM).
-    static member private musicFor(mapId: string) : string =
-        match mapId with
-        | _ -> "audio/music/azaleatown.asm"
+    /// The repo-relative music file for a map id: its baked `Meta.Music` song id
+    /// resolved through the generated `MUSIC_* -> file` table. `None` when the map
+    /// or its song isn't in the tree (e.g. `MUSIC_NONE`, or a song not yet shipped),
+    /// in which case the scene simply starts no track.
+    static member private musicFor(mapId: string) : string option =
+        MapsData.byName mapId
+        |> Option.bind (fun m -> Map.tryFind m.Meta.Music MusicData.byId)
 
     /// Resolve a text label to its M5 token string; unknown labels show the label.
     member private _.ResolveText(label: string) : string =
