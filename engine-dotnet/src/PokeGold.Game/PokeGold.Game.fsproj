@@ -31,6 +31,7 @@
     <Compile Include="Data\Generated\TypeChart.Generated.fs" />
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
+    <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\Generated\Music.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
@@ -53,6 +54,8 @@
     <Compile Include="Overworld\Script\MapEvents.fs" />
     <Compile Include="Overworld\Script\Triggers.fs" />
     <Compile Include="Overworld\Script\AsmLoad.fs" />
+    <Compile Include="Overworld\Object.fs" />
+    <Compile Include="Overworld\ObjectStep.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
@@ -124,6 +127,7 @@
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
+    <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)maps\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\music_constants.asm" />
@@ -131,6 +135,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
   </ItemGroup>

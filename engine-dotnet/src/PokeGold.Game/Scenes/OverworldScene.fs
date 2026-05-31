@@ -154,13 +154,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             spriteCache.[name] <- v
             v
 
-    /// The stand-pose frame + horizontal flip for an object's movement data.
-    static member private StandFrame(movement: string) : int * bool =
-        if movement.Contains "UP" then 1, false
-        elif movement.Contains "RIGHT" then 2, true
-        elif movement.Contains "LEFT" then 2, false
-        else 0, false // DOWN / WANDER / STILL and anything else
-
     interface Scene with
         member this.Update(buttons: Buttons) : Transition =
             match pending with
@@ -237,10 +230,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         member this.Render(fb: Framebuffer) =
             OverworldRenderer.draw fb state
 
-            // Draw visible NPC objects over the map (player already drawn above).
-            for o in MapEvents.visibleObjects world state.Events do
-                match this.SpriteFor o.Sprite with
-                | Some spr ->
-                    let frame, flip = OverworldScene.StandFrame o.Movement
-                    SpriteRenderer.draw fb state.SpritePalette spr frame (o.X * 16 - state.CamX) (o.Y * 16 - state.CamY) flip
-                | None -> ()
+            // Draw visible NPC objects over the map (player already drawn above),
+            // using each object's live, interpolated position and walk frame.
+            for n in state.Npcs do
+                if MapEvents.objectVisible world n.Event then
+                    match this.SpriteFor n.Event.Sprite with
+                    | Some spr ->
+                        let frame, flip = NpcObject.frameAndFlip n
+                        let px, py = NpcObject.worldPixel n
+                        SpriteRenderer.draw fb state.SpritePalette spr frame (px - state.CamX) (py - state.CamY) flip
+                    | None -> ()

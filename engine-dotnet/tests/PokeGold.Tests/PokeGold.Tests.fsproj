@@ -20,6 +20,7 @@
     <Compile Include="MapDataTests.fs" />
     <Compile Include="OverworldSfxTests.fs" />
     <Compile Include="ConnectionsTests.fs" />
+    <Compile Include="ObjectTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

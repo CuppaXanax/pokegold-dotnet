@@ -134,3 +134,47 @@ module Parsers =
                         Accuracy = int m.Groups.[5].Value
                         Pp = int m.Groups.[6].Value
                         EffectChance = int m.Groups.[7].Value } ]
+
+    // --- Sprite movement data ----------------------------------------------
+
+    /// One `SPRITEMOVEDATA_*` row: its movement function (`SPRITEMOVEFN_*`) and the
+    /// object's initial facing (`DOWN`/`UP`/`LEFT`/`RIGHT`). These are the only two
+    /// fields the high-level NPC engine needs from `data/sprites/map_objects.asm`.
+    type SpriteMovement =
+        { Constant: string
+          Fn: string
+          Facing: string }
+
+    /// Every `SPRITEMOVEDATA_*` row in table order, from `data/sprites/map_objects.asm`.
+    /// Stops at `assert_table_length` so the trailing unused entry is excluded.
+    let spriteMovement : SpriteMovement list =
+        let nameRx = Regex(@"^\s*;\s*(SPRITEMOVEDATA_\w+)")
+        let dbRx = Regex(@"^\s*db\s+([A-Za-z0-9_]+)")
+        let result = ResizeArray<SpriteMovement>()
+        let mutable name = ""
+        let mutable dbIndex = 0
+        let mutable fn = ""
+        let mutable stop = false
+
+        for raw in Repo.readText("data/sprites/map_objects.asm").Split('\n') do
+            if not stop then
+                if raw.Contains "assert_table_length" then
+                    stop <- true
+                else
+                    let nm = nameRx.Match raw
+
+                    if nm.Success then
+                        name <- nm.Groups.[1].Value
+                        dbIndex <- 0
+                    else
+                        let db = dbRx.Match raw
+
+                        if db.Success && name <> "" then
+                            match dbIndex with
+                            | 0 -> fn <- db.Groups.[1].Value
+                            | 1 -> result.Add { Constant = name; Fn = fn; Facing = db.Groups.[1].Value }
+                            | _ -> ()
+
+                            dbIndex <- dbIndex + 1
+
+        List.ofSeq result

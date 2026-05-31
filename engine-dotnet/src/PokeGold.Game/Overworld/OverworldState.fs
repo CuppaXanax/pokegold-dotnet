@@ -29,7 +29,11 @@ type OverworldState =
       /// Loaded, placed neighbour maps for border rendering, cross-join collision
       /// and walking off the edge into the next map. Empty until populated by a
       /// content-aware load (`withNeighbors`); a bare `build`/`createAt` has none.
-      Neighbors: MapConnections.NeighborMap list }
+      Neighbors: MapConnections.NeighborMap list
+      /// The map's live overworld objects (NPCs, signs-as-objects, etc.), one per
+      /// visible-or-not object event, advanced each frame by the `ObjectStep`
+      /// system. Autonomous ones wander; the rest hold their pose.
+      Npcs: NpcObject[] }
 
 module OverworldState =
 
@@ -77,6 +81,7 @@ module OverworldState =
     /// the given placement function (start cell vs a saved cell/facing).
     let private build (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (player: PlayerState) : OverworldState =
         let camX, camY = Camera.follow map player
+        let events = eventsFor mapId
 
         { MapId = mapId
           Map = map
@@ -88,10 +93,11 @@ module OverworldState =
           Player = player
           CamX = camX
           CamY = camY
-          Events = eventsFor mapId
+          Events = events
           Script = scriptFor mapId
           Text = textFor mapId
-          Neighbors = [] }
+          Neighbors = []
+          Npcs = events.Objects |> Array.mapi NpcObject.fromEvent }
 
     /// Build an overworld for an already-loaded map/tileset/collision/sprite,
     /// placing the player on the first walkable cell from the map center.
@@ -192,7 +198,13 @@ module OverworldState =
         let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
         let player = Movement.stepWith walkable collId buttons s.Player
         let camX, camY = Camera.followExt s.Map s.Neighbors player
-        { s with Player = player; CamX = camX; CamY = camY }
+        let npcs = ObjectStep.stepAll walkable s.Npcs
+
+        { s with
+            Player = player
+            CamX = camX
+            CamY = camY
+            Npcs = npcs }
 
     /// If the player has walked off the current map into a connected neighbour,
     /// rebuild the overworld as that neighbour with the player rebased to the

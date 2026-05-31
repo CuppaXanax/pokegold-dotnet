@@ -92,6 +92,27 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private spriteMovementFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated `SPRITEMOVEDATA_*` rows: the movement function (`SPRITEMOVEFN_*`)") |> ignore
+        sb.AppendLine("/// and initial facing for each, baked from data/sprites/map_objects.asm. Keyed") |> ignore
+        sb.AppendLine("/// by the `SPRITEMOVEDATA_*` constant an object event names; the value is a") |> ignore
+        sb.AppendLine("/// `(movementFn, facing)` pair the high-level NPC engine maps to behaviour.") |> ignore
+        sb.AppendLine("module SpriteMovementData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : Map<string, string * string> =") |> ignore
+        sb.AppendLine("        Map.ofArray [|") |> ignore
+
+        for r in Parsers.spriteMovement do
+            sb.AppendLine(sprintf "            (\"%s\", (\"%s\", \"%s\"))" r.Constant r.Fn r.Facing)
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.ToString()
+
     let private musicFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -116,6 +137,7 @@ module Emit =
         [ "TypeChart.Generated.fs", typeChart ()
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
+          "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
           "Music.Generated.fs", musicFile () ]
         |> List.map (fun (name, content) ->
