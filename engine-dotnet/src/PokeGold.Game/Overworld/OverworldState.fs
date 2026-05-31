@@ -196,9 +196,28 @@ module OverworldState =
     let tick (buttons: Buttons) (s: OverworldState) : OverworldState =
         let walkable = MapConnections.cellWalkable s.Map s.Collision s.Neighbors
         let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
-        let player = Movement.stepWith walkable collId buttons s.Player
+
+        // Live NPCs are solid: the player can't walk onto a cell an object holds
+        // (or is stepping out of). Ledge hops still don't re-validate the landing,
+        // matching GSC — an NPC on a ledge-landing cell won't stop a jump.
+        let npcCells = ObjectStep.occupiedCells s.Npcs
+        let playerWalkable cx cy = walkable cx cy && not (Set.contains (struct (cx, cy)) npcCells)
+
+        let player = Movement.stepWith playerWalkable collId buttons s.Player
         let camX, camY = Camera.followExt s.Map s.Neighbors player
-        let npcs = ObjectStep.stepAll walkable s.Npcs
+
+        // The player is solid too: objects won't step onto the player's cell (or the
+        // cell it's mid-step between). Use the post-step position so an NPC reacts to
+        // where the player actually is this frame.
+        let playerBlocked =
+            seq {
+                yield struct (player.CellX, player.CellY)
+
+                if player.Motion <> Standing then
+                    yield struct (player.SrcX, player.SrcY)
+            }
+
+        let npcs = ObjectStep.stepAllBlocked walkable playerBlocked s.Npcs
 
         { s with
             Player = player

@@ -140,3 +140,22 @@ let ``stepAll keeps two wanderers off the same cell`` () =
         let p0 = npcs.[0].CellX, npcs.[0].CellY
         let p1 = npcs.[1].CellX, npcs.[1].CellY
         Assert.NotEqual<int * int>(p0, p1)
+
+[<Fact>]
+let ``an object never steps onto a pinned player cell`` () =
+    // A wanderer on a fully-open field whose radius covers the pinned cell: it must
+    // never occupy it, because the player is solid.
+    let n = NpcObject.fromEvent 0 (mkEvent 5 5 "SPRITEMOVEDATA_WANDER" 3 3)
+    let pin = struct (6, 5)
+    let mutable npcs = [| n |]
+
+    for _ in 1..4000 do
+        npcs <- ObjectStep.stepAllBlocked open' (Seq.singleton pin) npcs
+        Assert.NotEqual<struct (int * int)>(pin, struct (npcs.[0].CellX, npcs.[0].CellY))
+
+[<Fact>]
+let ``occupiedCells reports a standing object's single cell`` () =
+    let n = NpcObject.fromEvent 0 (mkEvent 7 4 "SPRITEMOVEDATA_STILL" 0 0)
+    let cells = ObjectStep.occupiedCells [| n |]
+    Assert.True(Set.contains (struct (7, 4)) cells)
+    Assert.Equal(1, Set.count cells)

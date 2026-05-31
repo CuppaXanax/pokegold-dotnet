@@ -154,13 +154,34 @@ module ObjectStep =
                     Sleep = r2 &&& sleepMask n.Kind
                     Seed = seed2 }
 
+    /// The set of cells the live objects hold this frame: where each stands/heads,
+    /// plus the cell it is stepping out of while a walk is mid-flight. Used to block
+    /// the player from walking onto an NPC.
+    let occupiedCells (npcs: NpcObject[]) : Set<struct (int * int)> =
+        seq {
+            for m in npcs do
+                yield struct (m.CellX, m.CellY)
+
+                if m.Moving then
+                    yield struct (m.SrcX, m.SrcY)
+        }
+        |> Set.ofSeq
+
     /// Advance every object one frame. Occupancy is threaded sequentially: each
     /// object sees the cells already committed by earlier objects this frame plus
     /// the not-yet-moved cells of later objects, so two NPCs never end on the same
-    /// tile and none blocks itself. `walkable` already folds in map + connection
-    /// collision.
-    let stepAll (walkable: int -> int -> bool) (npcs: NpcObject[]) : NpcObject[] =
+    /// tile and none blocks itself. `blocked` are extra immovable cells (e.g. the
+    /// player) that no object may step onto. `walkable` already folds in map +
+    /// connection collision.
+    let stepAllBlocked (walkable: int -> int -> bool) (blocked: struct (int * int) seq) (npcs: NpcObject[]) : NpcObject[] =
         let occ = System.Collections.Generic.HashSet<struct (int * int)>()
+
+        for c in blocked do
+            occ.Add c |> ignore
+
+        // Cells that come from `blocked` are immovable; never remove them below even
+        // if an object happens to share one this frame.
+        let pinned = System.Collections.Generic.HashSet<struct (int * int)>(occ)
 
         for m in npcs do
             occ.Add(struct (m.CellX, m.CellY)) |> ignore
@@ -170,8 +191,14 @@ module ObjectStep =
 
         npcs
         |> Array.map (fun n ->
-            occ.Remove(struct (n.CellX, n.CellY)) |> ignore
-            occ.Remove(struct (n.SrcX, n.SrcY)) |> ignore
+            let self0 = struct (n.CellX, n.CellY)
+            let self1 = struct (n.SrcX, n.SrcY)
+
+            if not (pinned.Contains self0) then
+                occ.Remove self0 |> ignore
+
+            if not (pinned.Contains self1) then
+                occ.Remove self1 |> ignore
 
             let occupied cx cy = occ.Contains(struct (cx, cy))
             let stepped = step walkable occupied n
@@ -182,3 +209,7 @@ module ObjectStep =
                 occ.Add(struct (stepped.SrcX, stepped.SrcY)) |> ignore
 
             stepped)
+
+    /// Advance every object one frame with no external blockers (NPC↔NPC only).
+    let stepAll (walkable: int -> int -> bool) (npcs: NpcObject[]) : NpcObject[] =
+        stepAllBlocked walkable Seq.empty npcs
