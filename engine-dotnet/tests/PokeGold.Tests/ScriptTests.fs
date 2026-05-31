@@ -187,3 +187,212 @@ let ``parses the real Azalea Town Gramps branch`` () =
         [ Writetext "AzaleaTownGrampsTextAfter"; Waitbutton; Closetext; End ],
         ScriptProgram.blockAt "AzaleaTownGrampsScript.ClearedWell" prog
     )
+
+// ---- M9.2 — the resumable script VM + flag/var world store -----------------
+
+// Drive a script from `label` to completion, auto-answering each result-bearing
+// effect with `respond` and collecting the effects seen and the final world.
+let private drive (respond: ScriptEffect -> int option) (world: World) (label: string) (prog: ScriptProgram) =
+    let rec loop world step (effects: ScriptEffect list) =
+        match step with
+        | Completed -> world, List.rev effects
+        | Suspended(vm, effect) ->
+            let next = Script.resume (respond effect) world vm
+            loop next.World next.Outcome (effect :: effects)
+
+    let first = Script.start label world prog
+    loop first.World first.Outcome []
+
+// A driver that needs no answers (no result-bearing effects on the path).
+let private driveSilent world label prog =
+    drive (fun _ -> None) world label prog
+
+[<Fact>]
+let ``World flag set-check-clear round-trips`` () =
+    let w = World.empty
+    Assert.False(World.hasEvent "EVENT_X" w)
+    let w = World.setEvent "EVENT_X" w
+    Assert.True(World.hasEvent "EVENT_X" w)
+    let w = World.clearEvent "EVENT_X" w
+    Assert.False(World.hasEvent "EVENT_X" w)
+    // Vars and scenes default to 0 and round-trip independently.
+    Assert.Equal(0, World.getVar "VAR_X" w)
+    Assert.Equal(42, World.getVar "VAR_X" (World.setVar "VAR_X" 42 w))
+
+[<Fact>]
+let ``checkevent then iftrue branches only when the flag is set`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tcheckevent EVENT_GATE\n\
+             \tiftrue .Open\n\
+             \twritetext ClosedText\n\
+             \tend\n\
+             .Open:\n\
+             \twritetext OpenText\n\
+             \tend\n"
+
+    // Flag clear -> falls through to the "closed" text.
+    let _, closed = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("ClosedText", false) ], closed)
+
+    // Flag set -> the iftrue is taken and we see the "open" text.
+    let _, opened = driveSilent (World.setEvent "EVENT_GATE" World.empty) "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("OpenText", false) ], opened)
+
+[<Fact>]
+let ``setevent persists into the returned world`` () =
+    let prog = ScriptParser.parseText "S:\n\tsetevent EVENT_DONE\n\tend\n"
+    let world, _ = driveSilent World.empty "S" prog
+    Assert.True(World.hasEvent "EVENT_DONE" world)
+
+[<Fact>]
+let ``setval and ifequal compare the script var`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tsetval 3\n\
+             \tifequal 3, .Match\n\
+             \twritetext NoMatch\n\
+             \tend\n\
+             .Match:\n\
+             \twritetext Match\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Match", false) ], effects)
+
+[<Fact>]
+let ``readvar loads a game variable into the script var`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \treadvar VAR_BADGES\n\
+             \tifequal 8, .AllBadges\n\
+             \tend\n\
+             .AllBadges:\n\
+             \twritetext Congrats\n\
+             \tend\n"
+
+    let world = World.setVar "VAR_BADGES" 8 World.empty
+    let _, effects = driveSilent world "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Congrats", false) ], effects)
+
+[<Fact>]
+let ``writevar stores the script var into a game variable`` () =
+    let prog = ScriptParser.parseText "S:\n\tsetval 5\n\twritevar VAR_RESULT\n\tend\n"
+    let world, _ = driveSilent World.empty "S" prog
+    Assert.Equal(5, World.getVar "VAR_RESULT" world)
+
+[<Fact>]
+let ``scall runs a sub-script and end returns to the caller`` () =
+    let prog =
+        ScriptParser.parseText
+            "Main:\n\
+             \twritetext Before\n\
+             \tscall Sub\n\
+             \twritetext After\n\
+             \tend\n\
+             Sub:\n\
+             \twritetext Inside\n\
+             \tend\n"
+
+    // end inside Sub returns after the scall, so we see Before, Inside, After.
+    let _, effects = driveSilent World.empty "Main" prog
+    Assert.Equal<ScriptEffect list>(
+        [ ShowText("Before", false); ShowText("Inside", false); ShowText("After", false) ],
+        effects
+    )
+
+[<Fact>]
+let ``nested scall/end unwinds the call stack in order`` () =
+    let prog =
+        ScriptParser.parseText
+            "Main:\n\
+             \tscall A\n\
+             \twritetext M\n\
+             \tend\n\
+             A:\n\
+             \tscall B\n\
+             \twritetext AfromA\n\
+             \tend\n\
+             B:\n\
+             \twritetext B\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "Main" prog
+    Assert.Equal<ScriptEffect list>(
+        [ ShowText("B", false); ShowText("AfromA", false); ShowText("M", false) ],
+        effects
+    )
+
+[<Fact>]
+let ``endall stops even inside a sub-script`` () =
+    let prog =
+        ScriptParser.parseText
+            "Main:\n\
+             \tscall Sub\n\
+             \twritetext NeverShown\n\
+             \tend\n\
+             Sub:\n\
+             \twritetext Inside\n\
+             \tendall\n"
+
+    let _, effects = driveSilent World.empty "Main" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Inside", false) ], effects)
+
+[<Fact>]
+let ``yesorno feeds the choice back into the script var`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tyesorno\n\
+             \tiftrue .Yes\n\
+             \twritetext SaidNo\n\
+             \tend\n\
+             .Yes:\n\
+             \twritetext SaidYes\n\
+             \tend\n"
+
+    // Answer the AskYesNo effect with 1 (yes).
+    let respondYes = function AskYesNo -> Some 1 | _ -> None
+    let _, yes = drive respondYes World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ AskYesNo; ShowText("SaidYes", false) ], yes)
+
+    // ...and with 0 (no).
+    let respondNo = function AskYesNo -> Some 0 | _ -> None
+    let _, no = drive respondNo World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ AskYesNo; ShowText("SaidNo", false) ], no)
+
+[<Fact>]
+let ``jumptextfaceplayer shows text facing the player then ends`` () =
+    let prog = ScriptParser.parseText "S:\n\tjumptextfaceplayer Greeting\n"
+    let _, effects = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Greeting", true) ], effects)
+
+[<Fact>]
+let ``unsupported opcodes are skipped so the script keeps running`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tspecial Special_Foo\n\
+             \twritetext Shown\n\
+             \tpause 30\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Shown", false) ], effects)
+
+[<Fact>]
+let ``the real Gramps script runs the right branch for each flag state`` () =
+    let prog = ScriptParser.parseFile "maps/AzaleaTown.asm"
+
+    // Before clearing Slowpoke Well: faces the player, then the "before" text.
+    let _, before = driveSilent World.empty "AzaleaTownGrampsScript" prog
+    Assert.Equal<ScriptEffect list>([ FacePlayer; ShowText("AzaleaTownGrampsTextBefore", false) ], before)
+
+    // After: the iftrue is taken and we get the "after" text.
+    let cleared = World.setEvent "EVENT_CLEARED_SLOWPOKE_WELL" World.empty
+    let _, after = driveSilent cleared "AzaleaTownGrampsScript" prog
+    Assert.Equal<ScriptEffect list>([ FacePlayer; ShowText("AzaleaTownGrampsTextAfter", false) ], after)
+
