@@ -506,14 +506,18 @@ let ``a script label with no text block produces no entry`` () =
 let ``actionScript returns the faced NPC's script`` () =
     let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
+    // Resolve objects over the static event table (the scene uses live NPC cells).
+    let objAt fx fy =
+        MapEvents.objectAt World.empty fx fy ev |> Option.map (fun o -> o.Script)
+
     // Gramps stands on (21, 9); a player on (21, 10) facing up faces that cell.
     Assert.Equal(
         Some "AzaleaTownGrampsScript",
-        Triggers.actionScript World.empty ev 21 10 Up
+        Triggers.actionScript objAt ev 21 10 Up
     )
 
     // Facing an empty cell triggers nothing.
-    Assert.Equal(None, Triggers.actionScript World.empty ev 21 10 Down)
+    Assert.Equal(None, Triggers.actionScript objAt ev 21 10 Down)
 
 [<Fact>]
 let ``coordToFire gates on the active scene and fires once`` () =

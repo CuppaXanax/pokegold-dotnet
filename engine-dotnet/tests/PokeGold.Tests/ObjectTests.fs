@@ -159,3 +159,71 @@ let ``occupiedCells reports a standing object's single cell`` () =
     let cells = ObjectStep.occupiedCells [| n |]
     Assert.True(Set.contains (struct (7, 4)) cells)
     Assert.Equal(1, Set.count cells)
+
+// ---- M10 follow-ups: live interaction + visibility-gated solidity -----------
+
+[<Fact>]
+let ``actionScript talks to a wandering NPC at its current cell, not its spawn`` () =
+    // An NPC that has wandered two tiles east of where it spawned.
+    let ev = { mkEvent 5 5 "SPRITEMOVEDATA_WANDER" 2 2 with Script = "WandererScript" }
+    let npc = { NpcObject.fromEvent 0 ev with CellX = 7; CellY = 5 }
+
+    // The scene resolves the faced object over the *live* NPC set.
+    let objectScriptAt fx fy =
+        [| npc |]
+        |> Array.tryFind (fun n -> n.CellX = fx && n.CellY = fy)
+        |> Option.map (fun n -> n.Event.Script)
+
+    // Facing the NPC's current cell (7,5) talks to it...
+    Assert.Equal(Some "WandererScript", Triggers.actionScript objectScriptAt MapEvents.empty 8 5 Left)
+    // ...while facing the now-empty spawn tile (5,5) triggers nothing (no ghost).
+    Assert.Equal(None, Triggers.actionScript objectScriptAt MapEvents.empty 6 5 Left)
+
+[<Fact>]
+let ``hidden event-gated objects neither block the player nor wander`` () =
+    // Azalea Town's Slowpokes/Rockets/Rival are gated behind event flags that are
+    // unset in a fresh world, so they are absent — they must not render (scene-side),
+    // not occupy a tile (no invisible walls), and not wander.
+    let content = PokeGold.Game.Data.Content()
+    let st0 = OverworldState.loadById content "AzaleaTown"
+    let vis (n: NpcObject) = MapEvents.objectVisible World.empty n.Event
+
+    Assert.True(st0.Npcs |> Array.exists (vis >> not), "expected event-gated objects in Azalea")
+
+    // Hidden objects' tiles are not in the occupancy set the player is blocked by.
+    let visibleCells = ObjectStep.occupiedCells (st0.Npcs |> Array.filter vis)
+
+    for n in st0.Npcs do
+        if not (vis n) then
+            Assert.False(Set.contains (struct (n.CellX, n.CellY)) visibleCells)
+
+    // Stepping the world leaves every hidden object exactly where it spawned.
+    let mutable st = st0
+
+    for _ in 1..300 do
+        st <- OverworldState.tick vis Buttons.none st
+
+    for i in 0 .. st.Npcs.Length - 1 do
+        let a = st0.Npcs.[i]
+        let b = st.Npcs.[i]
+
+        if not (vis a) then
+            Assert.Equal<int * int>((a.CellX, a.CellY), (b.CellX, b.CellY))
+
+[<Fact>]
+let ``visible NPCs still wander when the world is stepped`` () =
+    // The flip side: with everything visible, an unobstructed wanderer does move,
+    // proving the visibility filter doesn't freeze present objects.
+    let content = PokeGold.Game.Data.Content()
+    let st0 = OverworldState.loadById content "AzaleaTown"
+    let always = fun (_: NpcObject) -> true
+
+    let mutable st = st0
+
+    for _ in 1..600 do
+        st <- OverworldState.tick always Buttons.none st
+
+    let moved =
+        Array.exists2 (fun (a: NpcObject) (b: NpcObject) -> (a.CellX, a.CellY) <> (b.CellX, b.CellY)) st0.Npcs st.Npcs
+
+    Assert.True(moved, "expected at least one wandering NPC to have moved")

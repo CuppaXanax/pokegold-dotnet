@@ -193,14 +193,21 @@ module OverworldState =
     /// Advance the overworld by one frame of input (movement + camera follow). The
     /// cell queries consult connected neighbours, so the player walks, hops and is
     /// blocked seamlessly across map joins; the camera tracks into neighbour terrain.
-    let tick (buttons: Buttons) (s: OverworldState) : OverworldState =
+    /// `visible` reports whether an object is currently present (event-flag gated):
+    /// only visible objects are solid, wander, and animate — a hidden object neither
+    /// renders (scene-side) nor blocks the player, so there are no invisible walls.
+    let tick (visible: NpcObject -> bool) (buttons: Buttons) (s: OverworldState) : OverworldState =
         let walkable = MapConnections.cellWalkable s.Map s.Collision s.Neighbors
         let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
+
+        // Only present objects participate in collision and stepping. Hidden ones are
+        // carried through untouched so they reappear (and resume) once their flag flips.
+        let activeNpcs = s.Npcs |> Array.filter visible
 
         // Live NPCs are solid: the player can't walk onto a cell an object holds
         // (or is stepping out of). Ledge hops still don't re-validate the landing,
         // matching GSC — an NPC on a ledge-landing cell won't stop a jump.
-        let npcCells = ObjectStep.occupiedCells s.Npcs
+        let npcCells = ObjectStep.occupiedCells activeNpcs
         let playerWalkable cx cy = walkable cx cy && not (Set.contains (struct (cx, cy)) npcCells)
 
         let player = Movement.stepWith playerWalkable collId buttons s.Player
@@ -217,7 +224,22 @@ module OverworldState =
                     yield struct (player.SrcX, player.SrcY)
             }
 
-        let npcs = ObjectStep.stepAllBlocked walkable playerBlocked s.Npcs
+        let stepped = ObjectStep.stepAllBlocked walkable playerBlocked activeNpcs
+
+        // Splice the stepped (visible) objects back into the full array, leaving the
+        // hidden ones where they were. `filter` and `Array.map` both keep order, so a
+        // running index over the visible entries lines up with `stepped`.
+        let npcs =
+            let mutable q = 0
+
+            s.Npcs
+            |> Array.map (fun n ->
+                if visible n then
+                    let r = stepped.[q]
+                    q <- q + 1
+                    r
+                else
+                    n)
 
         { s with
             Player = player

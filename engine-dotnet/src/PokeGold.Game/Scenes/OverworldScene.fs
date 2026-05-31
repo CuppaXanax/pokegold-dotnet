@@ -51,6 +51,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         MapsData.byName mapId
         |> Option.bind (fun m -> Map.tryFind m.Meta.Music MusicData.byId)
 
+    /// Switch the background music to the given map's track. A no-op when the map
+    /// has no shipped song, and (via the audio engine's same-path guard) when the
+    /// track is already playing — so walking within a single-music region doesn't
+    /// restart it, while crossing into a differently-scored map does change it.
+    member private _.PlayMapMusic(mapId: string) =
+        match OverworldScene.musicFor mapId with
+        | Some path -> sound.PlayMusic path
+        | None -> ()
+
     /// Resolve a text label to its M5 token string; unknown labels show the label.
     member private _.ResolveText(label: string) : string =
         match Map.tryFind label state.Text with
@@ -217,15 +226,23 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 prevA <- buttons.A
 
                 if aPressed && not state.Player.Moving then
-                    // Talk to / read whatever the player faces.
-                    match Triggers.actionScript world state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                    // Talk to / read whatever the player faces. Objects are resolved
+                    // over the *live* NPC set (a wandering NPC is talked to where it
+                    // now stands), filtered to those currently present.
+                    let objectScriptAt fx fy =
+                        state.Npcs
+                        |> Array.tryFind (fun n ->
+                            MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
+                        |> Option.map (fun n -> n.Event.Script)
+
+                    match Triggers.actionScript objectScriptAt state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                     | Some label when state.Script.Labels.ContainsKey label ->
                         sound.PlaySfx "Sfx_Menu"
                         this.Drive(Script.start label world state.Script)
                     | _ -> Stay
                 else
                     let before = state.Player.CellX, state.Player.CellY
-                    state <- OverworldState.tick buttons state
+                    state <- OverworldState.tick (fun n -> MapEvents.objectVisible world n.Event) buttons state
                     let after = state.Player.CellX, state.Player.CellY
 
                     // Overworld locomotion SFX (GSC plays these as the action begins):
@@ -242,6 +259,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match OverworldState.crossConnection content state with
                     | Some ns ->
                         state <- ns
+                        this.PlayMapMusic ns.MapId
                         firedCoords <- Set.empty
                         Stay
                     | None ->
@@ -257,6 +275,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             match OverworldState.tryWarp content w.DestMap w.DestWarp with
                             | Some dest ->
                                 state <- dest
+                                this.PlayMapMusic dest.MapId
                                 firedCoords <- Set.empty
                                 Stay
                             | None -> Stay

@@ -21,14 +21,23 @@ module Triggers =
         let dx, dy = facingDelta facing
         cellX + dx, cellY + dy
 
-    /// The script label an A-press runs: the visible object on the faced cell if
-    /// it has one, otherwise a sign/bg event there. `None` if nothing is
-    /// interactive in front of the player.
-    let actionScript (world: World) (events: MapEvents) (cellX: int) (cellY: int) (facing: Direction) : string option =
+    /// The script label an A-press runs: the object on the faced cell if it has a
+    /// real script, otherwise a sign/bg event there. `None` if nothing is interactive
+    /// in front of the player. `objectScriptAt fx fy` resolves the script of whatever
+    /// object currently stands on a cell — the caller supplies it over the *live*
+    /// object set (so a wandering NPC is talked to where it now stands, not at its
+    /// spawn tile), filtered to visible objects.
+    let actionScript
+        (objectScriptAt: int -> int -> string option)
+        (events: MapEvents)
+        (cellX: int)
+        (cellY: int)
+        (facing: Direction)
+        : string option =
         let fx, fy = facedCell cellX cellY facing
 
-        match MapEvents.objectAt world fx fy events with
-        | Some o when o.Script <> "" && o.Script <> "ObjectEvent" -> Some o.Script
+        match objectScriptAt fx fy with
+        | Some s when s <> "" && s <> "ObjectEvent" -> Some s
         | _ -> MapEvents.bgAt fx fy events |> Option.bind (fun b -> if b.Script <> "" then Some b.Script else None)
 
     /// The coord trigger a step onto `(cellX, cellY)` fires: one on that cell whose
