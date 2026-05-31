@@ -5,6 +5,7 @@ open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
 open Microsoft.Xna.Framework.Input
 open PokeGold.Game.Core
+open PokeGold.Game.Debug
 
 /// MonoGame DesktopGL shell. Owns the window, the fixed-step frame loop, and the
 /// presentation of the game core's 160x144 framebuffer scaled to the window with
@@ -23,6 +24,7 @@ type HostGame() as this =
     let mutable screen : Texture2D = null
     let mutable prevKb : KeyboardState = Unchecked.defaultof<KeyboardState>
     let mutable hostAudio : HostAudio = Unchecked.defaultof<HostAudio>
+    let mutable debugServer : DebugServer = Unchecked.defaultof<DebugServer>
 
     do
         this.Content.RootDirectory <- "Content"
@@ -44,6 +46,12 @@ type HostGame() as this =
         screen <- new Texture2D(this.GraphicsDevice, Display.Width, Display.Height, false, SurfaceFormat.Color)
         hostAudio <- new HostAudio(game)
         hostAudio.Start()
+
+        // Expose the game's debug channel over a named pipe so a CLI/agent can
+        // inspect and poke the running instance (T1). Commands are marshalled onto
+        // the update thread by the channel, so this never races the frame loop.
+        debugServer <- DebugServer(game.DebugChannel)
+        debugServer.Start()
 
     override _.Update(_gameTime: GameTime) =
         let kb = Keyboard.GetState()

@@ -599,8 +599,39 @@ already exist in the code.
 
 #### Phase D — Gen-2 signature systems & the last mile
 
+##### M23 — GBC overworld color & per-tile palettes  · M
+- **Why this exists:** the overworld currently renders with a single hand-picked 4-shade palette
+  for the whole map and a grayscale sprite palette (`OverworldState.fs` `mapPalette`/`spritePalette`),
+  so every area reads as one hue (Azalea = green). The color *pipeline* already exists — `Palette`
+  does RGB555→RGBA and parses pret `.pal` files, and the renderers already take a palette argument —
+  what's missing is the **per-tile/per-object palette data wiring** that gives the real Game Boy
+  Color look. This milestone supplies that data and the attribute lookups that drive it. It is a
+  prerequisite for M20's day/night **tinting**, which swaps between palette sets per time-of-day.
+- **Deliverables:**
+  - **Baked palette data (DataGen):** generate per-tileset CGB palettes from the disassembly's
+    `gfx/tilesets/<name>.pal` and the per-tile palette-attribute maps
+    (`gfx/tilesets/<name>_palette_map.asm` / metatile attribute bytes), emitted as a generated F#
+    table keyed by tileset stem — no runtime `.asm`/`.pal` parsing on the hot path.
+  - **Per-tile palette selection in `MapRenderer`:** each metatile/tile picks its CGB BG palette
+    index from the attribute map instead of a single global palette; the blitter resolves the 2bpp
+    pixel through that tile's palette.
+  - **Per-object/sprite palettes:** honour the `object_event` `palette` field we already parse
+    (plan §M10, line ~300) plus the OW sprite palette table, so NPCs and the player use their
+    assigned CGB OBJ palettes rather than one grayscale ramp.
+  - **Time-of-day palette sets** structured so M20 can select morning/day/night variants without
+    re-plumbing the renderer (the selection hook lands here; the *clock* that drives it is M20).
+- **Acceptance:** Azalea Town (and a second, differently-tinted map — e.g. a cave or interior)
+  render in their correct multi-palette GBC colors, matching the disassembly's tileset palettes to
+  a spot-checked golden image; NPCs show their assigned palettes; switching the time-of-day variant
+  by hand visibly re-tints without artefacts.
+- **Depends on:** M3 (palette/decoder primitives), M9/M10 (maps, tilesets, objects). **Risks:**
+  RGB555→RGBA color-curve fidelity (already flagged in M3) and attribute-map extraction accuracy.
+  *Mitigation:* start from the straight 5→8-bit scale, golden-image per tileset, and a later
+  optional perceptual curve.
+
 ##### M20 — Time & telephony  · L
-- **Deliverables:** **RTC day/night** clock and time-of-day tinting; time-based events &
+- **Deliverables:** **RTC day/night** clock and time-of-day tinting (selecting the palette sets
+  built in **M23**); time-based events &
   encounters (incl. swarms, morning/day/night tables); the **phone** (register/receive calls,
   rematches, gifts, tips); the **bug-catching contest**; **Radio** programs.
 - **Acceptance:** the clock advances day/night with correct palettes and encounter tables; a
@@ -628,6 +659,37 @@ already exist in the code.
 - **Depends on:** M15, M16, M17, M19. **Risks:** the "completable dex" constraint (trade-evos,
   exclusives, events). *Mitigation:* D7–D9 make every species reachable single-player.
 
+#### Engineering tooling (cross-cutting, not on the content critical path)
+
+These support development/debugging of the milestones above; they ship outside the M-number
+sequence and can land whenever useful.
+
+##### T1 — Debug command pipe  · S  *(in progress)*
+- **Deliverables:** an in-process **named-pipe debug server** (`PokeGold.Game/Debug`) exposing the
+  running game over a simple newline command protocol, plus a thread-safe **command queue** so all
+  inspection/mutation runs on the MonoGame update thread (no races against the frame loop). A small
+  command set covers live inspection (`player`, `npcs`, `flags`, `vars`, `map`, `bag`, `scene`,
+  `frame`) and mutation (`warp`, `tp`, `setflag`/`clearflag`, `setvar`). A PowerShell client
+  (`engine-dotnet/tools/debug-cli.ps1`) lets a developer **or an agent** poke a running instance.
+- **Acceptance:** with the game running, a client can read player position/NPC state/flags and warp
+  or set a flag and see the effect on screen, all without stalling or corrupting the frame loop.
+- **Depends on:** M10 (a live overworld scene to inspect). **Risks:** thread-safety vs. the game
+  loop. *Mitigation:* commands are marshalled onto the update thread via the queue; the pipe thread
+  only blocks its own client.
+
+##### T2 — Embedded FSI REPL over the debug pipe  · M  *(post-game / future)*
+- **Deliverables:** host an `FSharp.Compiler.Service` `FsiEvaluationSession` inside the game,
+  bound to the live scene/world objects, reachable **through the same T1 pipe** (a `:fsi <expr>`
+  mode) so a developer or agent can evaluate arbitrary F# against running state
+  (e.g. `scene.DebugState.Npcs |> Array.filter ...`). The pipe transport, command queue, and
+  game-thread marshalling are reused wholesale from T1; T2 only adds the FCS evaluation backend and
+  a bound symbol environment.
+- **Acceptance:** over the pipe, an arbitrary F# expression referencing live game state evaluates on
+  the game thread and returns its rendered result; errors are reported without crashing the game.
+- **Depends on:** T1. **Risks:** FCS is a heavy dependency with version sensitivity, and arbitrary
+  eval on the game thread can stall it. *Mitigation:* keep it opt-in (debug builds / explicit flag),
+  time-box/serialise evaluations on the queue, and treat T1's fixed command set as the default path.
+
 ---
 
 ## Dependency graph
@@ -646,7 +708,8 @@ Full game (M9–M22):
   M2 → M16 ───┼→ M15 ┤                   ├→ M22  (Definition of Done)
   M6 → M13 → M14 ─────┘                  │
   M7 → M11 → M12                         │
-  M9,M16 → M20                           │
+  M9,M16 → M20
+  M3,M9,M10 → M23 → M20  (GBC palettes precede day/night tinting)                           │
   M15,M9 → M21 ──────────────────────────┘
 ```
 Phase A (M9–M12) widens the overworld; Phase B (M13–M15) completes battle & growth; Phase C

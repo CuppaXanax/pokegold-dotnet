@@ -171,6 +171,56 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         world <- w
         bag <- b
 
+    // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
+    // These give the debug channel a race-free window onto the scene's private
+    // mutable state. They are only ever called on the game-update thread (the
+    // DebugChannel marshals every command there), so reads and writes here are
+    // consistent with the running frame.
+
+    /// The live overworld state (map, player, camera, NPCs).
+    member _.DebugState: OverworldState = state
+
+    /// The live script world (event/engine flags, vars, scenes).
+    member _.DebugWorld: World = world
+
+    /// The live bag (item constant → quantity).
+    member _.DebugBag: Map<string, int> = bag
+
+    /// Whether an NPC object is currently present (event-flag gated).
+    member _.DebugVisible(o: ObjectEvent) : bool = MapEvents.objectVisible world o
+
+    /// Set or clear an `EVENT_*` story flag on the live world.
+    member _.DebugSetEvent (flag: string) (value: bool) =
+        world <- (if value then World.setEvent flag world else World.clearEvent flag world)
+
+    /// Write a `VAR_*` game variable on the live world.
+    member _.DebugSetVar (var: string) (value: int) = world <- World.setVar var value world
+
+    /// Teleport the player to a cell on the current map (no warp/load), settling
+    /// any in-progress step and re-centering the camera.
+    member _.DebugTeleport (x: int) (y: int) =
+        let p =
+            { state.Player with
+                CellX = x
+                CellY = y
+                SrcX = x
+                SrcY = y
+                Motion = Standing
+                Progress = 0
+                Bumped = false }
+
+        let camX, camY = Camera.follow state.Map p
+        state <- { state with Player = p; CamX = camX; CamY = camY }
+
+    /// Warp to another map by id at an explicit cell/facing, loading its assets
+    /// and neighbours and switching music. Throws if the map id is unknown or its
+    /// assets aren't present (the channel turns that into an `error:` reply).
+    member this.DebugWarp (mapId: string) (x: int) (y: int) (facing: Direction) =
+        let ns = OverworldState.loadByIdAt content mapId x y facing
+        state <- ns
+        firedCoords <- Set.empty
+        this.PlayMapMusic ns.MapId
+
     /// The NPC sprite for a SPRITE_* constant, best-effort (None if no PNG).
     member private _.SpriteFor(name: string) : Sprite option =
         match spriteCache.TryGetValue name with

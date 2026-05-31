@@ -6,6 +6,7 @@ open PokeGold.Game.Data
 open PokeGold.Game.Audio
 open PokeGold.Game.Save
 open PokeGold.Game.Scenes
+open PokeGold.Game.Debug
 
 /// The platform-agnostic game: owns the framebuffer, the shared asset cache, and
 /// a stack of scenes. Each tick it advances the active scene, applies any stack
@@ -21,6 +22,9 @@ type Game() =
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
     let mutable overworld = OverworldScene.Load(content, audio)
+    /// The debug command bridge. Background clients (the named pipe) submit
+    /// commands here; they're drained on the game thread each Tick via `Pump`.
+    let debug = DebugChannel()
 
     do scenes.Push(overworld :> Scene)
 
@@ -49,13 +53,28 @@ type Game() =
     /// The sample rate of the audio mix the host should request.
     member _.AudioSampleRate = audio.SampleRate
 
+    /// The debug command bridge a host can expose over a transport (e.g. a named
+    /// pipe). Commands submitted here run on the game thread during `Tick`.
+    member _.DebugChannel = debug
+
+    /// Execute one debug command line against the live game and return its textual
+    /// reply. Runs on the game thread (called from the channel's `Pump`), so it
+    /// sees a coherent view of scene state and its mutations are frame-safe.
+    member _.RunDebugCommand(line: string) : string =
+        let top = scenes.Peek().GetType().Name
+        DebugCommands.dispatch overworld frame top line
+
     /// Fill `buffer` with the next `nFrames` interleaved stereo sample-frames
     /// (range [-1, 1]). The host converts these to its device's PCM format.
     member _.MixAudio(buffer: float32[], nFrames: int) = audio.Mix(buffer, nFrames)
 
     /// Advance the game by one frame, consuming this frame's button state.
-    member _.Tick(buttons: Buttons) =
+    member this.Tick(buttons: Buttons) =
         frame <- frame + 1UL
+
+        // Apply any pending debug commands on the game thread before the scene
+        // updates, so inspectors and mutations see this frame's starting state.
+        debug.Pump(this.RunDebugCommand)
 
         match scenes.Peek().Update(buttons) with
         | Stay -> ()
