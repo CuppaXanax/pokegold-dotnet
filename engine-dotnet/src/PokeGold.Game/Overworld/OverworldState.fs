@@ -2,6 +2,7 @@ namespace PokeGold.Game.Overworld
 
 open PokeGold.Game.Core
 open PokeGold.Game.Data
+open PokeGold.Game.Overworld.Script
 
 /// A loaded overworld: the map and its render/collision assets, the player, and
 /// the current camera. All immutable; scenes hold one of these and replace it
@@ -17,7 +18,9 @@ type OverworldState =
       SpritePalette: Palette
       Player: PlayerState
       CamX: int
-      CamY: int }
+      CamY: int
+      /// The map's parsed event tables (warps, coord triggers, signs, objects).
+      Events: MapEvents }
 
 module OverworldState =
 
@@ -38,6 +41,19 @@ module OverworldState =
               Palette.rgb555 13 13 15
               Palette.rgb555 2 2 3 ]
 
+    /// The map id → its `.asm` event-table file, when wired up. Adding a map's
+    /// events means adding a case here (mirrors `loadAssets`).
+    let private eventsPath (mapId: string) : string option =
+        match mapId with
+        | "AzaleaTown" -> Some "maps/AzaleaTown.asm"
+        | _ -> None
+
+    /// Parse a map's event tables, or empty if the map isn't wired up.
+    let private eventsFor (mapId: string) : MapEvents =
+        match eventsPath mapId with
+        | Some path -> MapEventParser.parseFile path
+        | None -> MapEvents.empty
+
     /// Build an overworld around an already-loaded map, placing the player with
     /// the given placement function (start cell vs a saved cell/facing).
     let private build (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (player: PlayerState) : OverworldState =
@@ -52,7 +68,8 @@ module OverworldState =
           SpritePalette = spritePalette
           Player = player
           CamX = camX
-          CamY = camY }
+          CamY = camY
+          Events = eventsFor mapId }
 
     /// Build an overworld for an already-loaded map/tileset/collision/sprite,
     /// placing the player on the first walkable cell from the map center.

@@ -40,14 +40,16 @@
     <Compile Include="Overworld\Movement.fs" />
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
-    <Compile Include="Overworld\OverworldState.fs" />
     <!-- Overworld scripts: the event-script command language (DU) + a parser
          that reads a map's .asm into a label-addressed command stream, the
-         flag/var/scene world store, and the resumable script VM. -->
+         flag/var/scene world store, the resumable script VM, and the map event
+         tables. Compiled before OverworldState, which loads a map's events. -->
     <Compile Include="Overworld\Script\ScriptCommand.fs" />
     <Compile Include="Overworld\Script\ScriptParser.fs" />
     <Compile Include="Overworld\Script\EventFlags.fs" />
     <Compile Include="Overworld\Script\Script.fs" />
+    <Compile Include="Overworld\Script\MapEvents.fs" />
+    <Compile Include="Overworld\OverworldState.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
     <Compile Include="Save\SaveFile.fs" />

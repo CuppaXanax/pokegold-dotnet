@@ -396,3 +396,83 @@ let ``the real Gramps script runs the right branch for each flag state`` () =
     let _, after = driveSilent cleared "AzaleaTownGrampsScript" prog
     Assert.Equal<ScriptEffect list>([ FacePlayer; ShowText("AzaleaTownGrampsTextAfter", false) ], after)
 
+// ---- M9.3 — map event tables (warps / coords / signs / objects) ------------
+
+[<Fact>]
+let ``parses Azalea Town event-table counts`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    // Counts verified against the def_*_events blocks in maps/AzaleaTown.asm.
+    Assert.Equal(8, ev.Warps.Length)
+    Assert.Equal(2, ev.Coords.Length)
+    Assert.Equal(9, ev.Bgs.Length)
+    Assert.Equal(11, ev.Objects.Length)
+
+[<Fact>]
+let ``parses the first warp / coord / bg records`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+
+    Assert.Equal(
+        { X = 15; Y = 9; DestMap = "AZALEA_POKECENTER_1F"; DestWarp = 1 },
+        ev.Warps.[0]
+    )
+
+    Assert.Equal(
+        { X = 5; Y = 10; Scene = "SCENE_AZALEATOWN_RIVAL_BATTLE"; Script = "AzaleaTownRivalBattleScene1" },
+        ev.Coords.[0]
+    )
+
+    Assert.Equal({ X = 19; Y = 9; Kind = "BGEVENT_READ"; Script = "AzaleaTownSign" }, ev.Bgs.[0])
+
+[<Fact>]
+let ``parses an object record with all thirteen fields`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+
+    // The Rocket: gated on a flag (EventFlag = Some _); Gramps: always present (None).
+    Assert.Equal(
+        { X = 31
+          Y = 9
+          Sprite = "SPRITE_AZALEA_ROCKET"
+          Movement = "SPRITEMOVEDATA_STANDING_DOWN"
+          RadiusX = 0
+          RadiusY = 0
+          Hour1 = -1
+          Hour2 = -1
+          Palette = "0"
+          Type = "OBJECTTYPE_SCRIPT"
+          Sight = 0
+          Script = "AzaleaTownRocket1Script"
+          EventFlag = Some "EVENT_AZALEA_TOWN_SLOWPOKETAIL_ROCKET" },
+        ev.Objects.[0]
+    )
+
+    let gramps = ev.Objects |> Array.find (fun o -> o.Script = "AzaleaTownGrampsScript")
+    Assert.Equal(None, gramps.EventFlag)
+    Assert.Equal((21, 9), (gramps.X, gramps.Y))
+
+[<Fact>]
+let ``object visibility is gated on the world's event flags`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+
+    // With no flags set, only the always-present objects (EventFlag = None) show.
+    let baseVisible = MapEvents.visibleObjects World.empty ev
+    Assert.All(baseVisible, fun o -> Assert.Equal(None, o.EventFlag))
+    Assert.Contains(baseVisible, fun o -> o.Script = "AzaleaTownGrampsScript")
+    Assert.DoesNotContain(baseVisible, fun o -> o.Script = "AzaleaTownRocket1Script")
+
+    // Setting the Rocket's flag makes it appear.
+    let withRocket = World.setEvent "EVENT_AZALEA_TOWN_SLOWPOKETAIL_ROCKET" World.empty
+    Assert.Contains(MapEvents.visibleObjects withRocket ev, fun o -> o.Script = "AzaleaTownRocket1Script")
+
+[<Fact>]
+let ``per-cell lookups find the event on a tile`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+
+    Assert.Equal(Some "AZALEA_GYM", MapEvents.warpAt 10 15 ev |> Option.map (fun w -> w.DestMap))
+    Assert.Equal(Some "AzaleaTownSign", MapEvents.bgAt 19 9 ev |> Option.map (fun b -> b.Script))
+    // Gramps stands on (21, 9) and is always visible.
+    Assert.Equal(
+        Some "AzaleaTownGrampsScript",
+        MapEvents.objectAt World.empty 21 9 ev |> Option.map (fun o -> o.Script)
+    )
+    Assert.Equal(None, MapEvents.warpAt 0 0 ev)
+
