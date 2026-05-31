@@ -552,6 +552,30 @@ let ``every game map parses without throwing and yields commands`` () =
     Assert.True(totalCommands > 10000, $"expected a substantial command corpus, got {totalCommands}")
 
 [<Fact>]
+let ``jumptext ends the script so consecutive sign scripts don't run together`` () =
+    // Two adjacent sign scripts, exactly like maps/AzaleaTown.asm's sign block:
+    // each is a bare `jumptext` with NO `end` before the next label. jumptext is
+    // terminal, so reading the first sign must NOT fall into the second.
+    let prog =
+        parse
+            "FirstSign:\n\
+             \tjumptext FirstSignText\n\
+             \n\
+             SecondSign:\n\
+             \tjumptext SecondSignText\n"
+
+    let step = Script.start "FirstSign" World.empty prog
+
+    match step.Outcome with
+    | Suspended(vm, ShowText(label, _)) ->
+        Assert.Equal("FirstSignText", label)
+        // Dismissing the first sign ends the script — it does not show the second.
+        match (Script.resume None World.empty vm).Outcome with
+        | Completed -> ()
+        | other -> Assert.Fail($"reading one sign should end the script, got {other}")
+    | other -> Assert.Fail($"expected the first sign's text, got {other}")
+
+[<Fact>]
 let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
     // A script mixing an out-of-slice opcode (pokemart) with text must still
     // reach the text — Unsupported is a no-op, not a stop.

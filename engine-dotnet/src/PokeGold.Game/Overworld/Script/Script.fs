@@ -103,6 +103,15 @@ module Script =
     let private suspend (vm: ScriptVm) (world: World) (effect: ScriptEffect) : ScriptStep =
         { World = world; Outcome = Suspended(vm, effect) }
 
+    /// The VM state an `end` produces: return from the innermost `scall`, or — if
+    /// unnested — a terminal pc so the next `run` completes. Used by the terminal
+    /// text opcodes (`jumptext`/`jumptextfaceplayer`), which display text and then
+    /// end the script, rather than falling through to the next command.
+    let private endLike (vm: ScriptVm) : ScriptVm =
+        match vm.Stack with
+        | ret :: rest -> { vm with Pc = ret; Stack = rest }
+        | [] -> { vm with Pc = vm.Program.Commands.Length }
+
     /// Run pure commands from `vm.Pc` until the script suspends on an effect or
     /// terminates. The single source of truth for both `start` and `resume`.
     let rec private run (world: World) (vm: ScriptVm) : ScriptStep =
@@ -173,8 +182,12 @@ module Script =
 
             // ---- Suspending effects ----------------------------------------
             | Writetext text -> suspend next world (ShowText(text, false))
-            | Jumptext text -> suspend next world (ShowText(text, false))
-            | Jumptextfaceplayer text -> suspend next world (ShowText(text, true))
+            // `jumptext`/`jumptextfaceplayer` display text then END the script
+            // (writetext + waitbutton + closetext + end), so resume must not fall
+            // through to the next command — otherwise consecutive sign scripts run
+            // into one another.
+            | Jumptext text -> suspend (endLike vm) world (ShowText(text, false))
+            | Jumptextfaceplayer text -> suspend (endLike vm) world (ShowText(text, true))
             | Yesorno -> suspend next world AskYesNo
             | Giveitem(item, qty) -> suspend next world (GiveItem(item, qty, false))
             | Verbosegiveitem(item, qty) -> suspend next world (GiveItem(item, qty, true))
