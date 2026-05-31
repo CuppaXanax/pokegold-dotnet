@@ -184,6 +184,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     state <- OverworldState.tick buttons state
                     let after = state.Player.CellX, state.Player.CellY
 
+                    // Overworld locomotion SFX (GSC plays these as the action begins):
+                    // a ledge hop on its first frame, a wall bump on its rising edge.
+                    // Plain walking is silent.
+                    if state.Player.Motion = Hopping && state.Player.Progress = 0 then
+                        sound.PlaySfx "Sfx_JumpOverLedge"
+                    elif state.Player.Bumped then
+                        sound.PlaySfx "Sfx_Bump"
+
                     if after = before then
                         Stay
                     else
