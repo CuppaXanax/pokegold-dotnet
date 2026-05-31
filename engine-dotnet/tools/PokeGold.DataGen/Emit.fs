@@ -90,9 +90,27 @@ module Emit =
             |> ignore
 
         sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+
+        // 1-based index array: index 0 = placeholder (NO_MOVE), indices 1..N = GSC move constants.
+        sb.AppendLine("    /// Move data in GSC declaration order. Index 0 is unused (NO_MOVE);") |> ignore
+        sb.AppendLine("    /// index N corresponds to GSC move constant N (e.g. 1 = POUND).") |> ignore
+        sb.AppendLine("    let byIndex : MoveData array =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+        sb.AppendLine("            { Name = \"\"; Effect = \"\"; Power = 0; Type = 0; Accuracy = 0; Pp = 0; EffectChance = 0 } // 0 = NO_MOVE") |> ignore
+
+        for mv in Parsers.moves do
+            sb.AppendLine(
+                sprintf
+                    "            { Name = \"%s\"; Effect = \"%s\"; Power = %d; Type = %d; Accuracy = %d; Pp = %d; EffectChance = %d }"
+                    mv.Constant mv.Effect mv.Power mv.Type mv.Accuracy mv.Pp mv.EffectChance
+            )
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
-    let private spriteMovementFile () : string =
+    let private spriteMovementFile() : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
         sb.AppendLine("namespace PokeGold.Game.Data") |> ignore

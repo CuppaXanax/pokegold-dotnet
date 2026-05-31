@@ -10,3 +10,12 @@ module Moves =
 
     /// Look up a move's data by its constant name (e.g. "TACKLE").
     let byName (name: string) : MoveData = all.[name]
+
+    /// Look up a move by its 1-based GSC numeric constant (0 = NO_MOVE, 1 = POUND, …).
+    /// Returns None for out-of-range or zero IDs.
+    let tryByIndex (id: int) : MoveData option =
+        if id > 0 && id < MovesData.byIndex.Length then
+            let m = MovesData.byIndex.[id]
+            if m.Name = "" then None else Some m
+        else
+            None

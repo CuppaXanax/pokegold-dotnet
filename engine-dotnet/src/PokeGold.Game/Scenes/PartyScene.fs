@@ -221,8 +221,7 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                     | "STATS" ->
                         mode <- Browsing
                         let mon = List.item slotIdx party
-                        // M11.5: replace with SummaryScene
-                        Push(TextBoxScene.Of(content, sprintf "%s's summary<DONE>" mon.Nickname) :> Scene)
+                        Push(SummaryScene(content, mon) :> Scene)
 
                     | "SWITCH" ->
                         mode <- SwitchPick slotIdx
