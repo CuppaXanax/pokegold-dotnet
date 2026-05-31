@@ -13,8 +13,17 @@
     <Compile Include="Repo.fs" />
     <Compile Include="AsmConstants.fs" />
     <Compile Include="Parsers.fs" />
+    <Compile Include="MapParsers.fs" />
+    <Compile Include="EmitMaps.fs" />
     <Compile Include="Emit.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <!-- The shared map DUs + .asm parsers, so the generator bakes the same values
+       the runtime consumes. Output assembly is not needed by the game build, but
+       DataGen links it to call the parsers. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PokeGold.MapData\PokeGold.MapData.fsproj" />
   </ItemGroup>
 
 </Project>

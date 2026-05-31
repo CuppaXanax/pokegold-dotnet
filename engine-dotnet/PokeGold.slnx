@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/PokeGold.Game/PokeGold.Game.fsproj" />
     <Project Path="src/PokeGold.Host/PokeGold.Host.fsproj" />
+    <Project Path="src/PokeGold.MapData/PokeGold.MapData.fsproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PokeGold.Tests/PokeGold.Tests.fsproj" />

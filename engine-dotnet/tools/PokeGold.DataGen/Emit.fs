@@ -96,7 +96,8 @@ module Emit =
     let all (outDir: string) : (string * bool) list =
         [ "TypeChart.Generated.fs", typeChart ()
           "Species.Generated.fs", speciesFile ()
-          "Moves.Generated.fs", movesFile () ]
+          "Moves.Generated.fs", movesFile ()
+          "Maps.Generated.fs", EmitMaps.render MapParsers.maps ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)
             path, writeIfChanged path content)

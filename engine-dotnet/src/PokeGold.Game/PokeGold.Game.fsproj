@@ -31,6 +31,7 @@
     <Compile Include="Data\Generated\TypeChart.Generated.fs" />
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
+    <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
@@ -40,17 +41,16 @@
     <Compile Include="Overworld\Movement.fs" />
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
-    <!-- Overworld scripts: the event-script command language (DU) + a parser
-         that reads a map's .asm into a label-addressed command stream, the
-         flag/var/scene world store, the resumable script VM, and the map event
-         tables. Compiled before OverworldState, which loads a map's events. -->
-    <Compile Include="Overworld\Script\ScriptCommand.fs" />
-    <Compile Include="Overworld\Script\ScriptParser.fs" />
+    <!-- Overworld scripts: the flag/var/scene world store, the resumable script
+         VM, the map event-table queries, and triggers. The event-script command
+         DUs, the .asm parsers, and the map metadata types live in the shared
+         PokeGold.MapData project (also used by the build-time generator); the
+         files here are the runtime-only pieces that depend on World/Assets. -->
     <Compile Include="Overworld\Script\EventFlags.fs" />
     <Compile Include="Overworld\Script\Script.fs" />
     <Compile Include="Overworld\Script\MapEvents.fs" />
-    <Compile Include="Overworld\Script\MapText.fs" />
     <Compile Include="Overworld\Script\Triggers.fs" />
+    <Compile Include="Overworld\Script\AsmLoad.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
@@ -92,6 +92,12 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
   </ItemGroup>
 
+  <!-- Shared, runtime-referenced map DUs + .asm parsers (also used by the
+       build-time generator). -->
+  <ItemGroup>
+    <ProjectReference Include="..\PokeGold.MapData\PokeGold.MapData.fsproj" />
+  </ItemGroup>
+
   <!-- Build-order only: ensure the generator is compiled before we run it. Its
        assembly is never referenced at runtime (ReferenceOutputAssembly=false). -->
   <ItemGroup>
@@ -111,12 +117,17 @@
   <ItemGroup>
     <GameDataInput Include="$(RepoRoot)constants\type_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\map_constants.asm" />
     <GameDataInput Include="$(RepoRoot)data\types\type_matchups.asm" />
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
+    <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
+    <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
+    <GameDataInput Include="$(RepoRoot)maps\*.asm" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
   </ItemGroup>
 
   <!-- Regenerate the baked data tables whenever a source table changes (or the

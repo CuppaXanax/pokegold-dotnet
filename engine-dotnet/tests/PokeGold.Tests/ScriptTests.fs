@@ -137,7 +137,7 @@ let ``text and event-table directives never emit commands`` () =
 
 [<Fact>]
 let ``parses the real Azalea Gym Bugsy script`` () =
-    let prog = ScriptParser.parseFile "maps/AzaleaGym.asm"
+    let prog = AsmLoad.script "maps/AzaleaGym.asm"
 
     // The pre-battle sequence, verbatim from maps/AzaleaGym.asm lines 15-34.
     let expected =
@@ -168,7 +168,7 @@ let ``parses the real Azalea Gym Bugsy script`` () =
 
 [<Fact>]
 let ``parses the real Azalea Town Gramps branch`` () =
-    let prog = ScriptParser.parseFile "maps/AzaleaTown.asm"
+    let prog = AsmLoad.script "maps/AzaleaTown.asm"
     let block = ScriptProgram.blockAt "AzaleaTownGrampsScript" prog
 
     // Gramps faces the player, opens text, and branches on the Slowpoke Well flag.
@@ -387,7 +387,7 @@ let ``unsupported opcodes are skipped so the script keeps running`` () =
 
 [<Fact>]
 let ``the real Gramps script runs the right branch for each flag state`` () =
-    let prog = ScriptParser.parseFile "maps/AzaleaTown.asm"
+    let prog = AsmLoad.script "maps/AzaleaTown.asm"
 
     // Before clearing Slowpoke Well: faces the player, then the "before" text.
     let _, before = driveSilent World.empty "AzaleaTownGrampsScript" prog
@@ -402,7 +402,7 @@ let ``the real Gramps script runs the right branch for each flag state`` () =
 
 [<Fact>]
 let ``parses Azalea Town event-table counts`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
     // Counts verified against the def_*_events blocks in maps/AzaleaTown.asm.
     Assert.Equal(8, ev.Warps.Length)
     Assert.Equal(2, ev.Coords.Length)
@@ -411,7 +411,7 @@ let ``parses Azalea Town event-table counts`` () =
 
 [<Fact>]
 let ``parses the first warp / coord / bg records`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
     Assert.Equal(
         { X = 15; Y = 9; DestMap = "AZALEA_POKECENTER_1F"; DestWarp = 1 },
@@ -427,7 +427,7 @@ let ``parses the first warp / coord / bg records`` () =
 
 [<Fact>]
 let ``parses an object record with all thirteen fields`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
     // The Rocket: gated on a flag (EventFlag = Some _); Gramps: always present (None).
     Assert.Equal(
@@ -453,7 +453,7 @@ let ``parses an object record with all thirteen fields`` () =
 
 [<Fact>]
 let ``object visibility is gated on the world's event flags`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
     // With no flags set, only the always-present objects (EventFlag = None) show.
     let baseVisible = MapEvents.visibleObjects World.empty ev
@@ -467,7 +467,7 @@ let ``object visibility is gated on the world's event flags`` () =
 
 [<Fact>]
 let ``per-cell lookups find the event on a tile`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
     Assert.Equal(Some "AZALEA_GYM", MapEvents.warpAt 10 15 ev |> Option.map (fun w -> w.DestMap))
     Assert.Equal(Some "AzaleaTownSign", MapEvents.bgAt 19 9 ev |> Option.map (fun b -> b.Script))
@@ -482,7 +482,7 @@ let ``per-cell lookups find the event on a tile`` () =
 
 [<Fact>]
 let ``MapText resolves a real dialogue label to its token string`` () =
-    let text = MapText.parseFile "maps/AzaleaTown.asm"
+    let text = AsmLoad.text "maps/AzaleaTown.asm"
 
     Assert.Equal(
         "The SLOWPOKE have<LINE>disappeared from<CONT>town…<PARA>I heard their<LINE>TAILS are being<CONT>sold somewhere.<DONE>",
@@ -493,18 +493,18 @@ let ``MapText resolves a real dialogue label to its token string`` () =
 let ``resolved dialogue round-trips through the M5 text engine`` () =
     // The Gramps text contains a `…` glyph; encoding it through the text box must
     // not throw and must produce a non-empty, terminated box.
-    let text = MapText.parseFile "maps/AzaleaTown.asm"
+    let text = AsmLoad.text "maps/AzaleaTown.asm"
     let box = TextBox.ofString text.["AzaleaTownGrampsTextAfter"]
     Assert.False(box.Done)
 
 [<Fact>]
 let ``a script label with no text block produces no entry`` () =
-    let text = MapText.parseFile "maps/AzaleaTown.asm"
+    let text = AsmLoad.text "maps/AzaleaTown.asm"
     Assert.False(text.ContainsKey "AzaleaTownGrampsScript")
 
 [<Fact>]
 let ``actionScript returns the faced NPC's script`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
     // Gramps stands on (21, 9); a player on (21, 10) facing up faces that cell.
     Assert.Equal(
@@ -517,7 +517,7 @@ let ``actionScript returns the faced NPC's script`` () =
 
 [<Fact>]
 let ``coordToFire gates on the active scene and fires once`` () =
-    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
     let dflt = MapEvents.defaultScene ev
     Assert.Equal("SCENE_AZALEATOWN_NOOP", dflt)
 

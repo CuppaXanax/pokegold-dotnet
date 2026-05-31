@@ -208,7 +208,3 @@ module ScriptParser =
 
         { Commands = commands.ToArray()
           Labels = labels |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq }
-
-    /// Parse a map `.asm` from a repo-relative path through the asset reader.
-    let parseFile (relativePath: string) : ScriptProgram =
-        parseText (PokeGold.Game.Core.Assets.readText relativePath)

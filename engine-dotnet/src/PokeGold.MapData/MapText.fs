@@ -73,7 +73,3 @@ module MapText =
                             sb.Clear() |> ignore
 
         result |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-
-    /// Parse a map `.asm`'s text labels from a repo-relative path.
-    let parseFile (relativePath: string) : Map<string, string> =
-        parseText (PokeGold.Game.Core.Assets.readText relativePath)

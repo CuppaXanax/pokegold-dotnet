@@ -55,19 +55,19 @@ module OverworldState =
     /// Parse a map's event tables, or empty if the map isn't wired up.
     let private eventsFor (mapId: string) : MapEvents =
         match eventsPath mapId with
-        | Some path -> MapEventParser.parseFile path
+        | Some path -> AsmLoad.events path
         | None -> MapEvents.empty
 
     /// Parse a map's script program, or an empty program if not wired up.
     let private scriptFor (mapId: string) : ScriptProgram =
         match eventsPath mapId with
-        | Some path -> ScriptParser.parseFile path
+        | Some path -> AsmLoad.script path
         | None -> { Commands = [||]; Labels = Map.empty }
 
     /// Parse a map's text labels, or an empty table if not wired up.
     let private textFor (mapId: string) : Map<string, string> =
         match eventsPath mapId with
-        | Some path -> MapText.parseFile path
+        | Some path -> AsmLoad.text path
         | None -> Map.empty
 
     /// Build an overworld around an already-loaded map, placing the player with

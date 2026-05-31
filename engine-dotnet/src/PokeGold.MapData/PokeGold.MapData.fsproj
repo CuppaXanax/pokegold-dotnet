@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>PokeGold.MapData</RootNamespace>
+    <AssemblyName>PokeGold.MapData</AssemblyName>
+  </PropertyGroup>
+
+  <!-- Pure, I/O-free map DUs + the disassembly text parsers (string in, value
+       out). Shared by PokeGold.Game (the runtime consumer) and PokeGold.DataGen
+       (the build-time producer) so the same parse logic backs both without a
+       circular reference. No PackageReferences, no Game types, no file I/O. -->
+  <ItemGroup>
+    <Compile Include="ScriptCommand.fs" />
+    <Compile Include="ScriptParser.fs" />
+    <Compile Include="MapEventTypes.fs" />
+    <Compile Include="MapText.fs" />
+    <Compile Include="MapMeta.fs" />
+    <Compile Include="GeneratedMap.fs" />
+  </ItemGroup>
+
+</Project>

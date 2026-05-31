@@ -103,7 +103,7 @@ let ``the real Azalea dialogue runs to completion`` () =
     // Drive the full sample: press A only while waiting (release between prompts
     // creates the button edge), and assert it terminates. Uses real resolved
     // in-game dialogue (multiple <PARA> page breaks) via the M9.4 text resolver.
-    let text = PokeGold.Game.Overworld.Script.MapText.parseFile "maps/AzaleaTown.asm"
+    let text = PokeGold.Game.Overworld.Script.AsmLoad.text "maps/AzaleaTown.asm"
     let mutable s = TextBox.ofString text.["AzaleaTownGrampsTextBefore"]
     let mutable f = 0
 
