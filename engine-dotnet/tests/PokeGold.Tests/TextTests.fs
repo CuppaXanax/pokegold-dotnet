@@ -92,10 +92,12 @@ let ``a box without prompts finishes on its own`` () =
     Assert.True(s.Done)
 
 [<Fact>]
-let ``the real Azalea demo text runs to completion`` () =
+let ``the real Azalea dialogue runs to completion`` () =
     // Drive the full sample: press A only while waiting (release between prompts
-    // creates the button edge), and assert it terminates.
-    let mutable s = TextBox.ofString PokeGold.Game.Scenes.OverworldScene.DemoText
+    // creates the button edge), and assert it terminates. Uses real resolved
+    // in-game dialogue (multiple <PARA> page breaks) via the M9.4 text resolver.
+    let text = PokeGold.Game.Overworld.Script.MapText.parseFile "maps/AzaleaTown.asm"
+    let mutable s = TextBox.ofString text.["AzaleaTownGrampsTextBefore"]
     let mutable f = 0
 
     while not s.Done && f < 2000 do

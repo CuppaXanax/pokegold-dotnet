@@ -1,6 +1,8 @@
 module PokeGold.Tests.ScriptTests
 
 open Xunit
+open PokeGold.Game.Core
+open PokeGold.Game.Text
 open PokeGold.Game.Overworld.Script
 
 // M9.1 — the overworld script command language (DU) + parser. These tests parse
@@ -475,4 +477,59 @@ let ``per-cell lookups find the event on a tile`` () =
         MapEvents.objectAt World.empty 21 9 ev |> Option.map (fun o -> o.Script)
     )
     Assert.Equal(None, MapEvents.warpAt 0 0 ev)
+
+// ---- M9.4 — text resolution + interaction triggers -------------------------
+
+[<Fact>]
+let ``MapText resolves a real dialogue label to its token string`` () =
+    let text = MapText.parseFile "maps/AzaleaTown.asm"
+
+    Assert.Equal(
+        "The SLOWPOKE have<LINE>disappeared from<CONT>town…<PARA>I heard their<LINE>TAILS are being<CONT>sold somewhere.<DONE>",
+        text.["AzaleaTownGrampsTextBefore"]
+    )
+
+[<Fact>]
+let ``resolved dialogue round-trips through the M5 text engine`` () =
+    // The Gramps text contains a `…` glyph; encoding it through the text box must
+    // not throw and must produce a non-empty, terminated box.
+    let text = MapText.parseFile "maps/AzaleaTown.asm"
+    let box = TextBox.ofString text.["AzaleaTownGrampsTextAfter"]
+    Assert.False(box.Done)
+
+[<Fact>]
+let ``a script label with no text block produces no entry`` () =
+    let text = MapText.parseFile "maps/AzaleaTown.asm"
+    Assert.False(text.ContainsKey "AzaleaTownGrampsScript")
+
+[<Fact>]
+let ``actionScript returns the faced NPC's script`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+
+    // Gramps stands on (21, 9); a player on (21, 10) facing up faces that cell.
+    Assert.Equal(
+        Some "AzaleaTownGrampsScript",
+        Triggers.actionScript World.empty ev 21 10 Up
+    )
+
+    // Facing an empty cell triggers nothing.
+    Assert.Equal(None, Triggers.actionScript World.empty ev 21 10 Down)
+
+[<Fact>]
+let ``coordToFire gates on the active scene and fires once`` () =
+    let ev = MapEventParser.parseFile "maps/AzaleaTown.asm"
+    let dflt = MapEvents.defaultScene ev
+    Assert.Equal("SCENE_AZALEATOWN_NOOP", dflt)
+
+    // The rival coords belong to a different scene, so they stay off by default.
+    Assert.Equal(None, Triggers.coordToFire dflt Set.empty ev 5 10)
+
+    // In the rival scene the coord fires — unless it has already fired.
+    let scene = "SCENE_AZALEATOWN_RIVAL_BATTLE"
+    Assert.Equal(
+        Some "AzaleaTownRivalBattleScene1",
+        Triggers.coordToFire scene Set.empty ev 5 10 |> Option.map (fun c -> c.Script)
+    )
+    Assert.Equal(None, Triggers.coordToFire scene (Set.singleton (5, 10)) ev 5 10)
+
 

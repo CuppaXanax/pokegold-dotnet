@@ -53,12 +53,16 @@ type ObjectEvent =
       EventFlag: string option }
 
 /// All four event tables parsed from a map's `.asm`. Mirrors the four
-/// `def_*_events` blocks at the foot of every map file.
+/// `def_*_events` blocks at the foot of every map file. `Scenes` lists the map's
+/// scene names in table order (`def_scene_scripts` / `scene_script label, SCENE_*`);
+/// the map starts in `Scenes.[0]` and a coord trigger fires only while its scene
+/// is the active one.
 type MapEvents =
     { Warps: WarpEvent[]
       Coords: CoordEvent[]
       Bgs: BgEvent[]
-      Objects: ObjectEvent[] }
+      Objects: ObjectEvent[]
+      Scenes: string[] }
 
 /// Parses a map `.asm`'s `def_*_events` tables into [`MapEvents`](#). Reads the
 /// disassembly source directly (like [`ScriptParser`](ScriptParser.fs)); operands
@@ -113,6 +117,7 @@ module MapEventParser =
         let coords = ResizeArray<CoordEvent>()
         let bgs = ResizeArray<BgEvent>()
         let objects = ResizeArray<ObjectEvent>()
+        let scenes = ResizeArray<string>()
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
@@ -123,6 +128,7 @@ module MapEventParser =
                 let i n = intArg (arg n)
 
                 match mn with
+                | "scene_script" -> scenes.Add(arg 1)
                 | "warp_event" ->
                     warps.Add
                         { X = i 0
@@ -161,7 +167,8 @@ module MapEventParser =
         { Warps = warps.ToArray()
           Coords = coords.ToArray()
           Bgs = bgs.ToArray()
-          Objects = objects.ToArray() }
+          Objects = objects.ToArray()
+          Scenes = scenes.ToArray() }
 
     /// Parse a map `.asm`'s event tables from a repo-relative path.
     let parseFile (relativePath: string) : MapEvents =
@@ -177,7 +184,13 @@ module MapEvents =
         { Warps = [||]
           Coords = [||]
           Bgs = [||]
-          Objects = [||] }
+          Objects = [||]
+          Scenes = [||] }
+
+    /// The scene the map starts in: the first entry of its scene table (mirroring
+    /// `wCurMapSceneID` defaulting to 0), or `""` if the map has no scenes.
+    let defaultScene (events: MapEvents) : string =
+        if events.Scenes.Length > 0 then events.Scenes.[0] else ""
 
     /// Is this object currently present, given the world's event flags? An object
     /// with no `EventFlag` is always present; otherwise it appears only while its

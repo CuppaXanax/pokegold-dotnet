@@ -1,32 +1,113 @@
 namespace PokeGold.Game.Scenes
 
+open System.Collections.Generic
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Audio
 open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
 open PokeGold.Game.Render
 open PokeGold.Game.Save
 
-/// The walk-around-the-map scene. Owns a mutable OverworldState that the pure
-/// Overworld systems advance each frame; everything inside the state is
-/// immutable, so this single `mutable` is the only piece of mutation.
+/// The walk-around-the-map scene. Owns the mutable overworld state plus the
+/// running-script bookkeeping that turns NPC/sign interactions and coord triggers
+/// into real GSC scripts: it drives the pure [`Script`] VM, enacting each
+/// [`ScriptEffect`] (text box, yes/no, battle, flags, items) and resuming the VM
+/// with the result. Pure commands run inline within one frame; effects that need a
+/// child scene push it and suspend until it pops.
 type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldState) =
     let mutable state = initial
+    /// The script flag/var/scene world — mutated as scripts run; persisted in M9.5.
+    let mutable world = World.empty
+    /// The map's active scene name (gates coord triggers). Scene *progression* is
+    /// deeper than M9, so this stays at the map's default; rival coords stay off.
+    let activeScene = MapEvents.defaultScene initial.Events
+    /// Coord triggers already fired this visit (fire-once).
+    let mutable firedCoords: Set<int * int> = Set.empty
+    /// The player's bag (item constant → quantity).
+    let mutable bag: Map<string, int> = Map.empty
+    /// A suspended script awaiting the child scene we pushed for an effect.
+    let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// The most recent yes/no choice, written by the YesNoScene callback.
+    let mutable yesNoResult = 0
     let mutable prevA = false
-    let mutable prevStart = false
+    /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
+    let spriteCache = Dictionary<string, Sprite option>()
 
     /// Start this map's background music as soon as the scene exists.
     do sound.PlayMusic(OverworldScene.musicFor initial.MapId)
-
-    /// A real Azalea Town sign/NPC text, demonstrating the M5 text engine end to
-    /// end: literal glyphs, `<LINE>`, `<CONT>` (scroll), `<PARA>` (clear), `<DONE>`.
-    static member val DemoText =
-        "Did you come to<LINE>get KURT to make<CONT>some BALLS?<PARA>A lot of people do<LINE>just that.<DONE>"
 
     /// The repo-relative music file for a map id (the overworld BGM).
     static member private musicFor(mapId: string) : string =
         match mapId with
         | _ -> "audio/music/azaleatown.asm"
+
+    /// Resolve a text label to its M5 token string; unknown labels show the label.
+    member private _.ResolveText(label: string) : string =
+        match Map.tryFind label state.Text with
+        | Some s -> s
+        | None -> label + "<DONE>"
+
+    /// Add `qty` of an item to the bag.
+    member private _.AddItem (item: string) (qty: int) =
+        let cur = bag |> Map.tryFind item |> Option.defaultValue 0
+        bag <- Map.add item (cur + qty) bag
+
+    /// Remove up to `qty` of an item from the bag.
+    member private _.RemoveItem (item: string) (qty: int) =
+        let cur = bag |> Map.tryFind item |> Option.defaultValue 0
+        let left = max 0 (cur - qty)
+        bag <- if left = 0 then Map.remove item bag else Map.add item left bag
+
+    /// Drive the VM from a run step: enact pure/immediate effects inline (resuming
+    /// at once), and for effects that need a child scene, push it and suspend.
+    member private this.Drive(step: ScriptStep) : Transition =
+        world <- step.World
+
+        match step.Outcome with
+        | Completed -> Stay
+        | Suspended(vm, effect) ->
+            match effect with
+            // ----- effects that push a child scene and suspend -----
+            | ShowText(label, _faceFirst) ->
+                pending <- Some(vm, effect)
+                Push(TextBoxScene.Of(content, this.ResolveText label) :> Scene)
+            | AskYesNo ->
+                pending <- Some(vm, effect)
+                Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene)
+            | StartBattle ->
+                pending <- Some(vm, effect)
+                sound.PlaySfx "Sfx_Menu"
+                Push(BattleScene.StartDemo content :> Scene)
+            | GiveItem(item, qty, true) ->
+                this.AddItem item qty
+                pending <- Some(vm, effect)
+                Push(TextBoxScene.Of(content, item.Replace("_", " ") + "<DONE>") :> Scene)
+            // ----- immediate effects: enact, resume this frame -----
+            | GiveItem(item, qty, false) ->
+                this.AddItem item qty
+                this.Drive(Script.resume (Some 1) world vm)
+            | TakeItem(item, qty) ->
+                this.RemoveItem item qty
+                this.Drive(Script.resume (Some 1) world vm)
+            | CheckItem item ->
+                this.Drive(Script.resume (Some(if bag.ContainsKey item then 1 else 0)) world vm)
+            // ----- effects out of M9.4 scope: no-op, resume -----
+            | SetLastTalked _
+            | ApplyMovement _
+            | FacePlayer
+            | FaceObject _
+            | SetVisible _
+            | TurnObject _
+            | LoadWild _
+            | LoadTrainer _
+            | WinLossText _
+            | ReloadMap
+            | PlayMusic _
+            | PlaySound _
+            | ScriptEffect.Cry _
+            | WaitSfx
+            | ScriptEffect.Warp _ -> this.Drive(Script.resume None world vm)
 
     /// Load the Azalea Town overworld scene through the shared asset cache.
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
@@ -39,23 +120,77 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Snapshot this scene's persistable state for a save.
     member _.Capture() : SaveData = SaveData.capture state
 
+    /// The NPC sprite for a SPRITE_* constant, best-effort (None if no PNG).
+    member private _.SpriteFor(name: string) : Sprite option =
+        match spriteCache.TryGetValue name with
+        | true, v -> v
+        | _ ->
+            let file = name.Replace("SPRITE_", "").ToLowerInvariant()
+            let v =
+                try Some(Sprite.loadNamed file)
+                with _ -> None
+
+            spriteCache.[name] <- v
+            v
+
+    /// The stand-pose frame + horizontal flip for an object's movement data.
+    static member private StandFrame(movement: string) : int * bool =
+        if movement.Contains "UP" then 1, false
+        elif movement.Contains "RIGHT" then 2, true
+        elif movement.Contains "LEFT" then 2, false
+        else 0, false // DOWN / WANDER / STILL and anything else
+
     interface Scene with
-        member _.Update(buttons: Buttons) : Transition =
-            let aPressed = buttons.A && not prevA
-            let startPressed = buttons.Start && not prevStart
-            prevA <- buttons.A
-            prevStart <- buttons.Start
+        member this.Update(buttons: Buttons) : Transition =
+            match pending with
+            // A pushed child scene popped — resume the suspended script with its result.
+            | Some(vm, effect) ->
+                pending <- None
+                prevA <- buttons.A
 
-            // Pressing Start (while standing still) starts a scripted wild battle.
-            if startPressed && not state.Player.Moving then
-                sound.PlaySfx "Sfx_Menu"
-                Push(BattleScene.StartDemo(content) :> Scene)
-            // Pressing A while standing still opens a sample speech box.
-            elif aPressed && not state.Player.Moving then
-                sound.PlaySfx "Sfx_Menu"
-                Push(TextBoxScene.Of(content, OverworldScene.DemoText) :> Scene)
-            else
-                state <- OverworldState.tick buttons state
-                Stay
+                let value =
+                    match effect with
+                    | AskYesNo -> Some yesNoResult
+                    | StartBattle -> Some 1
+                    | _ -> None
 
-        member _.Render(fb: Framebuffer) = OverworldRenderer.draw fb state
+                this.Drive(Script.resume value world vm)
+            | None ->
+                let aPressed = buttons.A && not prevA
+                prevA <- buttons.A
+
+                if aPressed && not state.Player.Moving then
+                    // Talk to / read whatever the player faces.
+                    match Triggers.actionScript world state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                    | Some label when state.Script.Labels.ContainsKey label ->
+                        sound.PlaySfx "Sfx_Menu"
+                        this.Drive(Script.start label world state.Script)
+                    | _ -> Stay
+                else
+                    let before = state.Player.CellX, state.Player.CellY
+                    state <- OverworldState.tick buttons state
+                    let after = state.Player.CellX, state.Player.CellY
+
+                    // Stepping onto a new cell can fire a coord trigger.
+                    if after <> before then
+                        match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
+                        | Some c when state.Script.Labels.ContainsKey c.Script ->
+                            firedCoords <- Set.add after firedCoords
+                            this.Drive(Script.start c.Script world state.Script)
+                        | Some _ ->
+                            firedCoords <- Set.add after firedCoords
+                            Stay
+                        | None -> Stay
+                    else
+                        Stay
+
+        member this.Render(fb: Framebuffer) =
+            OverworldRenderer.draw fb state
+
+            // Draw visible NPC objects over the map (player already drawn above).
+            for o in MapEvents.visibleObjects world state.Events do
+                match this.SpriteFor o.Sprite with
+                | Some spr ->
+                    let frame, flip = OverworldScene.StandFrame o.Movement
+                    SpriteRenderer.draw fb state.SpritePalette spr frame (o.X * 16 - state.CamX) (o.Y * 16 - state.CamY) flip
+                | None -> ()

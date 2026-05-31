@@ -49,6 +49,8 @@
     <Compile Include="Overworld\Script\EventFlags.fs" />
     <Compile Include="Overworld\Script\Script.fs" />
     <Compile Include="Overworld\Script\MapEvents.fs" />
+    <Compile Include="Overworld\Script\MapText.fs" />
+    <Compile Include="Overworld\Script\Triggers.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
@@ -80,6 +82,7 @@
     <Compile Include="Scenes\Scene.fs" />
     <Compile Include="Scenes\TextBoxScene.fs" />
     <Compile Include="Scenes\BattleScene.fs" />
+    <Compile Include="Scenes\YesNoScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Top-level game: asset cache + scene stack. -->
     <Compile Include="Game.fs" />

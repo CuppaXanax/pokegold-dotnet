@@ -20,7 +20,11 @@ type OverworldState =
       CamX: int
       CamY: int
       /// The map's parsed event tables (warps, coord triggers, signs, objects).
-      Events: MapEvents }
+      Events: MapEvents
+      /// The map's parsed script program (labels → commands).
+      Script: ScriptProgram
+      /// The map's text labels resolved to M5 token strings.
+      Text: Map<string, string> }
 
 module OverworldState =
 
@@ -54,6 +58,18 @@ module OverworldState =
         | Some path -> MapEventParser.parseFile path
         | None -> MapEvents.empty
 
+    /// Parse a map's script program, or an empty program if not wired up.
+    let private scriptFor (mapId: string) : ScriptProgram =
+        match eventsPath mapId with
+        | Some path -> ScriptParser.parseFile path
+        | None -> { Commands = [||]; Labels = Map.empty }
+
+    /// Parse a map's text labels, or an empty table if not wired up.
+    let private textFor (mapId: string) : Map<string, string> =
+        match eventsPath mapId with
+        | Some path -> MapText.parseFile path
+        | None -> Map.empty
+
     /// Build an overworld around an already-loaded map, placing the player with
     /// the given placement function (start cell vs a saved cell/facing).
     let private build (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (player: PlayerState) : OverworldState =
@@ -69,7 +85,9 @@ module OverworldState =
           Player = player
           CamX = camX
           CamY = camY
-          Events = eventsFor mapId }
+          Events = eventsFor mapId
+          Script = scriptFor mapId
+          Text = textFor mapId }
 
     /// Build an overworld for an already-loaded map/tileset/collision/sprite,
     /// placing the player on the first walkable cell from the map center.
