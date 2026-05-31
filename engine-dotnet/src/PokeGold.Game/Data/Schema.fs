@@ -31,3 +31,29 @@ type MoveData =
       Accuracy: int
       Pp: int
       EffectChance: int }
+
+/// Which in-game bag pocket an item belongs to.
+type Pocket = Item | Ball | KeyItem | TmHm
+
+/// An item's full metadata record, decoded from the disassembly tables.
+type ItemData =
+    { Id: string
+      Name: string
+      Price: int
+      Pocket: Pocket
+      CantSelect: bool
+      CantToss: bool
+      HeldEffect: string
+      Param: int
+      FieldMenu: string
+      BattleMenu: string
+      Description: string }
+
+/// A Pokédex entry for one species (Gold version text).
+type DexEntry =
+    { Num: int
+      Name: string
+      Category: string
+      HeightDm: int
+      WeightHg: int
+      Description: string }

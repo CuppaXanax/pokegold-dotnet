@@ -178,3 +178,242 @@ module Parsers =
                             dbIndex <- dbIndex + 1
 
         List.ofSeq result
+
+    // --- Items -----------------------------------------------------------------
+
+    /// Intermediate record for one item parsed from the disassembly tables.
+    type Item =
+        { Constant: string
+          DisplayName: string
+          Price: int
+          Pocket: string   // "ITEM"|"KEY_ITEM"|"BALL"|"TM_HM"
+          CantSelect: bool
+          CantToss: bool
+          HeldEffect: string
+          Param: int
+          FieldMenu: string
+          BattleMenu: string
+          Description: string }
+
+    let private parsePrice (s: string) : int =
+        let trimmed = s.Trim()
+        if trimmed.StartsWith "$" then
+            System.Convert.ToInt32(trimmed.Substring(1), 16)
+        else
+            int trimmed
+
+    /// Every item's parsed data, in attributes-table order (id 1 onwards).
+    let items : Item list =
+        // Step 1: Parse attributes from data/items/attributes.asm
+        let attrText = Repo.readText "data/items/attributes.asm"
+        let commentRx = Regex(@"^\s*;\s*([A-Z][A-Z0-9_]*)(\s|$)")
+        let attrRx = Regex(@"item_attribute\s+([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*(\S+)")
+        
+        let attributesRaw = ResizeArray<_>()
+        let mutable lastConstant = ""
+        
+        for line in attrText.Split('\n') do
+            let cm = commentRx.Match(line)
+            if cm.Success then
+                lastConstant <- cm.Groups.[1].Value
+            else
+                let am = attrRx.Match(line)
+                if am.Success && lastConstant <> "" && lastConstant <> "$00" then
+                    let price = parsePrice (am.Groups.[1].Value)
+                    let heldEffect = am.Groups.[2].Value.Trim()
+                    let param = int (am.Groups.[3].Value.Trim())
+                    let perms = am.Groups.[4].Value.Trim()
+                    let pocket = am.Groups.[5].Value.Trim()
+                    let fieldMenu = am.Groups.[6].Value.Trim()
+                    let battleMenu = am.Groups.[7].Value.Trim()
+                    
+                    let cantSelect = perms.Contains("CANT_SELECT")
+                    let cantToss = perms.Contains("CANT_TOSS")
+                    
+                    attributesRaw.Add((lastConstant, price, heldEffect, param, cantSelect, cantToss, pocket, fieldMenu, battleMenu))
+                    lastConstant <- ""
+        
+        // Step 2: Parse names from data/items/names.asm
+        let namesText = Repo.readText "data/items/names.asm"
+        let nameRx = Regex(@"li\s+""([^""]*)""")
+        let names =
+            [ for line in namesText.Split('\n') do
+                  let m = nameRx.Match(line)
+                  if m.Success then yield m.Groups.[1].Value ]
+        
+        // Step 3: Parse descriptions from data/items/descriptions.asm
+        let descText = Repo.readText "data/items/descriptions.asm"
+        let dwRx = Regex(@"dw\s+(\w+Desc)\b")
+        let labelRx = Regex(@"^(\w+Desc):")
+        let dbTextRx = Regex(@"(db|next|page)\s+""([^""]*)""")
+        
+        // 3a: Collect pointer table
+        let pointerTable = ResizeArray<string>()
+        for line in descText.Split('\n') do
+            let m = dwRx.Match(line)
+            if m.Success then
+                pointerTable.Add(m.Groups.[1].Value)
+        
+        // 3b: Collect text blocks
+        let textBlocks = System.Collections.Generic.Dictionary<string, string>()
+        let mutable currentLabel = ""
+        let mutable currentText = ResizeArray<string>()
+        
+        for line in descText.Split('\n') do
+            let lm = labelRx.Match(line)
+            if lm.Success then
+                // Save previous block
+                if currentLabel <> "" && currentText.Count > 0 then
+                    let text = System.String.Join(" ", currentText).Replace("@", "").Trim()
+                    textBlocks.[currentLabel] <- text
+                currentLabel <- lm.Groups.[1].Value
+                currentText <- ResizeArray<string>()
+            else
+                let tm = dbTextRx.Match(line)
+                if tm.Success && currentLabel <> "" then
+                    currentText.Add(tm.Groups.[2].Value)
+        
+        // Save last block
+        if currentLabel <> "" && currentText.Count > 0 then
+            let text = System.String.Join(" ", currentText).Replace("@", "").Trim()
+            textBlocks.[currentLabel] <- text
+        
+        // Step 4: Build items list
+        let result = ResizeArray<Item>()
+        for idx, (constant, price, heldEffect, param, cantSelect, cantToss, pocket, fieldMenu, battleMenu) in Seq.indexed attributesRaw do
+            if idx < names.Length && idx < pointerTable.Count then
+                let name = names.[idx]
+                let descLabel = pointerTable.[idx]
+                let desc = if textBlocks.ContainsKey(descLabel) then textBlocks.[descLabel] else ""
+                
+                // Only keep items with valid pockets
+                let pocketStr = 
+                    match pocket with
+                    | "ITEM" -> "ITEM"
+                    | "BALL" -> "BALL"
+                    | "KEY_ITEM" -> "KEY_ITEM"
+                    | "TM_HM" -> "TM_HM"
+                    | _ -> ""
+                
+                if pocketStr <> "" then
+                    result.Add {
+                        Constant = constant
+                        DisplayName = name
+                        Price = price
+                        Pocket = pocketStr
+                        CantSelect = cantSelect
+                        CantToss = cantToss
+                        HeldEffect = heldEffect
+                        Param = param
+                        FieldMenu = fieldMenu
+                        BattleMenu = battleMenu
+                        Description = desc
+                    }
+        
+        List.ofSeq result
+
+    // --- Dex entries -----------------------------------------------------------
+
+    type DexEntryRaw =
+        { Constant: string
+          DisplayName: string
+          Category: string
+          HeightDm: int
+          WeightHg: int
+          Description: string }
+
+    /// Every Pokémon's display name from data/pokemon/names.asm.
+    let pokemonDisplayNames : string array =
+        let namesText = Repo.readText "data/pokemon/names.asm"
+        let nameRx = Regex(@"dname\s+""([^""]*)""")
+        let names = ResizeArray<string>()
+        names.Add("")  // Index 0 is unused
+        
+        for line in namesText.Split('\n') do
+            let m = nameRx.Match(line)
+            if m.Success then
+                names.Add(m.Groups.[1].Value)
+                if names.Count > 251 then
+                    ()  // Skip remaining entries
+        
+        names.ToArray()
+
+    /// Dex entries in dex-number order (1-251).
+    let dexEntries : DexEntryRaw list =
+        // Build reverse mapping: dex number -> constant
+        let dexToConstant =
+            dex
+            |> Map.toList
+            |> List.sortBy snd
+            |> List.filter (fun (_, num) -> num >= 1 && num <= 251)
+        
+        let result = ResizeArray<DexEntryRaw>()
+        
+        for (constant, dexNum) in dexToConstant do
+            let name = constant.ToLowerInvariant()
+            let dexPath = Repo.path $"data/pokemon/dex_entries/gold/{name}.asm"
+            
+            if File.Exists(dexPath) then
+                let lines = File.ReadAllLines(dexPath) |> Array.filter (fun l -> l.Trim() <> "")
+                
+                // First db line is category
+                let categoryRx = Regex(@"db\s+""([^""@]*)@?""")
+                let mutable category = ""
+                let mutable foundCategory = false
+                let mutable lineIdx = 0
+                
+                while not foundCategory && lineIdx < lines.Length do
+                    let cm = categoryRx.Match(lines.[lineIdx])
+                    if cm.Success then
+                        category <- cm.Groups.[1].Value
+                        foundCategory <- true
+                    lineIdx <- lineIdx + 1
+                
+                // Next dw line is height, weight
+                let dwRx = Regex(@"dw\s+(\d+),\s*(\d+)")
+                let mutable height = 0
+                let mutable weight = 0
+                let mutable foundDw = false
+                
+                while not foundDw && lineIdx < lines.Length do
+                    let dm = dwRx.Match(lines.[lineIdx])
+                    if dm.Success then
+                        height <- int dm.Groups.[1].Value
+                        weight <- int dm.Groups.[2].Value
+                        foundDw <- true
+                    lineIdx <- lineIdx + 1
+                
+                // Remaining db/next/page lines form description
+                let dbTextRx = Regex(@"(db|next|page)\s+""([^""]*)""")
+                let descParts = ResizeArray<string>()
+                
+                while lineIdx < lines.Length do
+                    let tm = dbTextRx.Match(lines.[lineIdx])
+                    if tm.Success then
+                        descParts.Add(tm.Groups.[2].Value)
+                    lineIdx <- lineIdx + 1
+                
+                let desc = System.String.Join(" ", descParts).Replace("@", "").Trim()
+                let displayName = if dexNum > 0 && dexNum < pokemonDisplayNames.Length then pokemonDisplayNames.[dexNum] else constant
+                
+                result.Add {
+                    Constant = constant
+                    DisplayName = displayName
+                    Category = category
+                    HeightDm = height
+                    WeightHg = weight
+                    Description = desc
+                }
+            else
+                // Fallback for missing entries (eggs, etc.)
+                let displayName = if dexNum > 0 && dexNum < pokemonDisplayNames.Length then pokemonDisplayNames.[dexNum] else constant
+                result.Add {
+                    Constant = constant
+                    DisplayName = displayName
+                    Category = ""
+                    HeightDm = 0
+                    WeightHg = 0
+                    Description = ""
+                }
+        
+        List.ofSeq result

@@ -132,6 +132,73 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private escapeString (s: string) : string =
+        s.Replace("\\", "\\\\").Replace("\"", "\\\"")
+
+    let private itemsFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated item metadata, keyed by item constant name.") |> ignore
+        sb.AppendLine("module ItemsData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : ItemData[] =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+
+        for item in Parsers.items do
+            let pocketCase =
+                match item.Pocket with
+                | "ITEM" -> "Item"
+                | "BALL" -> "Ball"
+                | "KEY_ITEM" -> "KeyItem"
+                | "TM_HM" -> "TmHm"
+                | _ -> "Item"
+            
+            sb.AppendLine(
+                sprintf
+                    "            { Id = \"%s\"; Name = \"%s\"; Price = %d; Pocket = %s; CantSelect = %s; CantToss = %s; HeldEffect = \"%s\"; Param = %d; FieldMenu = \"%s\"; BattleMenu = \"%s\"; Description = \"%s\" }"
+                    item.Constant (escapeString item.DisplayName) item.Price pocketCase
+                    (if item.CantSelect then "true" else "false")
+                    (if item.CantToss then "true" else "false")
+                    item.HeldEffect item.Param item.FieldMenu item.BattleMenu (escapeString item.Description)
+            )
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byId : Map<string, ItemData> =") |> ignore
+        sb.AppendLine("        all |> Array.map (fun d -> d.Id, d) |> Map.ofArray") |> ignore
+        sb.ToString()
+
+    let private dexFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated Pokédex entries for 251 species.") |> ignore
+        sb.AppendLine("module DexData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : DexEntry[] =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+
+        for entry in Parsers.dexEntries do
+            match Parsers.species |> List.tryFind (fun s -> s.Constant = entry.Constant) with
+            | Some species ->
+                sb.AppendLine(
+                    sprintf
+                        "            { Num = %d; Name = \"%s\"; Category = \"%s\"; HeightDm = %d; WeightHg = %d; Description = \"%s\" }"
+                        species.Dex entry.Constant (escapeString entry.Category) entry.HeightDm entry.WeightHg (escapeString entry.Description)
+                )
+                |> ignore
+            | None -> ()  // Skip entries without matching species
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byNum : Map<int, DexEntry> =") |> ignore
+        sb.AppendLine("        all |> Array.map (fun d -> d.Num, d) |> Map.ofArray") |> ignore
+        sb.ToString()
+
     /// Generate all data files into `outDir`. Returns the list of (path, changed).
     let all (outDir: string) : (string * bool) list =
         [ "TypeChart.Generated.fs", typeChart ()
@@ -139,7 +206,9 @@ module Emit =
           "Moves.Generated.fs", movesFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
-          "Music.Generated.fs", musicFile () ]
+          "Music.Generated.fs", musicFile ()
+          "Items.Generated.fs", itemsFile ()
+          "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)
             path, writeIfChanged path content)

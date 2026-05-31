@@ -5,6 +5,7 @@ open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
 open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
 open PokeGold.Game.Save
 
 // SaveData.capture/apply are pure and IO-free; SaveFile.serialize/deserialize
@@ -20,7 +21,8 @@ let ``a save round-trips through JSON unchanged`` () =
               EngineFlags = [||]
               Vars = [| { Name = "VAR_X"; Value = 3 } |]
               Scenes = [||] }
-          Bag = [| { Item = "POTION"; Qty = 2 } |] }
+          Bag = [| { Item = "POTION"; Qty = 2 } |]
+          Player = Unchecked.defaultof<_> }
 
     let json = SaveFile.serialize save
 
@@ -70,7 +72,7 @@ let ``deserialize returns None on malformed JSON`` () =
 // ---- M9.5 — world (flags/vars/scenes) + bag persistence, warps -------------
 
 [<Fact>]
-let ``captureWith then JSON round-trip restores world flags, vars, and bag`` () =
+let ``captureWith then JSON round-trip restores world flags, vars, and player`` () =
     let content = Content()
     let state = OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down
 
@@ -81,11 +83,11 @@ let ``captureWith then JSON round-trip restores world flags, vars, and bag`` () 
         |> World.setVar "VAR_BADGES" 1
         |> World.setScene "" 2
 
-    let bag = Map.ofList [ "POTION", 3; "GS_BALL", 1 ]
+    let player = { PlayerState.initial with Bag = Bag.empty |> Bag.add "POTION" 3 |> Bag.add "GS_BALL" 1 }
 
     // Round-trip through the actual on-disk JSON shape.
     let back =
-        SaveData.captureWith state world bag
+        SaveData.captureWith state world player
         |> SaveFile.serialize
         |> SaveFile.deserialize
         |> Option.get
@@ -96,9 +98,9 @@ let ``captureWith then JSON round-trip restores world flags, vars, and bag`` () 
     Assert.Equal(1, World.getVar "VAR_BADGES" w)
     Assert.Equal(2, World.getScene "" w)
 
-    let b = SaveData.bagOf back
-    Assert.Equal(3, b.["POTION"])
-    Assert.Equal(1, b.["GS_BALL"])
+    let p = SaveData.playerOf back
+    Assert.Equal(3, Bag.count "POTION" p.Bag)
+    Assert.Equal(1, Bag.count "GS_BALL" p.Bag)
 
 [<Fact>]
 let ``a v1 (position-only) save loads with an empty world and bag`` () =
@@ -108,7 +110,8 @@ let ``a v1 (position-only) save loads with an empty world and bag`` () =
     match SaveFile.deserialize json with
     | Some save ->
         Assert.Equal(World.empty, SaveData.worldOf save)
-        Assert.True((SaveData.bagOf save).IsEmpty)
+        let player = SaveData.playerOf save
+        Assert.Equal(0, Bag.count "POTION" player.Bag)
     | None -> Assert.Fail("a v1 save should still be readable")
 
 [<Fact>]

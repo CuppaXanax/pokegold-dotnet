@@ -52,25 +52,30 @@ module BattleMon =
     // The Gen-2 stat formula with DV = 0 and stat experience = 0 (see
     // engine/pokemon/move_mon.asm CalcMonStatC): the (2*Base*Level/100) core
     // plus Level + 10 for HP, or + 5 for every other stat.
-    let private core baseStat level = 2 * baseStat * level / 100
+    
+    /// Gen-2 stat formula core (DV=0, stat exp=0).
+    let statCore baseStat level = 2 * baseStat * level / 100
 
-    let private hpStat baseStat level = core baseStat level + level + 10
-    let private otherStat baseStat level = core baseStat level + 5
+    /// HP stat formula: core + level + 10.
+    let calcHp baseStat level = statCore baseStat level + level + 10
+
+    /// Non-HP stat formula: core + 5.
+    let calcStat baseStat level = statCore baseStat level + 5
 
     /// Build a battler from species data at a level with the given moves,
     /// starting at full HP with neutral stat stages.
     let ofSpecies (species: BaseStats) (level: int) (moves: MoveData list) : BattleMon =
-        let maxHp = hpStat species.Hp level
+        let maxHp = calcHp species.Hp level
 
         { Species = species
           Level = level
           MaxHp = maxHp
           Hp = maxHp
-          Attack = otherStat species.Attack level
-          Defense = otherStat species.Defense level
-          Speed = otherStat species.Speed level
-          SpAttack = otherStat species.SpAttack level
-          SpDefense = otherStat species.SpDefense level
+          Attack = calcStat species.Attack level
+          Defense = calcStat species.Defense level
+          Speed = calcStat species.Speed level
+          SpAttack = calcStat species.SpAttack level
+          SpDefense = calcStat species.SpDefense level
           Moves = moves
           AtkStage = 0
           DefStage = 0

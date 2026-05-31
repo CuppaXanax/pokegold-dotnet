@@ -34,10 +34,14 @@
     <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\Generated\Music.Generated.fs" />
+    <Compile Include="Data\Generated\Items.Generated.fs" />
+    <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
     <Compile Include="Data\Content.fs" />
+    <Compile Include="Data\Items.fs" />
+    <Compile Include="Data\Dex.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
     <Compile Include="Overworld\Movement.fs" />
@@ -58,9 +62,6 @@
     <Compile Include="Overworld\ObjectStep.fs" />
     <Compile Include="Overworld\MovementRunner.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
-    <!-- Save: versioned JSON save model + on-disk persistence. -->
-    <Compile Include="Save\SaveData.fs" />
-    <Compile Include="Save\SaveFile.fs" />
     <!-- Audio: parse the GSC sound script, sequence + software-synth the 4 GB
          channels to PCM (pure, no MonoGame; the host owns the sound device). -->
     <Compile Include="Audio\AudioData.fs" />
@@ -78,6 +79,14 @@
     <Compile Include="Battle\Damage.fs" />
     <Compile Include="Battle\Effects.fs" />
     <Compile Include="Battle\Battle.fs" />
+    <!-- Player: persistent party, bag, dex state. -->
+    <Compile Include="Player\PartyMon.fs" />
+    <Compile Include="Player\Bag.fs" />
+    <Compile Include="Player\Player.fs" />
+    <Compile Include="Player\DebugSeed.fs" />
+    <!-- Save: versioned JSON save model + on-disk persistence. -->
+    <Compile Include="Save\SaveData.fs" />
+    <Compile Include="Save\SaveFile.fs" />
     <!-- Render: draw typed state into the framebuffer. -->
     <Compile Include="Render\MapRenderer.fs" />
     <Compile Include="Render\SpriteRenderer.fs" />
@@ -128,9 +137,15 @@
     <GameDataInput Include="$(RepoRoot)constants\type_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\map_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\item_constants.asm" />
     <GameDataInput Include="$(RepoRoot)data\types\type_matchups.asm" />
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
+    <GameDataInput Include="$(RepoRoot)data\pokemon\names.asm" />
+    <GameDataInput Include="$(RepoRoot)data\pokemon\dex_entries\gold\*.asm" />
+    <GameDataInput Include="$(RepoRoot)data\items\attributes.asm" />
+    <GameDataInput Include="$(RepoRoot)data\items\names.asm" />
+    <GameDataInput Include="$(RepoRoot)data\items\descriptions.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
@@ -143,6 +158,8 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>
 
   <!-- Regenerate the baked data tables whenever a source table changes (or the

@@ -6,6 +6,7 @@ open PokeGold.Game.Data
 open PokeGold.Game.Audio
 open PokeGold.Game.Overworld
 open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
 open PokeGold.Game.Render
 open PokeGold.Game.Save
 
@@ -24,8 +25,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let activeScene = MapEvents.defaultScene initial.Events
     /// Coord triggers already fired this visit (fire-once).
     let mutable firedCoords: Set<int * int> = Set.empty
-    /// The player's bag (item constant → quantity).
-    let mutable bag: Map<string, int> = Map.empty
+    /// The player's full persistent state (party, bag, dex, money, etc.).
+    let mutable player: PlayerState = PlayerState.initial
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
     /// A script suspended on an `applymovement`: the VM to resume, the moved object's
@@ -68,14 +69,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =
-        let cur = bag |> Map.tryFind item |> Option.defaultValue 0
-        bag <- Map.add item (cur + qty) bag
+        player <- { player with Bag = Bag.add item qty player.Bag }
 
     /// Remove up to `qty` of an item from the bag.
     member private _.RemoveItem (item: string) (qty: int) =
-        let cur = bag |> Map.tryFind item |> Option.defaultValue 0
-        let left = max 0 (cur - qty)
-        bag <- if left = 0 then Map.remove item bag else Map.add item left bag
+        player <- { player with Bag = Bag.remove item qty player.Bag }
 
     /// Drive the VM from a run step: enact pure/immediate effects inline (resuming
     /// at once), and for effects that need a child scene, push it and suspend.
@@ -109,7 +107,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.RemoveItem item qty
                 this.Drive(Script.resume (Some 1) world vm)
             | CheckItem item ->
-                this.Drive(Script.resume (Some(if bag.ContainsKey item then 1 else 0)) world vm)
+                this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
             // ----- effects out of M9.4 scope: no-op, resume -----
             | SetLastTalked _
             | FacePlayer
@@ -157,19 +155,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
         OverworldScene(content, sound, OverworldState.loadAzalea content)
 
-    /// Restore an overworld scene from a save (position, world flags, and bag).
+    /// Restore an overworld scene from a save (position, world flags, and player state).
     static member OfSave(content: Content, sound: ISoundBoard, save: SaveData) : OverworldScene =
         let scene = OverworldScene(content, sound, SaveData.apply content save)
-        scene.Restore(SaveData.worldOf save, SaveData.bagOf save)
+        scene.Restore(SaveData.worldOf save, SaveData.playerOf save)
         scene
 
-    /// Snapshot this scene's persistable state (position, world flags, bag).
-    member _.Capture() : SaveData = SaveData.captureWith state world bag
+    /// Snapshot this scene's persistable state (position, world flags, player state).
+    member _.Capture() : SaveData = SaveData.captureWith state world player
 
-    /// Seed the script world and bag onto a freshly built scene (used by OfSave).
-    member _.Restore(w: World, b: Map<string, int>) =
+    /// Seed the script world and player state onto a freshly built scene (used by OfSave).
+    member _.Restore(w: World, p: PlayerState) =
         world <- w
-        bag <- b
+        player <- p
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
     // These give the debug channel a race-free window onto the scene's private
@@ -183,8 +181,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// The live script world (event/engine flags, vars, scenes).
     member _.DebugWorld: World = world
 
-    /// The live bag (item constant → quantity).
-    member _.DebugBag: Map<string, int> = bag
+    /// The live player state (party, bag, dex, money, etc.).
+    member _.DebugPlayer: PlayerState = player
+
+    /// The live bag (item constant → quantity) — for debug console.
+    member _.DebugBag: Map<string, int> = Bag.toFlat player.Bag
 
     /// Whether an NPC object is currently present (event-flag gated).
     member _.DebugVisible(o: ObjectEvent) : bool = MapEvents.objectVisible world o

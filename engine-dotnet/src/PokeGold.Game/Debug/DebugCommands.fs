@@ -42,6 +42,9 @@ module DebugCommands =
               "  npcs                      live overworld objects"
               "  flags                     set EVENT_*/ENGINE_* flags and VAR_*"
               "  bag                       items held"
+              "  party                     party members"
+              "  money                     money balance"
+              "  dex                       seen/owned dex counts"
               "  tp <x> <y>                teleport player on the current map"
               "  warp <map> <x> <y> [dir]  load another map at a cell"
               "  setflag <EVENT_*>         set an event flag"
@@ -136,6 +139,15 @@ module DebugCommands =
             | "npcs" -> npcsInfo scene
             | "flags" -> flagsInfo scene
             | "bag" -> bagInfo scene
+            | "party" ->
+                let party = scene.DebugPlayer.Party
+                if party.IsEmpty then "(empty party)"
+                else party |> List.mapi (fun i pm -> $"[{i}] #{pm.SpeciesId} {pm.Nickname} L{pm.Level} {pm.Hp}/{pm.MaxHp}HP") |> String.concat "\n"
+            | "money" ->
+                $"${scene.DebugPlayer.Money}"
+            | "dex" ->
+                let p = scene.DebugPlayer
+                $"seen: {p.DexSeen.Count}, owned: {p.DexOwn.Count}"
             | "tp" ->
                 match arg 1 |> Option.bind tryInt, arg 2 |> Option.bind tryInt with
                 | Some x, Some y ->
