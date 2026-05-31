@@ -433,6 +433,50 @@ for ~24 songs (e.g. `MUSIC_TITLE → Music_TitleScreen → titlescreen.asm`).
 instead of the old hard-coded `azaleatown.asm`. 131/131 tests green (new gate: ≥90
 bindings, the `MUSIC_TITLE` exception, and AzaleaTown's id resolves to a real file).
 
+**M10.3 — map connections — DONE.** Baked per-map `Connection` records (border map,
+offset, streaming window) from `data/maps/maps.asm`; `OverworldState` streams the
+neighbouring map's border tiles and crosses seams without a visible join, camera
+clamped per the connection math. Border golden checks in `ConnectionsTests`.
+
+**M10.4 — explicit script warps — DONE.** `warp`/`warpfacing` script effects move
+the player between maps (interior↔exterior), loading the destination's assets and
+placing the player at the target warp with the requested facing.
+
+**M10.5 — NPC object engine — DONE.** A pure wander state machine (`ObjectStep`)
+reproducing GSC `map_objects.asm` (sleep → pick direction → walk a tile inside the
+wander radius → re-sleep) seeded per object for deterministic tests; `SPRITEMOVEDATA_*`
+classifies each object's behaviour. NPCs render with facing/animation; occupancy is
+threaded so two NPCs never share a cell. `ObjectTests` (13 gates).
+
+**M10.6 — player↔NPC collision — DONE.** `ObjectStep.stepAllBlocked` folds the
+player's occupied cells into NPC walkability and excludes NPC cells from the player's
+walkable set — the player can no longer walk through Gramps, and wanderers don't step
+onto the player. Two collision gates added.
+
+**M10.7 — applymovement actor paths — DONE.** Movement scripts (`step`/`turn_head`/
+`step_sleep`/…) are baked at build time into `GeneratedMap.Movements` (+ `ObjectConsts`
+for object→index resolution); `MovementRunner` drives one NPC through a scripted path
+one frame at a time (collision-checked), suspending the map VM until the path
+completes, then resuming. The 348 `applymovement` call sites across the maps now enact
+real motion. `MovementScriptTests` (9 gates).
+
+**M10.8 — overworld locomotion SFX — DONE.** Ledge hop → `Sfx_JumpOverLedge` and wall
+bump → `Sfx_Bump`, wired in the scene layer off the pre-existing `Player.Motion`/
+`Player.Bumped` hooks (movement model stays pure). `OverworldSfxTests`.
+
+**M10.9 — coverage sweep — DONE.** A regression gate over the baked world rather than a
+runtime parse: 18 770 script commands across all 368 maps (stable vs the M9.6 sweep);
+1 819 movement commands of which only 6 distinct macros remain unsupported
+(`fix_facing`/`remove_fixed_facing`/`set_sliding`/`remove_sliding`/`teleport_from`/
+`tree_shake` — all explicitly deferred to M11+/field-move milestones), ≥96% movement
+coverage; and an enumerated overworld-sprite art gap (112 referenced, 33 without PNGs —
+Pokémon-overworld + deferred field objects, rendered as blanks). `CoverageSweepTests`.
+
+**M10 COMPLETE.** All sub-milestones (M10.0–M10.9) landed; 169/169 tests green. The
+overworld loads every baked map, streams connections, warps between maps, plays per-map
+music, runs wandering + scripted NPCs that collide with the player, and emits locomotion
+SFX — all from build-time-baked data, no runtime `.asm` parsing.
+
 ###### M10 addendum — inherited deferrals (from M4/M8) to enumerate here
 
 

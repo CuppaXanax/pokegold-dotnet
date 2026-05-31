@@ -22,6 +22,7 @@
     <Compile Include="ConnectionsTests.fs" />
     <Compile Include="ObjectTests.fs" />
     <Compile Include="MovementScriptTests.fs" />
+    <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
