@@ -26,6 +26,7 @@
     <Compile Include="UiTests.fs" />
     <Compile Include="StartMenuTests.fs" />
     <Compile Include="PackTests.fs" />
+    <Compile Include="PackUseGiveTests.fs" />
     <Compile Include="PartyTests.fs" />
     <Compile Include="SummaryTests.fs" />
     <Compile Include="PokedexTests.fs" />

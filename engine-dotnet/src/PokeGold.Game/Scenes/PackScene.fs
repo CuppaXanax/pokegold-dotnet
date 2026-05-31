@@ -18,7 +18,10 @@ type PackMode =
 /// Left/Right switch pocket; Up/Down scroll the list; A opens the item action
 /// submenu; B/CANCEL closes the scene. TOSS is fully implemented with a quantity
 /// selector (Up/Down = ±1, Left/Right = ±10) and a YES/NO confirmation via
-/// YesNoScene. USE and GIVE push a TextBoxScene placeholder — seamed for M11.4+.
+/// YesNoScene. GIVE pushes PartyScene in picker mode — on selection the item is
+/// transferred to the target mon's held slot (and any prior held item is returned).
+/// USE is implemented for HP-restore items (pushes PartyScene picker); all other
+/// item-use effects route to a gated "Can't use that here yet." message (M17+).
 ///
 ///   content   — loaded content (font)
 ///   player    — initial PlayerState to display
@@ -252,12 +255,35 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                         Stay
                     | "USE" ->
                         mode <- Browsing
-                        // M11.4+: route USE to the Party target picker
-                        Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene)
+                        if PackUseGive.isHpHeal id then
+                            // HP-restore item: push Party as a target picker.
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyHpHeal id slotIdx currentPlayer with
+                                        | Some newPlayer ->
+                                            currentPlayer <- newPlayer
+                                            rebuildMenus newPlayer.Bag
+                                            onChange newPlayer
+                                            Pop
+                                        | None ->
+                                            // Mon already at full HP — don't consume. Pop back to Pack.
+                                            Pop) :> Scene)
+                        else
+                            // Deferred: status cures, revives, vitamins, evo stones,
+                            // elixirs/PP restores, TMs/HMs, key-item field effects, etc.
+                            Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene)
                     | "GIVE" ->
                         mode <- Browsing
-                        // M11.4+: route GIVE to the Party target picker
-                        Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene)
+                        // Push Party as a target picker; on select, give the item.
+                        Push(
+                            PartyScene(content, currentPlayer, onChange,
+                                fun slotIdx ->
+                                    let newPlayer = PackUseGive.applyGive id slotIdx currentPlayer
+                                    currentPlayer <- newPlayer
+                                    rebuildMenus newPlayer.Bag
+                                    onChange newPlayer
+                                    Pop) :> Scene)
                     | "TOSS" ->
                         let cantToss =
                             ItemsData.byId
