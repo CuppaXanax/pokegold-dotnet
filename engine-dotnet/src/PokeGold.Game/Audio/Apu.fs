@@ -10,46 +10,65 @@ type internal ApuKind =
 
 /// One hardware voice's live state inside the APU. The sequencer (the GSC sound
 /// *driver*, in Synth.fs) writes the register-level parameters each frame; the
-/// oscillator phase / LFSR persist across frames like the real hardware counters.
+/// period timer / waveframe / LFSR free-run across frames exactly like the real
+/// hardware counters (clocked in CPU cycles).
 type internal ApuVoice =
     { Kind: ApuKind
       mutable DacOn: bool
       mutable PanL: bool
       mutable PanR: bool
-      mutable Period: int          // 11-bit period register (pulse/wave)
-      mutable Duty: int            // 0..3 (pulse)
-      mutable Vol: int             // 0..15 envelope volume (pulse/noise)
-      mutable WaveTable: int[]     // 32 nibbles (wave)
-      mutable WaveMult: float      // NR32 output level 0 / .25 / .5 / 1 (wave)
-      mutable NoiseFreq: float     // LFSR clock Hz (noise)
-      mutable Width7: bool         // 7-bit LFSR mode (noise)
-      mutable Phase: float         // oscillator phase 0..1 (pulse/wave)
-      mutable NoiseAcc: float      // LFSR clock accumulator (noise)
-      mutable Lfsr: int }          // 15-bit LFSR (noise)
+      mutable Period: int            // channel period in CPU cycles (per waveframe tick)
+      mutable PeriodTimer: int       // CPU-cycle countdown to the next waveframe tick
+      mutable WaveFrame: int         // duty step 0..7 (pulse) / sample step 0..31 (wave)
+      mutable Duty: int              // 0..3 (pulse)
+      mutable Vol: int               // 0..15 envelope volume (pulse/noise)
+      mutable WaveBytes: int[]       // 16 bytes of wave RAM (wave)
+      mutable VolShift: int          // NR32 output shift 0/1/2 or >=4 = mute (wave)
+      mutable Lfsr: int              // 15-bit LFSR shift register (noise)
+      mutable LfsrFeed: int }        // feedback mask: 0x4000 (15-bit) or 0x4040 (7-bit)
 
-/// A faithful, high-level model of the Game Boy / Game Boy Color APU (sound chip).
+/// A faithful, bit-level model of the Game Boy / Game Boy Color APU (sound chip),
+/// ported directly from PyBoy's `core/sound.py` — the project's ground-truth
+/// reference oracle.
 ///
 /// This is the audio *backend* — the counterpart to the sound *driver* that the
 /// sequencer in `Synth.fs` ports from the disassembly. The driver computes, each
-/// 60 Hz frame, what it would write to the hardware sound registers (period, duty,
-/// volume, panning, noise polynomial, wave RAM); this turns those into PCM exactly
-/// the way the chip does: square/wave/noise generators feeding 4-bit DACs, summed
-/// through the NR51 stereo mixer and an analog high-pass filter.
+/// 60 Hz frame, the register-level intent (period, duty, volume, panning, noise
+/// polynomial, wave RAM); this turns those into PCM exactly the way PyBoy's chip
+/// model does.
 ///
-/// Anti-aliasing: the generators run oversampled with analytic area-averaging of
-/// each square/wave edge (so transitions land at their true sub-sample time rather
-/// than snapping to the output grid), then a windowed-sinc FIR decimates to the
-/// output rate. This removes the harsh aliasing of a naive per-sample square wave.
+/// Synthesis model (PyBoy-identical): each channel runs a period timer measured in
+/// CPU cycles. Every output sample advances the chip by `cyclesPerSample` CPU
+/// cycles; whenever a channel's timer underflows, its waveframe (pulse/wave) or
+/// LFSR (noise) advances. The chip is then *point-sampled* — each channel's
+/// instantaneous 0..15 DAC value is read, the enabled-per-side channels are summed
+/// and clamped to 0..127, exactly as PyBoy's `Sound.sample()` does. This naive
+/// point-sampling (rather than band-limited area-averaging) reproduces the
+/// reference's characteristic high-harmonic content — which is the whole point of
+/// the bit-faithful path.
 ///
-/// References: Pan Docs (Audio_details, Audio_Registers), gbdev wiki "Gameboy sound
-/// hardware", blargg's band-limited synthesis notes.
+/// Reference: PyBoy `pyboy/core/sound.py` (Sound, ToneChannel, SweepChannel,
+/// WaveChannel, NoiseChannel).
 type internal Apu(sampleRate: int, kinds: ApuKind[]) =
 
-    // Oversampling factor for the internal generators. 16x at 44.1 kHz = 705.6 kHz,
-    // comfortably above the highest GB content (wave steps, sweep SFX) so the FIR
-    // can band-limit cleanly.
-    let os = 16
-    let osRate = float (sampleRate * os)
+    // CPU cycles advanced per output sample. Uses the physically correct CPU clock
+    // (4194304 Hz) so the APU stays consistent with the sequencer's frame clock:
+    // Synth's samplesPerFrame * cyclesPerSample == 70224 cycles/frame exactly. (PyBoy
+    // instead approximates 60 fps -> 70224/(sr//60) = 95.543, a ~0.45% slowdown; we
+    // keep the true rate so our APU and our proven sequencer share one timebase.)
+    // Fractional cycles are accumulated so the integer tick count stays exact.
+    let cyclesPerSample = 4194304.0 / float sampleRate
+    let mutable cycleAcc = 0.0
+
+    // The four pulse duty patterns (PyBoy ToneChannel.wavetables), each an 8-step
+    // bit pattern read by waveframe. 12.5% / 25% / 50% / 75%.
+    let dutyTable =
+        [| [| 0; 0; 0; 0; 0; 0; 0; 1 |]
+           [| 1; 0; 0; 0; 0; 0; 0; 1 |]
+           [| 1; 0; 0; 0; 0; 1; 1; 1 |]
+           [| 0; 1; 1; 1; 1; 1; 1; 0 |] |]
+
+    let divTable = [| 8; 16; 32; 48; 64; 80; 96; 112 |]
 
     let voices =
         kinds
@@ -59,119 +78,72 @@ type internal Apu(sampleRate: int, kinds: ApuKind[]) =
               PanL = true
               PanR = true
               Period = 0
+              PeriodTimer = 0
+              WaveFrame = 0
               Duty = 2
               Vol = 0
-              WaveTable = Array.zeroCreate 32
-              WaveMult = 0.0
-              NoiseFreq = 0.0
-              Width7 = false
-              Phase = 0.0
-              NoiseAcc = 0.0
-              Lfsr = 0x7FFF })
+              WaveBytes = Array.zeroCreate 16
+              VolShift = 0
+              Lfsr = 0x7FFF
+              LfsrFeed = 0x4000 })
 
-    // The four pulse duty cycles as their *fraction* of a period spent high. The
-    // GB's 8-step duty patterns are phase-rotated versions of these; rotation is
-    // inaudible, so a duty fraction reproduces the same harmonic content. (Pan Docs
-    // notes 25% and 75% are audibly identical for this reason.)
-    let dutyFrac = [| 0.125; 0.25; 0.5; 0.75 |]
-
-    // --- FIR decimation filter (windowed sinc low-pass at the oversampled rate) ---
-    let taps = 8 * os + 1
-    let coeffs =
-        let m = float (taps - 1)
-        let fc = 0.45 * float sampleRate / osRate   // cutoff in cycles/oversample
-        let raw =
-            Array.init taps (fun i ->
-                let x = float i - m / 2.0
-                let sinc =
-                    if x = 0.0 then 2.0 * fc
-                    else sin (2.0 * Math.PI * fc * x) / (Math.PI * x)
-                let w = 0.5 - 0.5 * cos (2.0 * Math.PI * float i / m)   // Hann window
-                sinc * w)
-        let sum = Array.sum raw
-        raw |> Array.map (fun v -> v / sum)         // unity DC gain
-    let histL = Array.zeroCreate<float> taps
-    let histR = Array.zeroCreate<float> taps
-    let mutable histPos = 0
-
-    // --- Analog DC-blocking high-pass filter (per stereo side). One-pole; its pole
-    // is the per-output-sample charge factor. This must sit FAR below the musical
-    // fundamentals (~tens of Hz) so it only removes the DAC's DC offset without
-    // eating bass — the naive 4.19 MHz-adapted CGB constant put the corner at
-    // ~670 Hz, which suppressed the 200-300 Hz note fundamentals. The corner (Hz)
-    // can be overridden via POKEGOLD_APU_HPF_HZ for empirical tuning. ---
+    // --- DC-blocking high-pass filter (per stereo side). One-pole; placed at a
+    // near-DC corner because the PyBoy reference applies NO analog filter (the gate
+    // compares the raw DAC sum, mean-subtracted) — so this only removes the channel
+    // mix's static DC offset for clean host playback without tilting the low band.
+    // Overridable via POKEGOLD_APU_HPF_HZ. ---
     let hpfHz =
         match Environment.GetEnvironmentVariable "POKEGOLD_APU_HPF_HZ" with
-        | null | "" -> 30.0
-        | s -> (match Double.TryParse s with | true, v -> v | _ -> 30.0)
+        | null | "" -> 0.4
+        | s -> (match Double.TryParse s with | true, v -> v | _ -> 0.4)
     let chargeFactor = 1.0 - (2.0 * Math.PI * hpfHz / float sampleRate)
     let mutable capL = 0.0
     let mutable capR = 0.0
 
-    /// Fraction of the sub-step `[phase, phase+dp)` (wrapped into 0..1) that lies in
-    /// the high region `[0, duty)` — analytic area-averaging of a duty-cycle pulse.
-    let areaHigh (phase: float) (dp: float) (duty: float) : float =
-        if dp <= 0.0 then (if phase < duty then 1.0 else 0.0)
-        else
-            let overlap a b = max 0.0 (min b duty - max a 0.0)
-            let p2 = phase + dp
-            let total =
-                if p2 <= 1.0 then overlap phase p2
-                else overlap phase 1.0 + overlap 0.0 (p2 - 1.0)
-            total / dp
-
-    /// One oversampled analog sample (-1..1) from a single voice, advancing its
-    /// oscillator/LFSR by one oversample step. A disabled DAC contributes silence.
-    let voiceSub (v: ApuVoice) : float =
-        if not v.DacOn then 0.0
-        else
+    /// Advance one voice's free-running counter by `cycles` CPU cycles, stepping its
+    /// waveframe (pulse/wave) or LFSR (noise) on each period underflow — PyBoy
+    /// `ToneChannel/WaveChannel/NoiseChannel.tick`.
+    let tick (v: ApuVoice) (cycles: int) =
+        if v.Period > 0 then
+            v.PeriodTimer <- v.PeriodTimer - cycles
             match v.Kind with
             | ApuPulse ->
-                let f =
-                    if v.Period <= 0 || v.Period >= 2048 then 0.0
-                    else 131072.0 / float (2048 - v.Period)
-                let dp = f / osRate
-                let frac = areaHigh v.Phase dp dutyFrac.[v.Duty &&& 3]
-                v.Phase <- (v.Phase + dp) % 1.0
-                (frac * float v.Vol) / 7.5 - 1.0
+                while v.PeriodTimer <= 0 do
+                    v.PeriodTimer <- v.PeriodTimer + v.Period
+                    v.WaveFrame <- (v.WaveFrame + 1) &&& 7
             | ApuWave ->
-                let f =
-                    if v.Period <= 0 || v.Period >= 2048 then 0.0
-                    else 65536.0 / float (2048 - v.Period)
-                let dp = f / osRate
-                let idx = int (v.Phase * 32.0) &&& 31
-                v.Phase <- (v.Phase + dp) % 1.0
-                (float v.WaveTable.[idx] * v.WaveMult) / 7.5 - 1.0
+                while v.PeriodTimer <= 0 do
+                    v.PeriodTimer <- v.PeriodTimer + v.Period
+                    v.WaveFrame <- (v.WaveFrame + 1) &&& 31
             | ApuNoise ->
-                v.NoiseAcc <- v.NoiseAcc + v.NoiseFreq / osRate
-                while v.NoiseAcc >= 1.0 do
-                    v.NoiseAcc <- v.NoiseAcc - 1.0
-                    let x = (v.Lfsr ^^^ (v.Lfsr >>> 1)) &&& 1
-                    v.Lfsr <- (v.Lfsr >>> 1) ||| (x <<< 14)
-                    if v.Width7 then v.Lfsr <- (v.Lfsr &&& ~~~0x40) ||| (x <<< 6)
-                let bit = (~~~v.Lfsr) &&& 1
-                let digital = if bit = 1 then float v.Vol else 0.0
-                digital / 7.5 - 1.0
+                while v.PeriodTimer <= 0 do
+                    v.PeriodTimer <- v.PeriodTimer + v.Period
+                    let tap = v.Lfsr
+                    v.Lfsr <- v.Lfsr >>> 1
+                    let bit = (tap ^^^ v.Lfsr) &&& 1
+                    if bit <> 0 then v.Lfsr <- v.Lfsr ||| v.LfsrFeed
+                    else v.Lfsr <- v.Lfsr &&& ~~~v.LfsrFeed
 
-    let pushHist (l: float) (r: float) =
-        histL.[histPos] <- l
-        histR.[histPos] <- r
-        histPos <- (histPos + 1) % taps
-
-    let firDot (h: float[]) : float =
-        let mutable acc = 0.0
-        let mutable k = (histPos - 1 + taps) % taps
-        for j in 0 .. taps - 1 do
-            acc <- acc + coeffs.[j] * h.[k]
-            k <- (k - 1 + taps) % taps
-        acc
+    /// Point-sample one voice's instantaneous DAC value (0..15) — PyBoy `sample()`.
+    let sample (v: ApuVoice) : int =
+        if not v.DacOn then 0
+        else
+            match v.Kind with
+            | ApuPulse -> v.Vol * dutyTable.[v.Duty &&& 3].[v.WaveFrame &&& 7]
+            | ApuWave ->
+                let mutable s = v.WaveBytes.[(v.WaveFrame >>> 1) &&& 15]
+                if v.WaveFrame &&& 1 = 1 then s <- s >>> 4
+                s <- s &&& 0x0F
+                if v.VolShift >= 4 then 0 else s >>> v.VolShift
+            | ApuNoise -> if v.Lfsr &&& 1 = 0 then v.Vol else 0
 
     member _.VoiceCount = voices.Length
 
     member _.SetPulse(i, dacOn, period, duty, vol, panL, panR) =
         let v = voices.[i]
         v.DacOn <- dacOn
-        v.Period <- period
+        // PyBoy ToneChannel: period (CPU cycles) = 4 * (0x800 - sound_period).
+        v.Period <- 4 * (0x800 - (period &&& 0x7FF))
         v.Duty <- duty
         v.Vol <- vol
         v.PanL <- panL
@@ -180,43 +152,72 @@ type internal Apu(sampleRate: int, kinds: ApuKind[]) =
     member _.SetWave(i, dacOn, period, table: int[], mult, panL, panR) =
         let v = voices.[i]
         v.DacOn <- dacOn
-        v.Period <- period
-        v.WaveTable <- table
-        v.WaveMult <- mult
+        // PyBoy WaveChannel: period (CPU cycles) = 2 * (0x800 - sound_period).
+        v.Period <- 2 * (0x800 - (period &&& 0x7FF))
+        // Pack the 32 nibbles (high-nibble-first ROM order) into 16 wave-RAM bytes,
+        // then read them with PyBoy's exact nibble extraction in `sample`.
+        for k in 0 .. 15 do
+            v.WaveBytes.[k] <- ((table.[2 * k] &&& 0xF) <<< 4) ||| (table.[2 * k + 1] &&& 0xF)
+        // NR32 level (1.0/0.5/0.25/0.0 from the driver) -> PyBoy volume shift.
+        v.VolShift <-
+            if mult >= 0.99 then 0
+            elif mult >= 0.49 then 1
+            elif mult >= 0.24 then 2
+            else 4
         v.PanL <- panL
         v.PanR <- panR
 
-    member _.SetNoise(i, dacOn, freq, width7, vol, panL, panR) =
+    member _.SetNoise(i, dacOn, nr43: int, vol, panL, panR) =
         let v = voices.[i]
+        let clkPow = (nr43 >>> 4) &&& 0xF
+        let regWidth = (nr43 >>> 3) &&& 1
+        let clkDiv = nr43 &&& 0x7
+        // PyBoy NoiseChannel: DIVTABLE[clkdiv] << clkpow CPU cycles; 7-bit width
+        // feeds bit 6 as well as bit 14 (mask 0x4040 vs 0x4000).
+        let newPeriod = divTable.[clkDiv] <<< clkPow
+        let newFeed = if regWidth = 1 then 0x4040 else 0x4000
+        // Re-trigger the LFSR on a fresh drum hit (dac rising or polynomial change),
+        // mirroring PyBoy's trigger (shiftregister = 0x7FFF).
+        if (dacOn && not v.DacOn) || newPeriod <> v.Period || newFeed <> v.LfsrFeed then
+            v.Lfsr <- 0x7FFF
         v.DacOn <- dacOn
-        v.NoiseFreq <- freq
-        v.Width7 <- width7
+        v.Period <- newPeriod
+        v.LfsrFeed <- newFeed
         v.Vol <- vol
         v.PanL <- panL
         v.PanR <- panR
 
-    /// Generate one output stereo sample. Runs `os` oversampled steps of every
-    /// voice through the DAC + NR51 mixer into the FIR history, decimates, then
-    /// applies the analog high-pass. Adds into `buffer` at `idx`/`idx+1`.
+    /// Generate one output stereo sample. Advances the chip by `cyclesPerSample`
+    /// CPU cycles, point-samples every voice, sums the enabled-per-side channels
+    /// (clamped 0..127 like PyBoy `Sound.sample`), DC-blocks, scales, and adds into
+    /// `buffer` at `idx`/`idx+1`.
     member _.RenderOne(buffer: float32[], idx: int, gain: float) =
-        for _ in 1 .. os do
-            let mutable l = 0.0
-            let mutable r = 0.0
+        cycleAcc <- cycleAcc + cyclesPerSample
+        let step = int cycleAcc
+        cycleAcc <- cycleAcc - float step
+        if step > 0 then
             for v in voices do
-                let s = voiceSub v
-                if v.PanL then l <- l + s
-                if v.PanR then r <- r + s
-            pushHist l r
+                tick v step
 
-        let fl = firDot histL
-        let fr = firDot histR
+        let mutable sumL = 0
+        let mutable sumR = 0
+        for v in voices do
+            let s = sample v
+            if v.PanL then sumL <- sumL + s
+            if v.PanR then sumR <- sumR + s
+        let sumL = if sumL > 127 then 127 else sumL
+        let sumR = if sumR > 127 then 127 else sumR
 
+        let fl = float sumL
+        let fr = float sumR
         let hl = fl - capL
         capL <- fl - hl * chargeFactor
         let hr = fr - capR
         capR <- fr - hr * chargeFactor
 
-        // Four summed channels span roughly ±4 pre-filter; scale to keep headroom.
-        let scale = 0.25 * gain
-        buffer.[idx] <- buffer.[idx] + float32 (hl * scale)
-        buffer.[idx + 1] <- buffer.[idx + 1] + float32 (hr * scale)
+        // The summed sides span 0..127 (AC component ~±30 typical); scale to keep
+        // headroom while staying audible. Gate is scale-invariant; this is cosmetic.
+        let scale = gain / 40.0
+        let clamp (x: float) = if x > 1.0 then 1.0 elif x < -1.0 then -1.0 else x
+        buffer.[idx] <- buffer.[idx] + float32 (clamp (hl * scale))
+        buffer.[idx + 1] <- buffer.[idx + 1] + float32 (clamp (hr * scale))

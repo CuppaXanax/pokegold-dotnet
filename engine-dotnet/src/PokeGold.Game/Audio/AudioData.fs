@@ -174,7 +174,7 @@ module AudioData =
 
         for line in lines do
             let body = stripComment line
-            if body.StartsWith "Drumkit" && body.EndsWith ":" then
+            if body.StartsWith "Drumkit" && body.EndsWith ":" && body <> "Drumkits:" then
                 if kit <> null then kits.Add(kit.ToArray())
                 kit <- System.Collections.Generic.List<NoiseNote list>()
             else

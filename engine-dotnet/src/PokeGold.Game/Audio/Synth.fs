@@ -81,6 +81,7 @@ type internal Chan =
       mutable NoiseAcc: float
       mutable NoiseFreq: float
       mutable NoiseWidth7: bool
+      mutable NoiseByte: int
       mutable DrumNotes: NoiseNote[]
       mutable DrumIdx: int
       mutable DrumSubLeft: int
@@ -106,7 +107,12 @@ type internal Chan =
       mutable SweepShift: int
       mutable SweepDown: bool
       mutable SweepPeriodFrames: int
-      mutable SweepCount: int }
+      mutable SweepCount: int
+      // APU register-write driving: set on each note/sub-note trigger, consumed by
+      // writeVoice (which emits the NRx2 envelope byte + NRx4 trigger only then, so
+      // the hardware envelope owns decay between notes — exactly like the GSC driver).
+      mutable Trigger: bool
+      mutable EnvByteToWrite: int }
 
 /// Software synthesizer that sequences one parsed `Song` on a ~60 Hz frame clock
 /// and renders it to PCM. Faithful to the engine's timing math (note duration from
@@ -159,6 +165,7 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
           NoiseAcc = 0.0
           NoiseFreq = 0.0
           NoiseWidth7 = false
+          NoiseByte = 0
           DrumNotes = [||]
           DrumIdx = 0
           DrumSubLeft = 0
@@ -180,7 +187,9 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
           SweepShift = 0
           SweepDown = false
           SweepPeriodFrames = 0
-          SweepCount = 0 }
+          SweepCount = 0
+          Trigger = false
+          EnvByteToWrite = 0 }
 
     let chans =
         song.Channels
@@ -188,27 +197,94 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
 
     let cmds = song.Commands
 
-    // The APU (sound chip) backend. The sequencer below writes its register-level
-    // parameters each frame; the APU turns them into band-limited PCM.
+    // The APU (sound chip) backend — the cycle-accurate PyBoy `sound.py` port,
+    // validated bit-identical to the oracle. The sequencer below drives it purely
+    // through register WRITES (NRxx) + per-note triggers, so the chip owns the
+    // hardware volume envelope / length / sweep at their real DIV-APU rates, exactly
+    // like the GSC driver writing $FF10..$FF3F. (Gold is a GBC title → cgb = true.)
     let apu =
-        chans
-        |> Array.map (fun c ->
-            match c.Kind with
-            | Wave -> ApuWave
-            | Noise -> ApuNoise
-            | _ -> ApuPulse)
-        |> fun kinds -> Apu(sampleRate, kinds)
+        let a = ApuChip(sampleRate, true)
+        a.WriteReg(22, 0x80)   // NR52: power on
+        // NR51: every channel routed to BOTH sides. GSC's stereo_panning is gated by
+        // the wOptions STEREO bit; the game's default sound option is MONO, so a
+        // faithful default render is centred (matches the PyBoy mono reference).
+        a.WriteReg(21, 0xFF)
+        a
 
-    /// Snapshot one channel's current driver state into its APU voice. `eff` is the
+    /// NRx2 volume-envelope byte (vol<<4 | increase<<3 | pace) for a pulse/noise note.
+    let envByteOf (env: Envelope) : int =
+        ((env.Volume &&& 0xF) <<< 4)
+        ||| (if env.Sweep < 0 then 0x8 else 0)
+        ||| (abs env.Sweep &&& 0x7)
+
+    /// NR32 wave output-level byte from the driver's 1.0/0.5/0.25/0.0 multiplier
+    /// (engine `(volEnv & $f0) << 1`): level code 1/2/3 in bits 5-6, 0 = mute.
+    let waveNR32 (mult: float) : int =
+        if mult >= 0.99 then 0x20
+        elif mult >= 0.49 then 0x40
+        elif mult >= 0.24 then 0x60
+        else 0x00
+
+    /// The APU register-block base offset for a channel's hardware voice
+    /// (NRx0 == base): CH1 $FF10→0, CH2 $FF15→5, CH3 $FF1A→10, CH4 $FF1F→15.
+    let baseOffset (kind: VoiceKind) : int =
+        match kind with
+        | Pulse1 -> 0
+        | Pulse2 -> 5
+        | Wave -> 10
+        | Noise -> 15
+
+    /// Translate one channel's per-frame driver intent into APU register writes,
+    /// mirroring engine.asm `UpdateChannels`: a rest turns the voice off; a note's
+    /// trigger frame writes duty/envelope/period + the NRx4 trigger bit; a continuing
+    /// note rewrites only period (+duty) so vibrato/slide/sweep take effect WITHOUT
+    /// retriggering — leaving the hardware envelope to decay on its own. `eff` is the
     /// effective 11-bit period (pulse/wave) after this frame's pitch effects.
-    let writeVoice (i: int) (c: Chan) (eff: int) (dacOn: bool) =
-        let panL = c.PanL > 0.0
-        let panR = c.PanR > 0.0
+    let writeVoice (c: Chan) (eff: int) =
+        let b = baseOffset c.Kind
+        let lo = eff &&& 0xFF
+        let hiNoTrig = (eff >>> 8) &&& 0x07
         match c.Kind with
         | Pulse1
-        | Pulse2 -> apu.SetPulse(i, dacOn, eff, c.Duty, int (c.EnvVol + 0.5), panL, panR)
-        | Wave -> apu.SetWave(i, dacOn && c.WaveVol > 0.0, eff, c.WaveTable, c.WaveVol, panL, panR)
-        | Noise -> apu.SetNoise(i, dacOn, c.NoiseFreq, c.NoiseWidth7, int (c.EnvVol + 0.5), panL, panR)
+        | Pulse2 ->
+            if not c.On then
+                apu.WriteReg(b + 2, 0)                       // NRx2 = 0 → DAC off (silence)
+            else
+                let dutyByte = ((c.Duty &&& 3) <<< 6) ||| 0x3F
+                apu.WriteReg(b + 1, dutyByte)               // NRx1: duty (+ length data)
+                if c.Trigger then
+                    apu.WriteReg(b + 2, c.EnvByteToWrite)   // NRx2: envelope (only on trigger)
+                    apu.WriteReg(b + 3, lo)
+                    apu.WriteReg(b + 4, 0x80 ||| hiNoTrig)  // NRx4: period hi + TRIGGER
+                else
+                    apu.WriteReg(b + 3, lo)
+                    apu.WriteReg(b + 4, hiNoTrig)
+        | Wave ->
+            if not c.On then
+                apu.WriteReg(b + 0, 0)                       // NR30 = 0 → DAC off (silence)
+            elif c.Trigger then
+                apu.WriteReg(b + 1, 0x3F)                    // NR31: length data
+                apu.WriteReg(b + 0, 0x00)                    // NR30: DAC off while loading RAM
+                for k in 0 .. 15 do
+                    let n0 = c.WaveTable.[2 * k] &&& 0xF
+                    let n1 = c.WaveTable.[2 * k + 1] &&& 0xF
+                    apu.WriteReg(32 + k, (n0 <<< 4) ||| n1)  // wave RAM byte (high nibble first)
+                apu.WriteReg(b + 2, waveNR32 c.WaveVol)      // NR32: output level
+                apu.WriteReg(b + 0, 0x80)                    // NR30: DAC on
+                apu.WriteReg(b + 3, lo)
+                apu.WriteReg(b + 4, 0x80 ||| hiNoTrig)       // NR34: period hi + TRIGGER
+            else
+                apu.WriteReg(b + 3, lo)
+                apu.WriteReg(b + 4, hiNoTrig)
+        | Noise ->
+            if not c.On then
+                apu.WriteReg(b + 2, 0)                       // NR42 = 0 → DAC off (silence)
+            elif c.Trigger then
+                apu.WriteReg(b + 1, 0x3F)                    // NR41: length data
+                apu.WriteReg(b + 2, c.EnvByteToWrite)        // NR42: envelope
+                apu.WriteReg(b + 3, c.NoiseByte)             // NR43: polynomial / period
+                apu.WriteReg(b + 4, 0x80)                    // NR44: TRIGGER
+        c.Trigger <- false
 
     // Decode a GB noise polynomial byte (NR43) into an LFSR clock frequency.
     let noiseParams (nr43: int) : float * bool =
@@ -232,6 +308,7 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
         c.EnvCur <- env
         c.EnvVol <- float (Envelope.initialVolume env)
         c.EnvCounter <- 0
+        c.EnvByteToWrite <- envByteOf env
 
     /// Latch a fresh pulse/wave note: set its base period, envelope/instrument,
     /// reset the per-note vibrato delay, and arm any pending pitch slide.
@@ -239,6 +316,7 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
         c.FramesLeft <- max 1 frames
         c.BasePeriod <- period
         c.On <- period > 0
+        c.Trigger <- true
         c.VibDelayCount <- c.VibDelay
         match c.Kind with
         | Wave ->
@@ -278,10 +356,17 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
             let f, w7 = noiseParams n.Freq
             c.NoiseFreq <- f
             c.NoiseWidth7 <- w7
+            c.NoiseByte <- n.Freq
             startEnv c n.Env
             c.On <- true
+            c.Trigger <- true
         else
-            c.On <- false
+            // Sub-sequence exhausted: do NOT silence. GSC never writes NR42=0
+            // between drums — it leaves the channel latched and lets the chip's
+            // hardware envelope decay the tail. Writing NR42=0 here clipped every
+            // drum to a single frame. Keep On (the chip owns the decay); a genuine
+            // rest / channel-end is what actually silences the channel.
+            c.DrumSubLeft <- 0
 
     /// Start a noise drum: load the selected drum's sub-note sequence and trigger its
     /// first sub-note immediately (GSC clears wNoiseSampleDelay so the first sample is
@@ -339,10 +424,12 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 let f, w7 = noiseParams n.Freq
                 c.NoiseFreq <- f
                 c.NoiseWidth7 <- w7
+                c.NoiseByte <- n.Freq
                 startEnv c n.Env
                 c.FramesLeft <- max 1 (noteFrames c n.Length)
                 c.DrumNotes <- [||]
                 c.On <- true
+                c.Trigger <- true
             | Octave o -> c.Octave <- o; advance c (guard - 1)
             | NoteType (len, env) ->
                 c.NoteLength <- len
@@ -352,8 +439,21 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 c.TransposeOct <- oct
                 c.TransposePitch <- pitch
                 advance c (guard - 1)
-            | Tempo t -> c.Tempo <- t; c.Modifier <- 0; advance c (guard - 1)
-            | TempoRelative d -> c.Tempo <- c.Tempo + d; advance c (guard - 1)
+            | Tempo t ->
+                // GSC `tempo` is GLOBAL (SetGlobalTempo): it writes the tempo to every
+                // music channel and clears each channel's note-duration modifier.
+                for ch in chans do
+                    ch.Tempo <- t
+                    ch.Modifier <- 0
+                advance c (guard - 1)
+            | TempoRelative d ->
+                // `tempo_relative` sets the global tempo to the CURRENT channel's tempo
+                // +/- delta, then applies it to all channels (SetGlobalTempo).
+                let t = c.Tempo + d
+                for ch in chans do
+                    ch.Tempo <- t
+                    ch.Modifier <- 0
+                advance c (guard - 1)
             | DutyCycle d ->
                 c.Duty <- d &&& 3
                 c.DutyLoop <- false
@@ -501,9 +601,9 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 let eff =
                     if c.Kind = Noise then 0
                     else max 1 (min 2047 (c.BasePeriod + c.PitchOffset + vibratoOffset c))
-                writeVoice i c eff c.On
+                writeVoice c eff
             else
-                writeVoice i c 0 false
+                writeVoice c 0
 
         if loop && Array.forall (fun (c: Chan) -> not c.Active) chans then
             song.Channels
@@ -514,7 +614,13 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
                 c.CallStack.Clear()
                 c.Loops.Clear())
 
-    let mutable sampleAcc = 0.0
+    // The APU advances exactly `cyclesPerSample` CPU cycles per emitted sample and
+    // `samplesPerFrameInt * cyclesPerSample == FRAME_CYCLES`, so stepping a sequencer
+    // frame every `sampleRate/60` samples keeps the driver's register writes phase-locked
+    // to the chip's DIV-APU clock — matching PyBoy's `sr//60` framing for the oracle gate.
+    // (`framesPerSecond`/`samplesPerFrame` above stay the true GB rate for PitchSweep math.)
+    let samplesPerFrameInt = sampleRate / 60
+    let mutable sampleInFrame = 0
 
     /// True once every channel has run to completion (only meaningful when not
     /// looping); lets the engine retire a finished SFX.
@@ -524,12 +630,12 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
     /// at `offset` (so multiple players mix). `gain` scales this song's output.
     member _.Render(buffer: float32[], offset: int, nFrames: int, gain: float) =
         for n in 0 .. nFrames - 1 do
-            if sampleAcc <= 0.0 then
+            if sampleInFrame <= 0 then
                 stepFrame ()
-                sampleAcc <- sampleAcc + samplesPerFrame
+                sampleInFrame <- samplesPerFrameInt
 
             apu.RenderOne(buffer, offset + n * 2, gain)
-            sampleAcc <- sampleAcc - 1.0
+            sampleInFrame <- sampleInFrame - 1
 
     /// Advance the sequencer exactly one 60 Hz frame (no audio render) and snapshot
     /// every channel's discrete driver state. The audio verification gate calls this
@@ -549,3 +655,11 @@ type SongPlayer(song: Song, loop: bool, sampleRate: int) =
               EnvByte = envByte
               Octave = c.Octave
               FramesLeft = c.FramesLeft })
+
+    /// Debug-only: advance one 60 Hz frame and return the APU's held register bytes
+    /// (index == offset == address-0xFF10 for 0..22, wave RAM at 32..47) — the exact
+    /// layout PyBoy's `pb.memory[0xFF10..]` capture uses, so a harness can diff the
+    /// driver's real register stream against hardware frame-for-frame.
+    member _.DebugStepFrameRegs() : int[] =
+        stepFrame ()
+        Array.copy apu.RegShadow

@@ -154,26 +154,31 @@ let private renderBuf (player: SongPlayer) (frames: int) : float32[] =
     buf
 
 [<Fact>]
-let ``the analog high-pass filter removes the DAC idle DC offset`` () =
-    // A steady pulse note rides on a negative DC pedestal at the DAC (a "low"
-    // sample maps to analog -1.0). A faithful APU's CGB high-pass must center the
-    // waveform, so the mean of a sustained tone settles near zero.
+let ``the DC blocker centres a sustained tone`` () =
+    // The point-sampled DAC sum rides on a positive pedestal (each channel is 0..15,
+    // summed 0..127). The APU's near-DC high-pass removes that static offset, so a
+    // sustained tone settles to a zero mean (no audible thump / clean playback).
     let song =
-        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundRet |] [| 1, 0 |]
-    let buf = renderBuf (SongPlayer(song, false, 44100)) 16000
-    // Skip the onset transient; average the left channel over the steady tail.
-    let tail = buf.[8000..] |> Array.mapi (fun i s -> i, s) |> Array.filter (fun (i, _) -> i % 2 = 0) |> Array.map snd
+        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundLoop(0, 2) |] [| 1, 0 |]
+    let buf = renderBuf (SongPlayer(song, false, 44100)) 88200
+    // Average the left channel over the settled second half (1..2 s).
+    let tail = [| for i in 88200 .. 2 .. buf.Length - 1 -> buf.[i] |]
     let mean = Array.average tail
-    Assert.InRange(mean, -0.05f, 0.05f)
+    Assert.InRange(mean, -0.02f, 0.02f)
 
 [<Fact>]
-let ``the band-limited pulse is not a raw two-level square`` () =
-    // A naive square emits only +amp / -amp. The band-limited APU (oversampling +
-    // FIR decimation) produces a continuum of intermediate values around each edge,
-    // which is exactly what removes the aliasing "harshness".
+let ``the point-sampled pulse is a two-level DAC square`` () =
+    // The bit-faithful APU point-samples like the hardware DAC (the PyBoy oracle):
+    // a steady pulse is a discrete two-level square (high / low), NOT a band-limited
+    // continuum. Its samples therefore cluster at the DAC extremes — most of them sit
+    // near +/- the peak amplitude (a sine or band-limited edge would not).
     let song =
-        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundRet |] [| 1, 0 |]
-    let buf = renderBuf (SongPlayer(song, false, 44100)) 8000
-    let distinct = buf |> Array.filter (fun s -> s <> 0.0f) |> Array.distinct |> Array.length
-    Assert.True(distinct > 16, $"expected a band-limited continuum, got {distinct} distinct levels")
+        mkSong [| VolumeEnvelope { Volume = 15; Sweep = 0 }; Octave 4; Note(2, 15); SoundLoop(0, 2) |] [| 1, 0 |]
+    let buf = renderBuf (SongPlayer(song, false, 44100)) 88200
+    let tail = [| for i in 88200 .. 2 .. buf.Length - 1 -> buf.[i] |]
+    let peak = tail |> Array.map abs |> Array.max
+    let nearExtreme = tail |> Array.filter (fun s -> abs s > 0.5f * peak) |> Array.length
+    Assert.True(
+        float nearExtreme / float tail.Length > 0.8,
+        $"a point-sampled square should spend most time at the DAC extremes, got {nearExtreme}/{tail.Length}")
 

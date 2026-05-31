@@ -15,8 +15,8 @@ let frames = sr * seconds
 let buf : float32[] = Array.zeroCreate (frames * 2)
 player.Render(buf, 0, frames, 1.0)
 
-use fs = new FileStream(outPath, FileMode.Create)
-use bw = new BinaryWriter(fs)
+let fs = new FileStream(outPath, FileMode.Create)
+let bw = new BinaryWriter(fs)
 let n = frames * 2
 bw.Write(System.Text.Encoding.ASCII.GetBytes "RIFF")
 bw.Write(36 + n * 2)
@@ -34,4 +34,7 @@ bw.Write(n * 2)
 for s in buf do
     let v = int (max -1.0f (min 1.0f s) * 32767.0f)
     bw.Write(int16 v)
+bw.Flush()
+bw.Close()
+fs.Close()
 printfn "wrote %s (%ds, %d channels)" outPath seconds song.ChannelCount
