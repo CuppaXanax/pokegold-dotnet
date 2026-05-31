@@ -37,6 +37,7 @@ module DebugCommands =
               "  ping                      -> pong"
               "  frame                     current frame counter"
               "  scene                     active (top) scene type"
+              "  screenshot [path]         write the framebuffer to a PNG"
               "  player                    map, cell, facing, motion, pixel"
               "  map                       map id, size, camera, neighbours"
               "  npcs                      live overworld objects"

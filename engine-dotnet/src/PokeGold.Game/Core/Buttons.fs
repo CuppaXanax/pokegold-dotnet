@@ -26,3 +26,25 @@ module Buttons =
           B = false
           Start = false
           Select = false }
+
+    /// Bitwise AND of two button frames: a button is set only if held in both.
+    let intersect (a: Buttons) (b: Buttons) : Buttons =
+        { Up = a.Up && b.Up
+          Down = a.Down && b.Down
+          Left = a.Left && b.Left
+          Right = a.Right && b.Right
+          A = a.A && b.A
+          B = a.B && b.B
+          Start = a.Start && b.Start
+          Select = a.Select && b.Select }
+
+    /// `a` with every button that is set in `mask` cleared (a AND NOT mask).
+    let except (a: Buttons) (mask: Buttons) : Buttons =
+        { Up = a.Up && not mask.Up
+          Down = a.Down && not mask.Down
+          Left = a.Left && not mask.Left
+          Right = a.Right && not mask.Right
+          A = a.A && not mask.A
+          B = a.B && not mask.B
+          Start = a.Start && not mask.Start
+          Select = a.Select && not mask.Select }

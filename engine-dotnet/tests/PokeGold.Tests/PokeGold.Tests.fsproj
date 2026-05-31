@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Compile Include="DisplayTests.fs" />
+    <Compile Include="PngTests.fs" />
+    <Compile Include="GameInputTests.fs" />
     <Compile Include="GraphicsTests.fs" />
     <Compile Include="AssetTests.fs" />
     <Compile Include="CollisionTests.fs" />

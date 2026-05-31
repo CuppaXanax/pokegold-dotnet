@@ -26,6 +26,13 @@ type Game() =
     /// commands here; they're drained on the game thread each Tick via `Pump`.
     let debug = DebugChannel()
 
+    /// Buttons carried over from the press that opened the current top scene.
+    /// While a masked button stays physically held it is hidden from the active
+    /// scene, so the same press can't both open a menu and immediately act inside
+    /// it (the input "debounce" every scene transition needs). Cleared per-button
+    /// as the player releases each one.
+    let mutable inputMask = Buttons.none
+
     do scenes.Push(overworld :> Scene)
 
     /// Make the given overworld scene the sole, bottom scene (used on load).
@@ -62,7 +69,25 @@ type Game() =
     /// sees a coherent view of scene state and its mutations are frame-safe.
     member _.RunDebugCommand(line: string) : string =
         let top = scenes.Peek().GetType().Name
-        DebugCommands.dispatch overworld frame top line
+        let parts =
+            line.Trim().Split([| ' '; '\t' |], System.StringSplitOptions.RemoveEmptyEntries)
+
+        match (if parts.Length > 0 then parts.[0].ToLowerInvariant() else "") with
+        // Capture the most recently rendered framebuffer to a PNG. Handled here
+        // (not in DebugCommands) because the framebuffer is owned by the Game.
+        // `screenshot [path]` — defaults to %TEMP%/pokegold/screenshot.png.
+        | "screenshot" | "ss" | "capture" ->
+            let path =
+                if parts.Length > 1 then parts.[1]
+                else
+                    System.IO.Path.Combine(
+                        System.IO.Path.GetTempPath(), "pokegold", "screenshot.png")
+            try
+                Png.writeFile path Display.Width Display.Height framebuffer.Pixels
+                sprintf "wrote %d×%d screenshot: %s" Display.Width Display.Height path
+            with ex ->
+                sprintf "screenshot failed: %s" ex.Message
+        | _ -> DebugCommands.dispatch overworld frame top line
 
     /// Fill `buffer` with the next `nFrames` interleaved stereo sample-frames
     /// (range [-1, 1]). The host converts these to its device's PCM format.
@@ -76,13 +101,28 @@ type Game() =
         // updates, so inspectors and mutations see this frame's starting state.
         debug.Pump(this.RunDebugCommand)
 
-        match scenes.Peek().Update(buttons) with
+        // Shrink the carry-over mask to buttons that are *still* held (a release
+        // clears that button), then hide the remaining masked buttons from the
+        // active scene. This debounces every scene transition: the button that
+        // opened a menu won't register again until it's released and pressed anew.
+        inputMask <- Buttons.intersect inputMask buttons
+        let effective = Buttons.except buttons inputMask
+
+        // A transition that changes which scene is on top re-arms the mask with
+        // whatever is held this frame, so the newly-active scene starts clean.
+        let armMask () = inputMask <- buttons
+
+        match scenes.Peek().Update(effective) with
         | Stay -> ()
-        | Push s -> scenes.Push s
-        | Pop -> if scenes.Count > 1 then scenes.Pop() |> ignore
+        | Push s -> scenes.Push s; armMask ()
+        | Pop ->
+            if scenes.Count > 1 then
+                scenes.Pop() |> ignore
+                armMask ()
         | Replace s ->
             scenes.Pop() |> ignore
             scenes.Push s
+            armMask ()
 
         // Render the scene stack bottom-to-top so overlays (text boxes, menus)
         // layer over the scenes beneath them. The overworld fills the screen and

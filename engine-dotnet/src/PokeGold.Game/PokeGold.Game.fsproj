@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- Core: framebuffer, assets, palettes, tiles, primitives, input. -->
     <Compile Include="Core\Display.fs" />
+    <Compile Include="Core\Png.fs" />
     <Compile Include="Core\Assets.fs" />
     <Compile Include="Core\Palette.fs" />
     <Compile Include="Core\Tile.fs" />
