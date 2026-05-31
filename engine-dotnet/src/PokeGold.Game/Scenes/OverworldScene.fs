@@ -292,7 +292,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Pokedex -> Push(PokedexScene(content, player) :> Scene)
                         | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
                         | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
-                        | Save    -> Push(TextBoxScene.Of(content, "SAVE<DONE>") :> Scene)         // M11.8: replace with real Save scene
+                        | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop) :> Scene)
                 elif aPressed && not state.Player.Moving then

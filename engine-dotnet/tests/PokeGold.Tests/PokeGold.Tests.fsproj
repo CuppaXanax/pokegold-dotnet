@@ -30,6 +30,7 @@
     <Compile Include="SummaryTests.fs" />
     <Compile Include="PokedexTests.fs" />
     <Compile Include="OptionsTests.fs" />
+    <Compile Include="SaveMenuTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 
