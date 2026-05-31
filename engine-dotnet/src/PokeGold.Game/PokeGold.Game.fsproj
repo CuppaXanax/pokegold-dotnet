@@ -41,6 +41,10 @@
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
+    <!-- Overworld scripts: the event-script command language (DU) + a parser
+         that reads a map's .asm into a label-addressed command stream. -->
+    <Compile Include="Overworld\Script\ScriptCommand.fs" />
+    <Compile Include="Overworld\Script\ScriptParser.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
     <Compile Include="Save\SaveFile.fs" />
