@@ -533,3 +533,39 @@ let ``coordToFire gates on the active scene and fires once`` () =
     Assert.Equal(None, Triggers.coordToFire scene (Set.singleton (5, 10)) ev 5 10)
 
 
+// M9.6 — coverage sweep. The script engine must survive the WHOLE game: every
+// real map parses without throwing, and any opcode outside the M9 slice degrades
+// to `Unsupported` (a runtime no-op) rather than a crash. This guards against a
+// parser change that starts throwing on some far-flung map.
+
+[<Fact>]
+let ``every game map parses without throwing and yields commands`` () =
+    let maps = System.IO.Directory.GetFiles(Assets.path "maps", "*.asm")
+    Assert.True(maps.Length > 300, $"expected the full map set, found {maps.Length}")
+
+    let mutable totalCommands = 0
+    for path in maps do
+        // Must not throw on any map; record the command count.
+        let prog = ScriptParser.parseText (System.IO.File.ReadAllText path)
+        totalCommands <- totalCommands + prog.Commands.Length
+
+    Assert.True(totalCommands > 10000, $"expected a substantial command corpus, got {totalCommands}")
+
+[<Fact>]
+let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
+    // A script mixing an out-of-slice opcode (pokemart) with text must still
+    // reach the text — Unsupported is a no-op, not a stop.
+    let prog =
+        parse
+            "Mixed:\n\
+             \tpokemart MARTTYPE_STANDARD, MART_AZALEA\n\
+             \twritetext MixedText\n\
+             \tend\n"
+
+    let step = Script.start "Mixed" World.empty prog
+
+    match step.Outcome with
+    | Suspended(_, ShowText(label, _)) -> Assert.Equal("MixedText", label)
+    | other -> Assert.Fail($"expected the script to run past pokemart to the text, got {other}")
+
+
