@@ -35,6 +35,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// The most recent yes/no choice, written by the YesNoScene callback.
     let mutable yesNoResult = 0
     let mutable prevA = false
+    let mutable prevStart = false
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
 
@@ -178,6 +179,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// The live overworld state (map, player, camera, NPCs).
     member _.DebugState: OverworldState = state
 
+    /// The live player state (party, bag, dex, money, etc.). Exposed for menus.
+    member _.Player: PlayerState = player
+
     /// The live script world (event/engine flags, vars, scenes).
     member _.DebugWorld: World = world
 
@@ -264,6 +268,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | Some(vm, effect) ->
                 pending <- None
                 prevA <- buttons.A
+                prevStart <- buttons.Start
 
                 let value =
                     match effect with
@@ -274,9 +279,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume value world vm)
             | None ->
                 let aPressed = buttons.A && not prevA
+                let startPressed = buttons.Start && not prevStart
                 prevA <- buttons.A
+                prevStart <- buttons.Start
 
-                if aPressed && not state.Player.Moving then
+                if startPressed && not state.Player.Moving then
+                    // Open the start menu over the overworld. Each entry pushes a
+                    // child scene; Exit (and B/Start within the menu) pops the menu.
+                    Push(StartMenuScene(content, fun entry ->
+                        match entry with
+                        | Pokedex -> Push(TextBoxScene.Of(content, "POK\u00e9DEX<DONE>") :> Scene) // M11.6: replace with real Pok\u00e9dex scene
+                        | Pokemon -> Push(TextBoxScene.Of(content, "POK\u00e9MON<DONE>") :> Scene) // M11.4: replace with real Party scene
+                        | Pack    -> Push(TextBoxScene.Of(content, "PACK<DONE>") :> Scene)         // M11.3: replace with real Pack scene
+                        | Save    -> Push(TextBoxScene.Of(content, "SAVE<DONE>") :> Scene)         // M11.8: replace with real Save scene
+                        | Option  -> Push(TextBoxScene.Of(content, "OPTION<DONE>") :> Scene)       // M11.7: replace with real Options scene
+                        | Exit    -> Pop) :> Scene)
+                elif aPressed && not state.Player.Moving then
                     // Talk to / read whatever the player faces. Objects are resolved
                     // over the *live* NPC set (a wandering NPC is talked to where it
                     // now stands), filtered to those currently present.

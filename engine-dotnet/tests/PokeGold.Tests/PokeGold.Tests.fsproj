@@ -24,6 +24,7 @@
     <Compile Include="ObjectTests.fs" />
     <Compile Include="MovementScriptTests.fs" />
     <Compile Include="UiTests.fs" />
+    <Compile Include="StartMenuTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 

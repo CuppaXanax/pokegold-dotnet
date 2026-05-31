@@ -104,6 +104,7 @@
     <Compile Include="Scenes\TextBoxScene.fs" />
     <Compile Include="Scenes\BattleScene.fs" />
     <Compile Include="Scenes\YesNoScene.fs" />
+    <Compile Include="Scenes\StartMenuScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Debug command pipe (T1): inspect/poke a running instance. -->
     <Compile Include="Debug\DebugChannel.fs" />
