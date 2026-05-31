@@ -113,12 +113,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
         OverworldScene(content, sound, OverworldState.loadAzalea content)
 
-    /// Restore an overworld scene from a save.
+    /// Restore an overworld scene from a save (position, world flags, and bag).
     static member OfSave(content: Content, sound: ISoundBoard, save: SaveData) : OverworldScene =
-        OverworldScene(content, sound, SaveData.apply content save)
+        let scene = OverworldScene(content, sound, SaveData.apply content save)
+        scene.Restore(SaveData.worldOf save, SaveData.bagOf save)
+        scene
 
-    /// Snapshot this scene's persistable state for a save.
-    member _.Capture() : SaveData = SaveData.capture state
+    /// Snapshot this scene's persistable state (position, world flags, bag).
+    member _.Capture() : SaveData = SaveData.captureWith state world bag
+
+    /// Seed the script world and bag onto a freshly built scene (used by OfSave).
+    member _.Restore(w: World, b: Map<string, int>) =
+        world <- w
+        bag <- b
 
     /// The NPC sprite for a SPRITE_* constant, best-effort (None if no PNG).
     member private _.SpriteFor(name: string) : Sprite option =
@@ -171,18 +178,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     state <- OverworldState.tick buttons state
                     let after = state.Player.CellX, state.Player.CellY
 
-                    // Stepping onto a new cell can fire a coord trigger.
-                    if after <> before then
-                        match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
-                        | Some c when state.Script.Labels.ContainsKey c.Script ->
-                            firedCoords <- Set.add after firedCoords
-                            this.Drive(Script.start c.Script world state.Script)
-                        | Some _ ->
-                            firedCoords <- Set.add after firedCoords
-                            Stay
-                        | None -> Stay
-                    else
+                    if after = before then
                         Stay
+                    else
+                        // Stepping onto a warp tile sends the player to its paired
+                        // warp on the destination map (a no-op until that map is
+                        // wired up). Otherwise a coord trigger may fire.
+                        match MapEvents.warpAt (fst after) (snd after) state.Events with
+                        | Some w ->
+                            match OverworldState.tryWarp content w.DestMap w.DestWarp with
+                            | Some dest ->
+                                state <- dest
+                                firedCoords <- Set.empty
+                                Stay
+                            | None -> Stay
+                        | None ->
+                            match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
+                            | Some c when state.Script.Labels.ContainsKey c.Script ->
+                                firedCoords <- Set.add after firedCoords
+                                this.Drive(Script.start c.Script world state.Script)
+                            | Some _ ->
+                                firedCoords <- Set.add after firedCoords
+                                Stay
+                            | None -> Stay
 
         member this.Render(fb: Framebuffer) =
             OverworldRenderer.draw fb state

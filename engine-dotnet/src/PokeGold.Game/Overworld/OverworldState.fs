@@ -130,3 +130,26 @@ module OverworldState =
         let player = Movement.step s.Map s.Collision buttons s.Player
         let camX, camY = Camera.follow s.Map player
         { s with Player = player; CamX = camX; CamY = camY }
+
+    /// A destination `MAP_*` constant → the loadable map id, for the maps wired
+    /// into `loadAssets`. Unknown maps (interiors not yet built) return `None`, so
+    /// a warp onto them is a no-op until the map is added — adding the destination
+    /// map here and in `loadAssets` makes that warp work with no other change.
+    let private mapIdOfConst (mapConst: string) : string option =
+        match mapConst with
+        | "AZALEA_TOWN" -> Some "AzaleaTown"
+        | _ -> None
+
+    /// Resolve a warp to its destination overworld: load the destination map and
+    /// place the player on its `destWarp`-th warp tile (GSC pairs warps by id).
+    /// `None` if the destination map isn't wired up or the warp id is out of range.
+    let tryWarp (content: Content) (destMap: string) (destWarp: int) : OverworldState option =
+        match mapIdOfConst destMap with
+        | None -> None
+        | Some mapId ->
+            let dest = eventsFor mapId
+            if destWarp >= 1 && destWarp <= dest.Warps.Length then
+                let w = dest.Warps.[destWarp - 1]
+                Some(loadByIdAt content mapId w.X w.Y Down)
+            else
+                None
