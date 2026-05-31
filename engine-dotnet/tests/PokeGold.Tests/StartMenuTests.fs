@@ -177,3 +177,41 @@ let ``StartMenu Render draws non-zero pixels at box top-left corner`` () =
                 anyNonZero <- true
 
     Assert.True(anyNonZero, "Expected BoxTopLeft border glyph to write non-zero pixels at tile (10, 0)")
+
+// ── Render: box spans the full screen height (GSC menu_coords 10,0,19,17) ─────
+
+[<Fact>]
+let ``StartMenu Render draws the bottom border at the last screen row`` () =
+    // The box height matches the GSC start menu (rows 0-17). Its bottom-left
+    // corner is tile (10, 17) = pixels (80..87, 136..143); that glyph is non-blank.
+    let fb = Framebuffer()
+    let scene = StartMenuScene(Content(), fun _ -> Stay)
+    (scene :> Scene).Render(fb)
+
+    let mutable anyNonZero = false
+    for py in 136 .. 143 do
+        for px in 80 .. 87 do
+            let i = (py * Display.Width + px) * 4
+            if fb.Pixels.[i] <> 0uy || fb.Pixels.[i + 1] <> 0uy || fb.Pixels.[i + 2] <> 0uy then
+                anyNonZero <- true
+
+    Assert.True(anyNonZero, "Expected the box bottom border to reach tile row 17 (full screen height)")
+
+// ── Flicker regression: the Start press that opens the menu must not close it ──
+
+[<Fact>]
+let ``StartMenu seeded with Start held does not close on the first frame`` () =
+    // Repro of the open-then-immediately-close flicker: the menu opens while
+    // Start is still physically held. Seeding the edge detector with that held
+    // state must suppress the stale rising edge so the menu stays open.
+    let held = { Buttons.none with Start = true }
+    let scene = StartMenuScene(Content(), (fun _ -> Stay), held)
+    Assert.Equal(Stay, (scene :> Scene).Update(held))
+
+[<Fact>]
+let ``StartMenu seeded with Start held closes only after release and re-press`` () =
+    let held = { Buttons.none with Start = true }
+    let scene = StartMenuScene(Content(), (fun _ -> Stay), held)
+    (scene :> Scene).Update(held)        |> ignore // still held → Stay
+    (scene :> Scene).Update(Buttons.none) |> ignore // released → latch clears
+    Assert.Equal(Pop, (scene :> Scene).Update(held)) // fresh press → Pop

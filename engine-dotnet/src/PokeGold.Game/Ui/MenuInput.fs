@@ -17,8 +17,13 @@ type EdgeState =
 /// Tracks the previous button state to compute rising edges (pressed-this-frame).
 /// Extracted from `YesNoScene` so every menu can reuse the same edge detection
 /// without duplicating the `prev` latch and `pressed cur was` idiom.
-type EdgeDetector() =
-    let mutable prev = Buttons.none
+///
+/// `initial` seeds the previous-frame latch. Pass the buttons that were held at
+/// the moment a scene was opened so the press that *opened* the scene doesn't
+/// register as a fresh rising edge on its first frame (e.g. holding Start to open
+/// the start menu must not immediately close it). Defaults to `Buttons.none`.
+type EdgeDetector(?initial: Buttons) =
+    let mutable prev = defaultArg initial Buttons.none
 
     /// Call once per frame with the current button state; returns which buttons
     /// were newly pressed (rising edge) this frame. Updates the internal latch.

@@ -24,7 +24,7 @@ type StartEntry =
 /// is pressed; returning `Push child` pushes the child over this scene so it
 /// can later pop back to the menu. `Exit` (and B/Start) always pop the menu
 /// without consulting `openEntry`.
-type StartMenuScene(content: Content, openEntry: StartEntry -> Transition) =
+type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?heldAtOpen: Buttons) =
 
     // GSC order: POKéDEX, POKéMON, PACK, SAVE, OPTION, EXIT.
     let entryLabels = [| "POKéDEX"; "POKéMON"; "PACK"; "SAVE"; "OPTION"; "EXIT" |]
@@ -32,15 +32,16 @@ type StartMenuScene(content: Content, openEntry: StartEntry -> Transition) =
 
     // All 6 entries always fit in the visible window — no scrolling needed.
     let mutable menu = MenuList.create entryLabels.Length entryLabels.Length true
-    let input = EdgeDetector()
+    // Seed the edge detector with the buttons that were held when the menu opened
+    // (Start, typically) so that press doesn't immediately re-fire and close it.
+    let input = EdgeDetector(defaultArg heldAtOpen Buttons.none)
     let palette = TextRenderer.palette
 
-    // Box geometry in 8-px tiles.
-    // Screen is 20×18 tiles. The box is flush against the right edge.
-    // Longest entries ("POKéDEX" / "POKéMON") are 7 chars rendered via charmap;
-    // the cursor glyph (▶) needs 1 more column, so interior is 8 tiles wide.
-    // Box: 2 border + 8 interior = 10 wide. Left = 20 - 10 = 10.
-    // Height: 2 border + 6 entries (1 row each) = 8.
+    // Box geometry in 8-px tiles, mirroring the GSC start menu's
+    // `menu_coords 10, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1`: flush against the
+    // right edge (cols 10-19) and the full 18-tile screen height (rows 0-17).
+    // Entries are placed every 2 rows (GSC 1-D menu spacing) starting at the
+    // first interior row below the top border.
     [<Literal>]
     let Left = 10
 
@@ -51,7 +52,15 @@ type StartMenuScene(content: Content, openEntry: StartEntry -> Transition) =
     let Width = 10
 
     [<Literal>]
-    let Height = 8
+    let Height = 18
+
+    // First entry's row (one blank row under the top border) and the per-entry
+    // row stride (GSC spaces menu items two tiles apart).
+    [<Literal>]
+    let FirstRow = 2
+
+    [<Literal>]
+    let RowStep = 2
 
     /// Current cursor position (0-based entry index). Exposed for unit tests.
     member _.Cursor = menu.Cursor
@@ -79,8 +88,11 @@ type StartMenuScene(content: Content, openEntry: StartEntry -> Transition) =
         member _.Render(fb: Framebuffer) =
             WindowRenderer.drawBox fb content.Font palette Left Top Width Height
 
-            // All 6 entries are always visible (visible = count = 6, Top = 0).
-            // drawList places the ▶ cursor at column Left+1 and text at Left+2.
-            let visibleItems =
-                entryLabels.[menu.Top .. menu.Top + menu.Visible - 1] |> Array.toSeq
-            WindowRenderer.drawList fb content.Font palette (Left + 1) (Top + 1) visibleItems (menu.Cursor - menu.Top)
+            // Entries are spaced two tiles apart (GSC 1-D menu spacing). The ▶
+            // cursor sits at column Left+1; the label starts at Left+2.
+            entryLabels
+            |> Array.iteri (fun i label ->
+                let row = Top + FirstRow + i * RowStep
+                if i = menu.Cursor then
+                    WindowRenderer.drawCursor fb content.Font palette (Left + 1) row
+                WindowRenderer.drawString fb content.Font palette (Left + 2) row label)

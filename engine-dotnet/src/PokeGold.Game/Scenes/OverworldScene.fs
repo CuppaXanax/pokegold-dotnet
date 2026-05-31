@@ -287,14 +287,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 if startPressed && not state.Player.Moving then
                     // Open the start menu over the overworld. Each entry pushes a
                     // child scene; Exit (and B/Start within the menu) pops the menu.
-                    Push(StartMenuScene(content, fun entry ->
+                    Push(StartMenuScene(content, (fun entry ->
                         match entry with
                         | Pokedex -> Push(PokedexScene(content, player) :> Scene)
                         | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
                         | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
-                        | Exit    -> Pop) :> Scene)
+                        | Exit    -> Pop), buttons) :> Scene)
                 elif aPressed && not state.Player.Moving then
                     // Talk to / read whatever the player faces. Objects are resolved
                     // over the *live* NPC set (a wandering NPC is talked to where it
