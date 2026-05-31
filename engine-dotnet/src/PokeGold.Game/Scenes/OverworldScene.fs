@@ -288,7 +288,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // child scene; Exit (and B/Start within the menu) pops the menu.
                     Push(StartMenuScene(content, fun entry ->
                         match entry with
-                        | Pokedex -> Push(TextBoxScene.Of(content, "POK\u00e9DEX<DONE>") :> Scene) // M11.6: replace with real Pok\u00e9dex scene
+                        | Pokedex -> Push(PokedexScene(content, player) :> Scene)
                         | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
                         | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
                         | Save    -> Push(TextBoxScene.Of(content, "SAVE<DONE>") :> Scene)         // M11.8: replace with real Save scene
