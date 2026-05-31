@@ -38,22 +38,7 @@ module TextRenderer =
 
     /// Draw the box border (top/middle/bottom rows) using the box-drawing glyphs.
     let private drawBorder (fb: Framebuffer) (font: Font) =
-        let last = ScreenW - 1
-
-        for row in 0 .. BoxH - 1 do
-            let screenRow = BoxTop + row
-
-            let left, mid, right =
-                if row = 0 then Charmap.BoxTopLeft, Charmap.BoxHoriz, Charmap.BoxTopRight
-                elif row = BoxH - 1 then Charmap.BoxBottomLeft, Charmap.BoxHoriz, Charmap.BoxBottomRight
-                else Charmap.BoxVert, Charmap.Space, Charmap.BoxVert
-
-            drawCode fb font 0 screenRow left
-
-            for col in 1 .. last - 1 do
-                drawCode fb font col screenRow mid
-
-            drawCode fb font last screenRow right
+        WindowRenderer.drawBox fb font palette 0 BoxTop ScreenW BoxH
 
     /// Draw a finished or in-progress text box into the framebuffer.
     let draw (fb: Framebuffer) (font: Font) (state: TextBoxState) =

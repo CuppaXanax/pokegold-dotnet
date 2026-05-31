@@ -18,6 +18,11 @@
     <Compile Include="Core\Direction.fs" />
     <Compile Include="Core\Buttons.fs" />
     <Compile Include="Core\Charmap.fs" />
+    <!-- Ui: pure state machines and geometry helpers (menus, HP bar, windowing). -->
+    <Compile Include="Ui\MenuInput.fs" />
+    <Compile Include="Ui\MenuList.fs" />
+    <Compile Include="Ui\HpBar.fs" />
+    <Compile Include="Ui\Window.fs" />
     <!-- Data: typed game data + an asset cache. Tabular game data (species,
          moves, type chart) is generated at build time by PokeGold.DataGen into
          Data\Generated\ and baked into this assembly; see the GenerateGameData
@@ -91,6 +96,7 @@
     <Compile Include="Render\MapRenderer.fs" />
     <Compile Include="Render\SpriteRenderer.fs" />
     <Compile Include="Render\OverworldRenderer.fs" />
+    <Compile Include="Render\WindowRenderer.fs" />
     <Compile Include="Render\TextRenderer.fs" />
     <Compile Include="Render\BattleRenderer.fs" />
     <!-- Scenes: the scene-stack abstraction and the overworld scene. -->
