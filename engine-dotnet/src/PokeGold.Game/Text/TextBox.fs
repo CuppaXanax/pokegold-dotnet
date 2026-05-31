@@ -90,7 +90,10 @@ module TextBox =
     /// Consume the next token from a non-waiting, non-delayed box.
     let private advance (s: TextBoxState) : TextBoxState =
         match s.Tokens with
-        | [] -> { s with Done = true }
+        // End of the stream: the GSC text engine returns to a `waitbutton`, so the
+        // box holds the final line on screen until the player confirms — it does
+        // not auto-dismiss.
+        | [] -> { s with Waiting = true; Pending = Some Done }
         | token :: rest ->
             let s = { s with Tokens = rest }
 
@@ -103,7 +106,9 @@ module TextBox =
             | Cont -> { s with Waiting = true; Pending = Some Cont }
             | Para -> { s with Waiting = true; Pending = Some Para }
             | Prompt -> { s with Waiting = true; Pending = Some Prompt }
-            | Done -> { s with Done = true }
+            // `<DONE>` finishes the text, but (like the real `waitbutton`) only
+            // after the player confirms — so the last box stays up.
+            | Done -> { s with Waiting = true; Pending = Some Done }
 
     /// Apply a confirmed prompt's deferred action and resume typing.
     let private applyPending (pending: TextToken option) (s: TextBoxState) : TextBoxState =
@@ -111,6 +116,7 @@ module TextBox =
         | Some Cont -> scrolled s
         | Some Para -> cleared s
         | Some Prompt -> { s with Done = true }
+        | Some Done -> { s with Done = true }
         | _ -> s
 
     /// Advance the box by one frame, consuming this frame's input.

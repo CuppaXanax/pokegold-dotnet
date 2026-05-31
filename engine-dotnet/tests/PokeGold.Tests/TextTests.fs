@@ -87,9 +87,16 @@ let ``Para waits, then clears the box for a new paragraph`` () =
     Assert.Equal(Charmap.Space, resumed.Lines.[0].[1]) // the previous 'C' was cleared
 
 [<Fact>]
-let ``a box without prompts finishes on its own`` () =
-    let s = idle 30 (TextBox.ofString "Hi<DONE>")
-    Assert.True(s.Done)
+let ``a box waits on its final line and closes only when confirmed`` () =
+    // The GSC text engine holds the last line up (a `waitbutton`) rather than
+    // auto-dismissing. Idling leaves the box waiting, not done.
+    let waiting = idle 30 (TextBox.ofString "Hi<DONE>")
+    Assert.True(waiting.Waiting)
+    Assert.False(waiting.Done)
+
+    // Pressing A confirms and closes the box.
+    let confirmed = TextBox.tick pressA waiting
+    Assert.True(confirmed.Done)
 
 [<Fact>]
 let ``the real Azalea dialogue runs to completion`` () =
