@@ -290,7 +290,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         match entry with
                         | Pokedex -> Push(TextBoxScene.Of(content, "POK\u00e9DEX<DONE>") :> Scene) // M11.6: replace with real Pok\u00e9dex scene
                         | Pokemon -> Push(TextBoxScene.Of(content, "POK\u00e9MON<DONE>") :> Scene) // M11.4: replace with real Party scene
-                        | Pack    -> Push(TextBoxScene.Of(content, "PACK<DONE>") :> Scene)         // M11.3: replace with real Pack scene
+                        | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
                         | Save    -> Push(TextBoxScene.Of(content, "SAVE<DONE>") :> Scene)         // M11.8: replace with real Save scene
                         | Option  -> Push(TextBoxScene.Of(content, "OPTION<DONE>") :> Scene)       // M11.7: replace with real Options scene
                         | Exit    -> Pop) :> Scene)
