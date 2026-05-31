@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Overworld
 
+open System.IO
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld.Script
@@ -45,29 +46,27 @@ module OverworldState =
               Palette.rgb555 13 13 15
               Palette.rgb555 2 2 3 ]
 
-    /// The map id → its `.asm` event-table file, when wired up. Adding a map's
-    /// events means adding a case here (mirrors `loadAssets`).
-    let private eventsPath (mapId: string) : string option =
-        match mapId with
-        | "AzaleaTown" -> Some "maps/AzaleaTown.asm"
-        | _ -> None
+    /// The build-time-generated static data for a map id, if it exists. Events,
+    /// scripts and text now come from the baked `MapsData` table — the overworld
+    /// load path no longer parses any `maps/<Name>.asm` at runtime.
+    let private dataFor (mapId: string) : GeneratedMap option = MapsData.byName mapId
 
-    /// Parse a map's event tables, or empty if the map isn't wired up.
+    /// Parse a map's event tables, or empty if the map isn't in the generated table.
     let private eventsFor (mapId: string) : MapEvents =
-        match eventsPath mapId with
-        | Some path -> AsmLoad.events path
+        match dataFor mapId with
+        | Some m -> m.Events
         | None -> MapEvents.empty
 
-    /// Parse a map's script program, or an empty program if not wired up.
+    /// A map's script program, or an empty program if not in the generated table.
     let private scriptFor (mapId: string) : ScriptProgram =
-        match eventsPath mapId with
-        | Some path -> AsmLoad.script path
+        match dataFor mapId with
+        | Some m -> m.Script
         | None -> { Commands = [||]; Labels = Map.empty }
 
-    /// Parse a map's text labels, or an empty table if not wired up.
+    /// A map's text labels, or an empty table if not in the generated table.
     let private textFor (mapId: string) : Map<string, string> =
-        match eventsPath mapId with
-        | Some path -> AsmLoad.text path
+        match dataFor mapId with
+        | Some m -> m.Text
         | None -> Map.empty
 
     /// Build an overworld around an already-loaded map, placing the player with
@@ -100,16 +99,34 @@ module OverworldState =
     let createAt (mapId: string) (map: GameMap) (tileset: Tileset) (coll: Collision) (sprite: Sprite) (cellX: int) (cellY: int) (facing: Direction) : OverworldState =
         build mapId map tileset coll sprite (Player.createFacing cellX cellY facing)
 
-    /// Asset spec for a known map id: the loaders needed to (re)build it. Adding a
-    /// new map means adding a case here; save/load and the scene both go through it.
+    /// Map a `TILESET_*` constant to its asset stem (e.g. `TILESET_JOHTO_MODERN`
+    /// → `johto_modern`), which names both the gfx/metatiles and the collision.
+    let private tilesetStem (meta: MapMeta) : string =
+        let t = meta.Tileset
+        let t = if t.StartsWith "TILESET_" then t.Substring "TILESET_".Length else t
+        t.ToLowerInvariant()
+
+    /// Whether a map's binary/asset files are all present, so it can be loaded.
+    /// Map geometry/events/text are baked, but the `.blk` block layout, tileset
+    /// gfx and collision are still on-disk assets; an interior whose assets aren't
+    /// in the tree yet simply isn't loadable (warps onto it are a no-op).
+    let private canLoad (meta: MapMeta) : bool =
+        let stem = tilesetStem meta
+        File.Exists(Assets.path $"maps/{meta.Name}.blk")
+        && File.Exists(Assets.path $"gfx/tilesets/{stem}.png")
+        && File.Exists(Assets.path $"data/tilesets/{stem}_collision.asm")
+
+    /// Asset spec for a map id: the loaders needed to (re)build it, derived from the
+    /// baked metadata (dimensions, tileset). The player overworld sprite is fixed.
     let private loadAssets (content: Content) (mapId: string) : GameMap * Tileset * Collision * Sprite =
-        match mapId with
-        | "AzaleaTown" ->
-            content.Map(20, 9, "maps/AzaleaTown.blk"),
-            content.Tileset "johto_modern",
-            content.Collision "johto_modern",
+        match dataFor mapId with
+        | Some m ->
+            let stem = tilesetStem m.Meta
+            content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{mapId}.blk"),
+            content.Tileset stem,
+            content.Collision stem,
             content.Sprite "chris"
-        | other -> failwithf "Unknown map id '%s'" other
+        | None -> failwithf "Unknown map id '%s'" mapId
 
     /// Load a known map by id, placing the player on its first walkable cell.
     let loadById (content: Content) (mapId: string) : OverworldState =
@@ -131,25 +148,26 @@ module OverworldState =
         let camX, camY = Camera.follow s.Map player
         { s with Player = player; CamX = camX; CamY = camY }
 
-    /// A destination `MAP_*` constant → the loadable map id, for the maps wired
-    /// into `loadAssets`. Unknown maps (interiors not yet built) return `None`, so
-    /// a warp onto them is a no-op until the map is added — adding the destination
-    /// map here and in `loadAssets` makes that warp work with no other change.
-    let private mapIdOfConst (mapConst: string) : string option =
-        match mapConst with
-        | "AZALEA_TOWN" -> Some "AzaleaTown"
-        | _ -> None
+    /// A destination `MAP_*` constant → its loadable map id, resolved from the baked
+    /// metadata's name↔const link (every one of the 368 maps, not just Azalea).
+    let private constToName : Map<string, string> =
+        MapsData.all
+        |> Seq.map (fun kv -> kv.Value.Meta.Const, kv.Value.Meta.Name)
+        |> Map.ofSeq
+
+    let private mapIdOfConst (mapConst: string) : string option = Map.tryFind mapConst constToName
 
     /// Resolve a warp to its destination overworld: load the destination map and
     /// place the player on its `destWarp`-th warp tile (GSC pairs warps by id).
-    /// `None` if the destination map isn't wired up or the warp id is out of range.
+    /// `None` if the destination map is unknown, its assets aren't in the tree yet,
+    /// or the warp id is out of range.
     let tryWarp (content: Content) (destMap: string) (destWarp: int) : OverworldState option =
-        match mapIdOfConst destMap with
-        | None -> None
-        | Some mapId ->
-            let dest = eventsFor mapId
-            if destWarp >= 1 && destWarp <= dest.Warps.Length then
-                let w = dest.Warps.[destWarp - 1]
-                Some(loadByIdAt content mapId w.X w.Y Down)
+        match mapIdOfConst destMap |> Option.bind dataFor with
+        | Some m when canLoad m.Meta ->
+            let warps = m.Events.Warps
+            if destWarp >= 1 && destWarp <= warps.Length then
+                let w = warps.[destWarp - 1]
+                Some(loadByIdAt content m.Meta.Name w.X w.Y Down)
             else
                 None
+        | _ -> None

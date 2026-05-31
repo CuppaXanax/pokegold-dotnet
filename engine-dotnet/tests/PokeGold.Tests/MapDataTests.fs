@@ -48,3 +48,22 @@ let ``every generated map has a non-empty const and matching name`` () =
     for kv in MapsData.all do
         Assert.Equal(kv.Key, kv.Value.Meta.Name)
         Assert.False(System.String.IsNullOrWhiteSpace kv.Value.Meta.Const)
+
+[<Fact>]
+let ``the overworld sources its events from the baked table, not live asm`` () =
+    // M10.1 — OverworldState consumes MapsData. Loading AzaleaTown must yield the
+    // exact event/script/text tables baked into MapsData (proving the load path no
+    // longer parses maps/<Name>.asm at runtime). Content decodes only binary/gfx
+    // assets; the map data is the generated value.
+    let content = PokeGold.Game.Data.Content()
+    let state = PokeGold.Game.Overworld.OverworldState.loadById content "AzaleaTown"
+
+    let baked =
+        match MapsData.byName "AzaleaTown" with
+        | Some m -> m
+        | None -> failwith "AzaleaTown missing from generated map data"
+
+    Assert.Equal<WarpEvent[]>(baked.Events.Warps, state.Events.Warps)
+    Assert.Equal<ObjectEvent[]>(baked.Events.Objects, state.Events.Objects)
+    Assert.Equal(baked.Script.Commands.Length, state.Script.Commands.Length)
+    Assert.Equal<Map<string, string>>(baked.Text, state.Text)

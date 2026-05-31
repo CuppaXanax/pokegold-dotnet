@@ -124,6 +124,8 @@ let ``tryWarp loads the destination map and lands on the paired warp`` () =
     | None -> Assert.Fail("AZALEA_TOWN should resolve to a loadable map")
 
 [<Fact>]
-let ``tryWarp is a no-op for a destination map that is not wired up`` () =
+let ``tryWarp is a no-op for a destination map whose assets are not in the tree`` () =
     let content = Content()
-    Assert.Equal(None, OverworldState.tryWarp content "KURTS_HOUSE" 1)
+    // RUINS_OF_ALPH_HO_OH_CHAMBER is a real map (baked metadata/events) but has no
+    // `.blk` block layout in the tree yet, so it isn't loadable — the warp no-ops.
+    Assert.Equal(None, OverworldState.tryWarp content "RUINS_OF_ALPH_HO_OH_CHAMBER" 1)

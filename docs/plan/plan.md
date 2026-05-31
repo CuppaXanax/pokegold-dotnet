@@ -409,6 +409,18 @@ split needed). Runtime still parses via the new `Overworld/Script/AsmLoad.fs` se
 the `MapEvents` query module stays in Game (needs `World`). 129/129 tests green (4 new `MapDataTests`
 gating count=368 + connections + NewBarkTown warps + name/const integrity).
 
+**M10.1 — OverworldState consumes MapsData — DONE.** Repointed the overworld load
+path at the baked table: `eventsFor`/`scriptFor`/`textFor` now read `MapsData.byName`
+(no more `AsmLoad` in the load path), `loadAssets` derives dimensions + tileset stem
+from the baked `MapMeta` (`TILESET_JOHTO_MODERN` → `johto_modern`) instead of a
+hard-coded Azalea case, and `mapIdOfConst` is a `Const→Name` map built from all 368
+maps. `tryWarp` now resolves any map's warp and loads it when its on-disk assets
+(`.blk` + tileset gfx + collision) are present, no-opping otherwise (interiors whose
+`.blk` isn't in the tree yet). `AsmLoad.fs` is retained as a test-only utility (parse
+live `.asm` to assert against the baked data). `OverworldState.fs` has zero
+`Assets.readText`. 130/130 tests green (new gate: loading AzaleaTown yields the exact
+baked Events/Script/Text; the no-op warp test repointed to a `.blk`-less map).
+
 ###### M10 addendum — inherited deferrals (from M4/M8) to enumerate here
 
 

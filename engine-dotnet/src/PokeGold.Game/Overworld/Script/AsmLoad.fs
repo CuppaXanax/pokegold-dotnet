@@ -3,10 +3,11 @@ namespace PokeGold.Game.Overworld.Script
 open PokeGold.Game.Core
 
 /// Thin wrappers that feed a repo-relative `maps/<Name>.asm` through the pure
-/// parsers in `PokeGold.MapData`. These are the last runtime `.asm` reads in the
-/// overworld load path; M10.1 replaces them with lookups into the build-time
-/// generated map tables. Kept here (not in the shared lib) because they touch
-/// `Assets`, which is a Game concern.
+/// parsers in `PokeGold.MapData`. As of M10.1 the overworld load path no longer
+/// uses these — it reads the build-time-generated `MapsData` table instead. They
+/// are retained as a test utility, so tests can parse a real map `.asm` live and
+/// assert it against the baked data. Kept here (not in the shared lib) because they
+/// touch `Assets`, which is a Game concern.
 module AsmLoad =
 
     /// Parse a map's script program from its `.asm`.
