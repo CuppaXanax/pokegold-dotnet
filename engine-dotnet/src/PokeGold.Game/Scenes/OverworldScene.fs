@@ -112,8 +112,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | PlayMusic _
             | PlaySound _
             | ScriptEffect.Cry _
-            | WaitSfx
-            | ScriptEffect.Warp _ -> this.Drive(Script.resume None world vm)
+            | WaitSfx -> this.Drive(Script.resume None world vm)
+            // ----- warp: load the destination map, then continue the script -----
+            | ScriptEffect.Warp(map, x, y, facing) ->
+                match OverworldState.tryWarpExplicit content map x y facing state.Player.Facing with
+                | Some ns ->
+                    state <- ns
+                    firedCoords <- Set.empty
+                | None -> ()
+
+                this.Drive(Script.resume None world vm)
 
     /// Load the Azalea Town overworld scene through the shared asset cache.
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =

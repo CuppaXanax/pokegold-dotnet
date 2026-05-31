@@ -232,3 +232,30 @@ module OverworldState =
             else
                 None
         | _ -> None
+
+    /// Resolve an explicit script warp (`warp`/`warpfacing MAP, x, y`): load the
+    /// destination map and place the player at the given cell, facing the script's
+    /// direction (or keeping `fallback` when the command gives none). `None` if the
+    /// destination map is unknown or its assets aren't in the tree yet.
+    let tryWarpExplicit
+        (content: Content)
+        (destMap: string)
+        (x: int)
+        (y: int)
+        (facing: string option)
+        (fallback: Direction)
+        : OverworldState option =
+        let dir =
+            match facing with
+            | Some s ->
+                let u = s.ToUpperInvariant()
+                if u.Contains "UP" then Up
+                elif u.Contains "LEFT" then Left
+                elif u.Contains "RIGHT" then Right
+                elif u.Contains "DOWN" then Down
+                else fallback
+            | None -> fallback
+
+        match mapIdOfConst destMap |> Option.bind dataFor with
+        | Some m when canLoad m.Meta -> Some(loadByIdAt content m.Meta.Name x y dir)
+        | _ -> None

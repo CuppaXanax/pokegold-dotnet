@@ -129,3 +129,30 @@ let ``tryWarp is a no-op for a destination map whose assets are not in the tree`
     // RUINS_OF_ALPH_HO_OH_CHAMBER is a real map (baked metadata/events) but has no
     // `.blk` block layout in the tree yet, so it isn't loadable — the warp no-ops.
     Assert.Equal(None, OverworldState.tryWarp content "RUINS_OF_ALPH_HO_OH_CHAMBER" 1)
+
+// ---- M10.4 — explicit script warps (warp / warpfacing) ---------------------
+
+[<Fact>]
+let ``tryWarpExplicit loads the destination map at the given cell and facing`` () =
+    let content = Content()
+
+    match OverworldState.tryWarpExplicit content "AZALEA_TOWN" 7 11 (Some "UP") Down with
+    | Some s ->
+        Assert.Equal("AzaleaTown", s.MapId)
+        Assert.Equal((7, 11), (s.Player.CellX, s.Player.CellY))
+        Assert.Equal(Up, s.Player.Facing)
+    | None -> Assert.Fail("AZALEA_TOWN should resolve to a loadable map")
+
+[<Fact>]
+let ``tryWarpExplicit keeps the fallback facing when the command gives none`` () =
+    let content = Content()
+
+    match OverworldState.tryWarpExplicit content "AZALEA_TOWN" 7 11 None Left with
+    | Some s -> Assert.Equal(Left, s.Player.Facing)
+    | None -> Assert.Fail("AZALEA_TOWN should resolve to a loadable map")
+
+[<Fact>]
+let ``tryWarpExplicit is a no-op for an unknown or unloadable destination`` () =
+    let content = Content()
+    Assert.Equal(None, OverworldState.tryWarpExplicit content "MAP_THAT_DOES_NOT_EXIST" 1 1 None Down)
+    Assert.Equal(None, OverworldState.tryWarpExplicit content "RUINS_OF_ALPH_HO_OH_CHAMBER" 1 1 None Down)
