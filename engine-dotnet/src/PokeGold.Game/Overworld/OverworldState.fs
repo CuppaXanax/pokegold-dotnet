@@ -25,7 +25,11 @@ type OverworldState =
       /// The map's parsed script program (labels → commands).
       Script: ScriptProgram
       /// The map's text labels resolved to M5 token strings.
-      Text: Map<string, string> }
+      Text: Map<string, string>
+      /// Loaded, placed neighbour maps for border rendering, cross-join collision
+      /// and walking off the edge into the next map. Empty until populated by a
+      /// content-aware load (`withNeighbors`); a bare `build`/`createAt` has none.
+      Neighbors: MapConnections.NeighborMap list }
 
 module OverworldState =
 
@@ -86,7 +90,8 @@ module OverworldState =
           CamY = camY
           Events = eventsFor mapId
           Script = scriptFor mapId
-          Text = textFor mapId }
+          Text = textFor mapId
+          Neighbors = [] }
 
     /// Build an overworld for an already-loaded map/tileset/collision/sprite,
     /// placing the player on the first walkable cell from the map center.
@@ -128,25 +133,81 @@ module OverworldState =
             content.Sprite "chris"
         | None -> failwithf "Unknown map id '%s'" mapId
 
+    /// A neighbour map's render/collision assets, if it is loadable (`.blk` + gfx +
+    /// collision present); `None` for interiors whose assets aren't in the tree yet.
+    let private neighborAssets (content: Content) (name: string) : (GameMap * Tileset * Collision) option =
+        match dataFor name with
+        | Some m when canLoad m.Meta ->
+            let stem = tilesetStem m.Meta
+            Some(
+                content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{name}.blk"),
+                content.Tileset stem,
+                content.Collision stem
+            )
+        | _ -> None
+
+    /// Load and place every loadable connected neighbour of `s`'s map, deriving each
+    /// one's cell-frame placement from its `connection` offset and block dimensions.
+    let withNeighbors (content: Content) (s: OverworldState) : OverworldState =
+        let cw, ch = s.Map.Width * 2, s.Map.Height * 2
+
+        let neighbors =
+            match dataFor s.MapId with
+            | Some m ->
+                [ for c in m.Meta.Connections do
+                      match dataFor c.Map with
+                      | Some nm ->
+                          match neighborAssets content c.Map with
+                          | Some(map, tileset, coll) ->
+                              { MapConnections.Placement =
+                                  MapConnections.placement cw ch nm.Meta.WidthBlocks nm.Meta.HeightBlocks c
+                                MapConnections.Map = map
+                                MapConnections.Tileset = tileset
+                                MapConnections.Collision = coll }
+                          | None -> ()
+                      | None -> () ]
+            | None -> []
+
+        { s with Neighbors = neighbors }
+
     /// Load a known map by id, placing the player on its first walkable cell.
     let loadById (content: Content) (mapId: string) : OverworldState =
         let map, tileset, coll, sprite = loadAssets content mapId
-        create mapId map tileset coll sprite
+        create mapId map tileset coll sprite |> withNeighbors content
 
     /// Load a known map by id, placing the player at an explicit cell and facing
     /// (used to restore a saved position).
     let loadByIdAt (content: Content) (mapId: string) (cellX: int) (cellY: int) (facing: Direction) : OverworldState =
         let map, tileset, coll, sprite = loadAssets content mapId
-        createAt mapId map tileset coll sprite cellX cellY facing
+        createAt mapId map tileset coll sprite cellX cellY facing |> withNeighbors content
 
     /// Load the Azalea Town overworld through the shared asset cache.
     let loadAzalea (content: Content) : OverworldState = loadById content "AzaleaTown"
 
-    /// Advance the overworld by one frame of input (movement + camera follow).
+    /// Advance the overworld by one frame of input (movement + camera follow). The
+    /// cell queries consult connected neighbours, so the player walks, hops and is
+    /// blocked seamlessly across map joins; the camera tracks into neighbour terrain.
     let tick (buttons: Buttons) (s: OverworldState) : OverworldState =
-        let player = Movement.step s.Map s.Collision buttons s.Player
-        let camX, camY = Camera.follow s.Map player
+        let walkable = MapConnections.cellWalkable s.Map s.Collision s.Neighbors
+        let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
+        let player = Movement.stepWith walkable collId buttons s.Player
+        let camX, camY = Camera.followExt s.Map s.Neighbors player
         { s with Player = player; CamX = camX; CamY = camY }
+
+    /// If the player has walked off the current map into a connected neighbour,
+    /// rebuild the overworld as that neighbour with the player rebased to the
+    /// equivalent local cell (same world position, so the camera stays put). The
+    /// caller resets any per-visit state (e.g. fired coord triggers). `None` while
+    /// the player is still inside the current map's bounds or mid-step.
+    let crossConnection (content: Content) (s: OverworldState) : OverworldState option =
+        let cw, ch = s.Map.Width * 2, s.Map.Height * 2
+        let cx, cy = s.Player.CellX, s.Player.CellY
+
+        if s.Player.Motion <> Standing || (cx >= 0 && cy >= 0 && cx < cw && cy < ch) then
+            None
+        else
+            MapConnections.resolve s.Neighbors cx cy
+            |> Option.map (fun (n, lx, ly) -> loadByIdAt content n.Placement.Conn.Map lx ly s.Player.Facing)
 
     /// A destination `MAP_*` constant → its loadable map id, resolved from the baked
     /// metadata's name↔const link (every one of the 368 maps, not just Azalea).

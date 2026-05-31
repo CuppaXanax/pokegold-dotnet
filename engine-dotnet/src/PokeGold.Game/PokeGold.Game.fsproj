@@ -40,6 +40,7 @@
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
     <Compile Include="Overworld\Movement.fs" />
+    <Compile Include="Overworld\MapConnections.fs" />
     <Compile Include="Overworld\Camera.fs" />
     <Compile Include="Overworld\Animation.fs" />
     <!-- Overworld scripts: the flag/var/scene world store, the resumable script

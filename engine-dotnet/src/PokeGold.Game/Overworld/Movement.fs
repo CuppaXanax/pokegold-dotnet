@@ -58,8 +58,11 @@ module Movement =
         |> Seq.tryFind (fun (cx, cy) -> cellWalkable map coll cx cy)
         |> Option.defaultValue (cx0, cy0)
 
-    /// Advance the player by one frame, consuming this frame's button state.
-    let step (map: GameMap) (coll: Collision) (buttons: Buttons) (p: PlayerState) : PlayerState =
+    /// Advance the player by one frame, consuming this frame's button state, using
+    /// caller-supplied cell queries. `walkable cx cy` reports whether a cell can be
+    /// stepped on and `collId cx cy` its raw collision id — both may consult
+    /// connected neighbour maps, so the player walks and hops seamlessly across joins.
+    let stepWith (walkable: int -> int -> bool) (collId: int -> int -> byte) (buttons: Buttons) (p: PlayerState) : PlayerState =
         let next =
             match p.Motion with
             | Standing ->
@@ -88,7 +91,7 @@ module Movement =
                     let dx, dy = delta d
                     let tx, ty = p.CellX + dx, p.CellY + dy
 
-                    if cellWalkable map coll tx ty then
+                    if walkable tx ty then
                         { p with
                             SrcX = p.CellX
                             SrcY = p.CellY
@@ -102,7 +105,7 @@ module Movement =
                         // permits a hop in this facing, vault two cells over it (the
                         // landing cell is not re-validated — faithful to GSC `.TryJump`).
                         let onLedge =
-                            Collision.tryLedge (collisionIdAtCell map coll p.CellX p.CellY)
+                            Collision.tryLedge (collId p.CellX p.CellY)
                             |> Option.map (List.contains d)
                             |> Option.defaultValue false
 
@@ -155,3 +158,7 @@ module Movement =
         | Hopping
         | Bumping -> { next with AnimFrame = next.AnimFrame + 1 }
         | _ -> next
+
+    /// Advance the player by one frame against a single map (no connections).
+    let step (map: GameMap) (coll: Collision) (buttons: Buttons) (p: PlayerState) : PlayerState =
+        stepWith (cellWalkable map coll) (collisionIdAtCell map coll) buttons p

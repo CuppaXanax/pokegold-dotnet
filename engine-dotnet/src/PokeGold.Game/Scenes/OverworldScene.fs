@@ -192,6 +192,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     elif state.Player.Bumped then
                         sound.PlaySfx "Sfx_Bump"
 
+                    // Walking off the current map into a connected neighbour swaps the
+                    // active map once the step settles (player rebased to the same world
+                    // position, so the view is seamless).
+                    match OverworldState.crossConnection content state with
+                    | Some ns ->
+                        state <- ns
+                        firedCoords <- Set.empty
+                        Stay
+                    | None ->
+
                     if after = before then
                         Stay
                     else
