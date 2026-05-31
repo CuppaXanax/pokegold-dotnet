@@ -88,7 +88,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             // ----- effects that push a child scene and suspend -----
             | ShowText(label, _faceFirst) ->
                 pending <- Some(vm, effect)
-                Push(TextBoxScene.Of(content, this.ResolveText label) :> Scene)
+                let speed = Options.textSpeedDelay player.Options.TextSpeed
+                Push(TextBoxScene.Of(content, this.ResolveText label, speed) :> Scene)
             | AskYesNo ->
                 pending <- Some(vm, effect)
                 Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene)
@@ -292,7 +293,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
                         | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
                         | Save    -> Push(TextBoxScene.Of(content, "SAVE<DONE>") :> Scene)         // M11.8: replace with real Save scene
-                        | Option  -> Push(TextBoxScene.Of(content, "OPTION<DONE>") :> Scene)       // M11.7: replace with real Options scene
+                        | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop) :> Scene)
                 elif aPressed && not state.Player.Moving then
                     // Talk to / read whatever the player faces. Objects are resolved

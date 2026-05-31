@@ -109,6 +109,7 @@
     <Compile Include="Scenes\SummaryScene.fs" />
     <Compile Include="Scenes\PartyScene.fs" />
     <Compile Include="Scenes\PokedexScene.fs" />
+    <Compile Include="Scenes\OptionsScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Debug command pipe (T1): inspect/poke a running instance. -->
     <Compile Include="Debug\DebugChannel.fs" />

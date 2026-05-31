@@ -13,8 +13,12 @@ type TextBoxScene(font: Font, initial: TextBoxState) =
     let mutable state = initial
 
     /// Open a text box for the given source text (with embedded `<…>` tokens).
-    static member Of(content: Content, text: string) : TextBoxScene =
-        TextBoxScene(content.Font, TextBox.ofString text)
+    /// When `speed` is given (frames per glyph), the box types at that rate;
+    /// otherwise the default `TypewriterDelay` is used.
+    static member Of(content: Content, text: string, ?speed: int) : TextBoxScene =
+        match speed with
+        | Some s -> TextBoxScene(content.Font, TextBox.ofStringWithSpeed s text)
+        | None   -> TextBoxScene(content.Font, TextBox.ofString text)
 
     interface Scene with
         member _.Update(buttons: Buttons) : Transition =

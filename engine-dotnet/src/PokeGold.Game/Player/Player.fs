@@ -17,6 +17,16 @@ type PlayerState =
       Badges: int
       Options: GameOptions }
 
+module Options =
+
+    /// Convert a TextSpeed value (1=slow, 2=mid, 3=fast) to frames per glyph.
+    /// GSC: FAST → 1 frame, MID → 3 frames, SLOW → 5 frames.
+    let textSpeedDelay (textSpeed: int) : int =
+        match textSpeed with
+        | 3 -> 1   // FAST
+        | 1 -> 5   // SLOW
+        | _ -> 3   // MID (default)
+
 module PlayerState =
 
     let defaultOptions = { TextSpeed = 2; BoxBorder = 0; Sound = 0 }

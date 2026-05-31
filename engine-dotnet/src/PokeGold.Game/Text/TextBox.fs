@@ -20,6 +20,10 @@ type TextBoxState =
       Col: int
       /// Frames remaining before the next token is consumed.
       Delay: int
+      /// Frames per glyph (typewriter speed). Seeded from `TypewriterDelay` by
+      /// default; override via `createWithSpeed`/`ofStringWithSpeed` to honour
+      /// the player's TEXT SPEED option.
+      Speed: int
       /// True while waiting for the player to confirm a prompt.
       Waiting: bool
       /// The control action deferred until the prompt is confirmed.
@@ -52,14 +56,24 @@ module TextBox =
           Row = 0
           Col = 0
           Delay = 0
+          Speed = TypewriterDelay
           Waiting = false
           Pending = None
           PrevConfirm = false
           Done = false }
 
+    /// A fresh box for the given token stream with an explicit typewriter speed
+    /// (frames per glyph). Use this to honour the player's TEXT SPEED option.
+    let createWithSpeed (speed: int) (tokens: TextToken list) : TextBoxState =
+        { create tokens with Speed = speed }
+
     /// A fresh box for source text (with embedded `<…>` control tokens).
     let ofString (text: string) : TextBoxState =
         create (TextStream.ofString text)
+
+    /// A fresh box for source text with an explicit typewriter speed (frames per glyph).
+    let ofStringWithSpeed (speed: int) (text: string) : TextBoxState =
+        createWithSpeed speed (TextStream.ofString text)
 
     let private withGlyph (s: TextBoxState) (code: byte) : TextBoxState =
         let lines = Array.map Array.copy s.Lines
@@ -70,7 +84,7 @@ module TextBox =
         { s with
             Lines = lines
             Col = min (s.Col + 1) InnerW
-            Delay = TypewriterDelay }
+            Delay = s.Speed }
 
     /// Scroll the box up one line: the bottom line becomes the top, the bottom
     /// line is cleared, and the cursor returns to the start of the bottom line.
