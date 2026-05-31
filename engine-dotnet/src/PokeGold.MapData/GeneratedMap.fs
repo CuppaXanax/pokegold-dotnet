@@ -9,4 +9,9 @@ type GeneratedMap =
     { Meta: MapMeta
       Events: MapEvents
       Script: ScriptProgram
-      Text: Map<string, string> }
+      Text: Map<string, string>
+      /// The map's `applymovement` actor scripts, by label.
+      Movements: Map<string, MovementCmd[]>
+      /// The map's object-constant names in `object_event` order, so a script's
+      /// symbolic actor operand resolves to an object index by position.
+      ObjectConsts: string[] }

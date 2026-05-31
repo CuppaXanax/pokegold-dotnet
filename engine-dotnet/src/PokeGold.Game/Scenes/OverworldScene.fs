@@ -28,6 +28,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable bag: Map<string, int> = Map.empty
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// A script suspended on an `applymovement`: the VM to resume, the moved object's
+    /// index in `state.Npcs`, and the live movement run. Ticked each frame until done.
+    let mutable runningMove: (ScriptVm * int * MovementRunner.Run) option = None
     /// The most recent yes/no choice, written by the YesNoScene callback.
     let mutable yesNoResult = 0
     let mutable prevA = false
@@ -100,7 +103,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume (Some(if bag.ContainsKey item then 1 else 0)) world vm)
             // ----- effects out of M9.4 scope: no-op, resume -----
             | SetLastTalked _
-            | ApplyMovement _
             | FacePlayer
             | FaceObject _
             | SetVisible _
@@ -113,6 +115,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | PlaySound _
             | ScriptEffect.Cry _
             | WaitSfx -> this.Drive(Script.resume None world vm)
+            // ----- applymovement: animate the actor over frames, then resume -----
+            | ApplyMovement(objSym, label) ->
+                match this.TryStartMovement(vm, objSym, label) with
+                | true -> Stay
+                | false -> this.Drive(Script.resume None world vm)
             // ----- warp: load the destination map, then continue the script -----
             | ScriptEffect.Warp(map, x, y, facing) ->
                 match OverworldState.tryWarpExplicit content map x y facing state.Player.Facing with
@@ -122,6 +129,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | None -> ()
 
                 this.Drive(Script.resume None world vm)
+
+    /// Begin an `applymovement`: resolve the symbolic actor to a live NPC and look up
+    /// its baked movement script. Returns `true` if a run was started (the scene then
+    /// suspends and ticks it each frame); `false` if either couldn't be resolved, so
+    /// the caller resumes the VM immediately (a faithful no-op for unmodelled actors).
+    member private _.TryStartMovement(vm: ScriptVm, objSym: string, label: string) : bool =
+        let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+
+        match OverworldState.objectIndexOf state.MapId objSym, OverworldState.movementScript state.MapId label with
+        | Some i, Some cmds when i >= 0 && i < state.Npcs.Length ->
+            let run = MovementRunner.start walkable cmds state.Npcs.[i]
+            runningMove <- Some(vm, i, run)
+            true
+        | _ -> false
 
     /// Load the Azalea Town overworld scene through the shared asset cache.
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
@@ -156,6 +177,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     interface Scene with
         member this.Update(buttons: Buttons) : Transition =
+            match runningMove with
+            // An applymovement is animating: advance the actor a frame, write it back,
+            // and resume the suspended script once the run reaches step_end.
+            | Some(vm, i, run) ->
+                let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+                let run' = MovementRunner.step walkable run
+
+                let npcs = Array.copy state.Npcs
+
+                if i < npcs.Length then
+                    npcs.[i] <- run'.Npc
+
+                state <- { state with Npcs = npcs }
+
+                if run'.Done then
+                    runningMove <- None
+                    this.Drive(Script.resume None world vm)
+                else
+                    runningMove <- Some(vm, i, run')
+                    Stay
+            | None ->
+
             match pending with
             // A pushed child scene popped — resume the suspended script with its result.
             | Some(vm, effect) ->

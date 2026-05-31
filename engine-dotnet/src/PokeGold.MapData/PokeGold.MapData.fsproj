@@ -16,6 +16,7 @@
     <Compile Include="MapEventTypes.fs" />
     <Compile Include="MapText.fs" />
     <Compile Include="MapMeta.fs" />
+    <Compile Include="MovementScript.fs" />
     <Compile Include="GeneratedMap.fs" />
   </ItemGroup>
 

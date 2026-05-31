@@ -56,6 +56,7 @@
     <Compile Include="Overworld\Script\AsmLoad.fs" />
     <Compile Include="Overworld\Object.fs" />
     <Compile Include="Overworld\ObjectStep.fs" />
+    <Compile Include="Overworld\MovementRunner.fs" />
     <Compile Include="Overworld\OverworldState.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />

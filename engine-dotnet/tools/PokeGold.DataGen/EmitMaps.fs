@@ -83,6 +83,27 @@ module EmitMaps =
             let a = args |> List.map str |> String.concat "; "
             sprintf "Unsupported(%s, [%s])" (str n) a
 
+    /// One movement command rendered as its DU constructor.
+    let private moveCmd (c: MovementCmd) : string =
+        match c with
+        | MoveStep d -> sprintf "MoveStep %d" d
+        | MoveBigStep d -> sprintf "MoveBigStep %d" d
+        | MoveSlowStep d -> sprintf "MoveSlowStep %d" d
+        | MoveTurnStep d -> sprintf "MoveTurnStep %d" d
+        | MoveSlideStep d -> sprintf "MoveSlideStep %d" d
+        | MoveJumpStep d -> sprintf "MoveJumpStep %d" d
+        | MoveTurnHead d -> sprintf "MoveTurnHead %d" d
+        | MoveStepSleep n -> sprintf "MoveStepSleep %d" n
+        | MoveStepEnd -> "MoveStepEnd"
+        | MoveUnsupported n -> sprintf "MoveUnsupported %s" (str n)
+
+    /// A map's movement scripts rendered as a `Map<string, MovementCmd[]>` literal.
+    let private movements (m: Map<string, MovementCmd[]>) : string =
+        m
+        |> Map.toArray
+        |> Array.map (fun (k, cs) -> sprintf "(%s, [| %s |])" (str k) (cs |> Array.map moveCmd |> String.concat "; "))
+        |> String.concat "; "
+
     /// `key, value` pairs of a string→string map, as F# tuple literals.
     let private pairs (m: Map<string, string>) : string =
         m
@@ -155,7 +176,9 @@ module EmitMaps =
             sb.AppendLine(sprintf "        { Meta = %s" (mapMeta g.Meta)) |> ignore
             sb.AppendLine(sprintf "          Events = %s" (mapEvents g.Events)) |> ignore
             sb.AppendLine(sprintf "          Script = %s" (scriptProgram g.Script)) |> ignore
-            sb.AppendLine(sprintf "          Text = Map.ofArray [| %s |] }" (pairs g.Text)) |> ignore
+            sb.AppendLine(sprintf "          Text = Map.ofArray [| %s |]" (pairs g.Text)) |> ignore
+            sb.AppendLine(sprintf "          Movements = Map.ofArray [| %s |]" (movements g.Movements)) |> ignore
+            sb.AppendLine(sprintf "          ObjectConsts = [| %s |] }" (g.ObjectConsts |> Array.map str |> String.concat "; ")) |> ignore
             sb.AppendLine() |> ignore
 
         sb.AppendLine("    /// Every map's static data, keyed by its PascalCase id (its maps/<id>.asm).") |> ignore

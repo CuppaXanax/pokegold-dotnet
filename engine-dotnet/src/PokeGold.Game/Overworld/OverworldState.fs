@@ -290,3 +290,14 @@ module OverworldState =
         match mapIdOfConst destMap |> Option.bind dataFor with
         | Some m when canLoad m.Meta -> Some(loadByIdAt content m.Meta.Name x y dir)
         | _ -> None
+
+    /// The named `applymovement` script for a map, if the map bakes it.
+    let movementScript (mapId: string) (label: string) : MovementCmd[] option =
+        dataFor mapId |> Option.bind (fun m -> Map.tryFind label m.Movements)
+
+    /// The object index a script's symbolic actor operand (`AZALEATOWN_RIVAL`, …)
+    /// refers to: its position in the map's `object_const_def` order, which is the
+    /// same as its index in `Events.Objects` / `Npcs`. `None` if the name is unknown.
+    let objectIndexOf (mapId: string) (objConst: string) : int option =
+        dataFor mapId
+        |> Option.bind (fun m -> Array.tryFindIndex ((=) objConst) m.ObjectConsts)

@@ -33,8 +33,17 @@ module MapParsers =
                       { Commands = [||]; Labels = Map.empty },
                       Map.empty
 
+              let movements, objectConsts =
+                  if File.Exists path then
+                      let asm = File.ReadAllText path
+                      MovementParser.parseMovements asm, MovementParser.parseObjectConsts asm
+                  else
+                      Map.empty, [||]
+
               yield
                   { Meta = meta
                     Events = events
                     Script = script
-                    Text = text } ]
+                    Text = text
+                    Movements = movements
+                    ObjectConsts = objectConsts } ]

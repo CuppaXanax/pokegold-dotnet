@@ -21,6 +21,7 @@
     <Compile Include="OverworldSfxTests.fs" />
     <Compile Include="ConnectionsTests.fs" />
     <Compile Include="ObjectTests.fs" />
+    <Compile Include="MovementScriptTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
