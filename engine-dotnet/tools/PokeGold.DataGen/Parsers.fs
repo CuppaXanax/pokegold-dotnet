@@ -417,3 +417,66 @@ module Parsers =
                 }
         
         List.ofSeq result
+
+
+    // --- Marts -----------------------------------------------------------------
+
+    /// One mart: its label name (e.g. "MartCherrygrove") and ordered item constants.
+    type Mart =
+        { Label: string
+          Items: string list }
+
+    let private parseMarts () : Mart list * string list =
+        let text = Repo.readText "data/items/marts.asm"
+        let lines = text.Split('\n')
+
+        let orderRx = Regex(@"^\s*dw\s+(Mart\w+)")
+        let labelRx = Regex(@"^(Mart\w+):")
+        // Only match uppercase item constants (db N and db -1 won't match).
+        let dbItemRx = Regex(@"^\s*db\s+([A-Z][A-Z0-9_]*)")
+
+        let order = ResizeArray<string>()
+        let martItems = ResizeArray<string * ResizeArray<string>>()
+        let mutable currentItems: ResizeArray<string> = null
+        let mutable inPointerTable = false
+        let mutable pastHeader = false
+
+        for line in lines do
+            if line.TrimStart().StartsWith("Marts:") then
+                inPointerTable <- true
+            elif inPointerTable && line.Contains("assert_table_length") then
+                inPointerTable <- false
+                pastHeader <- true
+            elif inPointerTable then
+                let m = orderRx.Match(line)
+                if m.Success then order.Add(m.Groups.[1].Value)
+            elif pastHeader then
+                let lm = labelRx.Match(line)
+                if lm.Success then
+                    currentItems <- ResizeArray<string>()
+                    martItems.Add(lm.Groups.[1].Value, currentItems)
+                elif not (isNull currentItems) then
+                    let dm = dbItemRx.Match(line)
+                    if dm.Success then
+                        currentItems.Add(dm.Groups.[1].Value)
+
+        let itemMap =
+            martItems
+            |> Seq.map (fun (l, items) -> l, List.ofSeq items)
+            |> Map.ofSeq
+
+        let martsOrdered =
+            [ for label in order do
+                  match itemMap.TryFind label with
+                  | Some items -> yield { Label = label; Items = items }
+                  | None -> () ]
+
+        martsOrdered, List.ofSeq order
+
+    let private martsOnce = lazy parseMarts ()
+
+    /// All mart inventories in pointer-table order.
+    let marts : Mart list = fst martsOnce.Value
+
+    /// Mart label names in the order they appear in the Marts: pointer table.
+    let martOrder : string list = snd martsOnce.Value

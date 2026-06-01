@@ -121,7 +121,8 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
               DexSeen = [| 1; 4; 7 |]
               DexOwn  = [| 4 |]
               Badges  = 3
-              Options = { TextSpeed = 3; BoxBorder = 1; Sound = 0 } } }
+              Options = { TextSpeed = 3; BoxBorder = 1; Sound = 0 }
+              Pc = Unchecked.defaultof<_> } }
 
     let json = SaveFile.serialize save
 

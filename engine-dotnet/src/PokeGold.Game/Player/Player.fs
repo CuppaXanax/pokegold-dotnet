@@ -15,7 +15,8 @@ type PlayerState =
       DexSeen: Set<int>
       DexOwn: Set<int>
       Badges: int
-      Options: GameOptions }
+      Options: GameOptions
+      Pc: PcStorage }
 
 module Options =
 
@@ -31,7 +32,7 @@ module PlayerState =
 
     let defaultOptions = { TextSpeed = 2; BoxBorder = 0; Sound = 0 }
 
-    /// A brand-new game player state (empty party, no items, no dex).
+    /// A brand-new game player state (empty party, no items, no dex, empty PC).
     let initial =
         { Name = "PLAYER"
           Money = 3000
@@ -40,4 +41,5 @@ module PlayerState =
           DexSeen = Set.empty
           DexOwn = Set.empty
           Badges = 0
-          Options = defaultOptions }
+          Options = defaultOptions
+          Pc = Storage.empty }

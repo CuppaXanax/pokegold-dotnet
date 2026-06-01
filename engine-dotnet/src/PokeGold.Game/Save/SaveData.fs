@@ -46,6 +46,19 @@ type PartyMonSave =
       HeldItem: string; OtName: string; OtId: int; Friendship: int }
 
 [<CLIMutable>]
+type MailSave = { Author: string; Body: string; Species: int }
+
+[<CLIMutable>]
+type BoxSave = { Name: string; Mons: PartyMonSave[] }
+
+[<CLIMutable>]
+type PcStorageSave =
+    { Boxes: BoxSave[]
+      CurrentBox: int
+      PcItems: ItemSave[]
+      Mailbox: MailSave[] }
+
+[<CLIMutable>]
 type PocketSave = { Items: ItemSave[]; Balls: ItemSave[]; KeyItems: ItemSave[]; TmHm: ItemSave[] }
 
 [<CLIMutable>]
@@ -57,7 +70,8 @@ type PlayerSave =
       Party: PartyMonSave[]
       PocketedBag: PocketSave
       DexSeen: int[]; DexOwn: int[]
-      Badges: int; Options: GameOptionsSave }
+      Badges: int; Options: GameOptionsSave
+      Pc: PcStorageSave }
 
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
@@ -75,7 +89,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 3
+    let CurrentVersion = 4
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -177,15 +191,53 @@ module SaveData =
         if box s = null then PlayerState.defaultOptions
         else { TextSpeed = s.TextSpeed; BoxBorder = s.BoxBorder; Sound = s.Sound }
 
+    // PcStorage conversions
+    let private mailToSave (m: Mail) : MailSave =
+        { Author = m.Author; Body = m.Body; Species = m.Species }
+
+    let private mailOfSave (s: MailSave) : Mail =
+        { Author = nullToEmptyStr s.Author; Body = nullToEmptyStr s.Body; Species = s.Species }
+
+    let private boxToSave (b: Box) : BoxSave =
+        { Name = b.Name; Mons = b.Mons |> List.map partyMonToSave |> List.toArray }
+
+    let private boxOfSave (s: BoxSave) : Box =
+        { Name = nullToEmptyStr s.Name
+          Mons = nullToEmpty s.Mons |> Array.map partyMonOfSave |> Array.toList }
+
+    let private pcToSave (pc: PcStorage) : PcStorageSave =
+        { Boxes = pc.Boxes |> Array.map boxToSave
+          CurrentBox = pc.CurrentBox
+          PcItems = listToItemSaves pc.PcItems
+          Mailbox = pc.Mailbox |> List.map mailToSave |> List.toArray }
+
+    let private pcOfSave (s: PcStorageSave) : PcStorage =
+        if box s = null then Storage.empty
+        else
+            let savedBoxes = nullToEmpty s.Boxes
+            { Boxes =
+                if savedBoxes.Length = Storage.numBoxes then
+                    savedBoxes |> Array.map boxOfSave
+                else
+                    // Migrate: fill missing boxes with named empty boxes.
+                    Array.init Storage.numBoxes (fun i ->
+                        if i < savedBoxes.Length then boxOfSave savedBoxes.[i]
+                        else { Name = sprintf "BOX %d" (i + 1); Mons = [] })
+              CurrentBox = s.CurrentBox
+              PcItems = itemSavesToList s.PcItems
+              Mailbox = nullToEmpty s.Mailbox |> Array.map mailOfSave |> Array.toList }
+
     let private playerToSave (p: PlayerState) : PlayerSave =
         { Name = p.Name; Money = p.Money
           Party = p.Party |> List.map partyMonToSave |> List.toArray
           PocketedBag = bagToSave p.Bag
           DexSeen = p.DexSeen |> Set.toArray; DexOwn = p.DexOwn |> Set.toArray
-          Badges = p.Badges; Options = optionsToSave p.Options }
+          Badges = p.Badges; Options = optionsToSave p.Options
+          Pc = pcToSave p.Pc }
 
     /// The PlayerState a save restores. For v1/v2 saves (no Player block),
     /// migrates the flat Bag to a pocketed Bag; party/dex/money start empty/zero.
+    /// For v3 saves (no Pc block), the PC is initialised to Storage.empty.
     let playerOf (save: SaveData) : PlayerState =
         match box save.Player with
         | null ->
@@ -201,7 +253,8 @@ module SaveData =
               DexSeen = nullToEmpty ps.DexSeen |> Set.ofArray
               DexOwn = nullToEmpty ps.DexOwn |> Set.ofArray
               Badges = ps.Badges
-              Options = optionsOfSave ps.Options }
+              Options = optionsOfSave ps.Options
+              Pc = pcOfSave ps.Pc }
 
     /// Snapshot a live overworld plus its script world, bag, and player state into a save.
     let captureWith (s: OverworldState) (world: World) (player: PlayerState) : SaveData =

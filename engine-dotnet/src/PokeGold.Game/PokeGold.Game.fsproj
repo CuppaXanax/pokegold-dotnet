@@ -41,6 +41,7 @@
     <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\Generated\Music.Generated.fs" />
     <Compile Include="Data\Generated\Items.Generated.fs" />
+    <Compile Include="Data\Generated\Marts.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
@@ -88,6 +89,8 @@
     <!-- Player: persistent party, bag, dex state. -->
     <Compile Include="Player\PartyMon.fs" />
     <Compile Include="Player\Bag.fs" />
+    <Compile Include="Player\Money.fs" />
+    <Compile Include="Player\Storage.fs" />
     <Compile Include="Player\Player.fs" />
     <Compile Include="Player\DebugSeed.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
@@ -161,6 +164,7 @@
     <GameDataInput Include="$(RepoRoot)data\items\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\names.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\descriptions.asm" />
+    <GameDataInput Include="$(RepoRoot)data\items\marts.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
@@ -174,6 +178,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>
 

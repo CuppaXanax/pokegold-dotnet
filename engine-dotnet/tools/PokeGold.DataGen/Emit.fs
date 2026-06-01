@@ -189,6 +189,37 @@ module Emit =
         sb.AppendLine("        all |> Array.map (fun d -> d.Id, d) |> Map.ofArray") |> ignore
         sb.ToString()
 
+    let private martsFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated mart inventories, keyed by mart label name.") |> ignore
+        sb.AppendLine("/// Source: data/items/marts.asm.") |> ignore
+        sb.AppendLine("module MartsData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    /// Item lists keyed by mart label (e.g. \"MartCherrygrove\").") |> ignore
+        sb.AppendLine("    /// Values are ordered item constant strings matching ItemsData.byId keys.") |> ignore
+        sb.AppendLine("    let byLabel : Map<string, string list> =") |> ignore
+        sb.AppendLine("        Map.ofArray [|") |> ignore
+
+        for mart in Parsers.marts do
+            let items = mart.Items |> List.map (fun i -> sprintf "\"%s\"" i) |> String.concat "; "
+            sb.AppendLine(sprintf "            (\"%s\", [ %s ])" mart.Label items) |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    /// Mart labels in the order they appear in the Marts: pointer table,") |> ignore
+        sb.AppendLine("    /// corresponding to MART_* constants in constants/mart_constants.asm.") |> ignore
+        sb.AppendLine("    let order : string list =") |> ignore
+        sb.AppendLine("        [") |> ignore
+
+        for label in Parsers.martOrder do
+            sb.AppendLine(sprintf "            \"%s\"" label) |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private dexFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -226,6 +257,7 @@ module Emit =
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
           "Music.Generated.fs", musicFile ()
           "Items.Generated.fs", itemsFile ()
+          "Marts.Generated.fs", martsFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)

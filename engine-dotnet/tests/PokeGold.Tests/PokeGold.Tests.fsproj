@@ -34,6 +34,9 @@
     <Compile Include="PokedexTests.fs" />
     <Compile Include="OptionsTests.fs" />
     <Compile Include="SaveMenuTests.fs" />
+    <Compile Include="MoneyTests.fs" />
+    <Compile Include="MartDataTests.fs" />
+    <Compile Include="StorageSaveTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 
