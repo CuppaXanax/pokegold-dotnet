@@ -86,3 +86,55 @@ let ``map music ids resolve to shipped song files`` () =
         | None -> failwith "AzaleaTown missing"
 
     Assert.True(MusicData.byId.ContainsKey azalea.Meta.Music)
+
+// ---- M12.5 — shared blockdata so interiors are enterable --------------------
+
+[<Fact>]
+let ``parseBlocks resolves stacked shared labels to one file`` () =
+    // Many interiors stack their `_Blocks` labels before a single INCBIN, so they
+    // all share one .blk (the Mart/Pokecenter templates). A map with its own
+    // dedicated file resolves to itself.
+    let asm =
+        "BlackthornMart_Blocks:\n\
+         AzaleaMart_Blocks:\n\
+         CherrygroveMart_Blocks:\n\
+         \tINCBIN \"maps/Mart.blk\"\n\
+         \n\
+         AzaleaTown_Blocks:\n\
+         \tINCBIN \"maps/AzaleaTown.blk\"\n"
+
+    let blocks = MapMetaParser.parseBlocks asm
+    Assert.Equal("Mart", blocks.["AzaleaMart"])
+    Assert.Equal("Mart", blocks.["BlackthornMart"])
+    Assert.Equal("Mart", blocks.["CherrygroveMart"])
+    Assert.Equal("AzaleaTown", blocks.["AzaleaTown"])
+
+[<Fact>]
+let ``Azalea interiors bake their shared blockdata file`` () =
+    let blocksOf name =
+        match MapsData.byName name with
+        | Some m -> m.Meta.Blocks
+        | None -> failwithf "%s missing from generated map data" name
+
+    // Shared templates: every Mart -> Mart.blk, every Pokémon Center -> Pokecenter1F.blk.
+    Assert.Equal("Mart", blocksOf "AzaleaMart")
+    Assert.Equal("Pokecenter1F", blocksOf "AzaleaPokecenter1F")
+    // A map with a dedicated layout still points at its own file.
+    Assert.Equal("AzaleaTown", blocksOf "AzaleaTown")
+
+[<Fact>]
+let ``warping into the Azalea Pokemon Center and Mart succeeds`` () =
+    // The town's warps target the interiors by MAP_* const. Before M12.5 these
+    // interiors had no maps/<Name>.blk (their layout is the shared Mart/Pokecenter1F
+    // file), so canLoad failed and the warp silently no-opped. Now they load.
+    let content = PokeGold.Game.Data.Content()
+
+    // AzaleaTown warp #1 -> AZALEA_POKECENTER_1F warp 1; warp #3 -> AZALEA_MART warp 2.
+    match PokeGold.Game.Overworld.OverworldState.tryWarp content "AZALEA_POKECENTER_1F" 1 with
+    | Some s -> Assert.Equal("AzaleaPokecenter1F", s.MapId)
+    | None -> Assert.Fail "expected to warp into AzaleaPokecenter1F"
+
+    match PokeGold.Game.Overworld.OverworldState.tryWarp content "AZALEA_MART" 2 with
+    | Some s -> Assert.Equal("AzaleaMart", s.MapId)
+    | None -> Assert.Fail "expected to warp into AzaleaMart"
+

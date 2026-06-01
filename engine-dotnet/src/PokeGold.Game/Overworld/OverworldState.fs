@@ -123,7 +123,7 @@ module OverworldState =
     /// in the tree yet simply isn't loadable (warps onto it are a no-op).
     let private canLoad (meta: MapMeta) : bool =
         let stem = tilesetStem meta
-        File.Exists(Assets.path $"maps/{meta.Name}.blk")
+        File.Exists(Assets.path $"maps/{meta.Blocks}.blk")
         && File.Exists(Assets.path $"gfx/tilesets/{stem}.png")
         && File.Exists(Assets.path $"data/tilesets/{stem}_collision.asm")
 
@@ -133,7 +133,7 @@ module OverworldState =
         match dataFor mapId with
         | Some m ->
             let stem = tilesetStem m.Meta
-            content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{mapId}.blk"),
+            content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{m.Meta.Blocks}.blk"),
             content.Tileset stem,
             content.Collision stem,
             content.Sprite "chris"
@@ -146,7 +146,7 @@ module OverworldState =
         | Some m when canLoad m.Meta ->
             let stem = tilesetStem m.Meta
             Some(
-                content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{name}.blk"),
+                content.Map(m.Meta.WidthBlocks, m.Meta.HeightBlocks, $"maps/{m.Meta.Blocks}.blk"),
                 content.Tileset stem,
                 content.Collision stem
             )

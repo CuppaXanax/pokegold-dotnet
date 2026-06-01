@@ -16,6 +16,7 @@ module MapParsers =
             (Repo.readText "constants/map_constants.asm")
             (Repo.readText "data/maps/maps.asm")
             (Repo.readText "data/maps/attributes.asm")
+            (Repo.readText "data/maps/blocks.asm")
 
     /// Each map's full static record. A map whose `maps/<Name>.asm` is missing
     /// (should not happen for the real game) gets empty event/script/text tables

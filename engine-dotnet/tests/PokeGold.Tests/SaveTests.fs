@@ -129,9 +129,10 @@ let ``tryWarp loads the destination map and lands on the paired warp`` () =
 [<Fact>]
 let ``tryWarp is a no-op for a destination map whose assets are not in the tree`` () =
     let content = Content()
-    // RUINS_OF_ALPH_HO_OH_CHAMBER is a real map (baked metadata/events) but has no
-    // `.blk` block layout in the tree yet, so it isn't loadable — the warp no-ops.
-    Assert.Equal(None, OverworldState.tryWarp content "RUINS_OF_ALPH_HO_OH_CHAMBER" 1)
+    // DARK_CAVE_VIOLET_ENTRANCE is a real map (baked metadata/events) but its
+    // `dark_cave` tileset gfx/collision aren't in the tree yet, so it isn't
+    // loadable — the warp no-ops.
+    Assert.Equal(None, OverworldState.tryWarp content "DARK_CAVE_VIOLET_ENTRANCE" 1)
 
 // ---- M10.4 — explicit script warps (warp / warpfacing) ---------------------
 
@@ -158,4 +159,4 @@ let ``tryWarpExplicit keeps the fallback facing when the command gives none`` ()
 let ``tryWarpExplicit is a no-op for an unknown or unloadable destination`` () =
     let content = Content()
     Assert.Equal(None, OverworldState.tryWarpExplicit content "MAP_THAT_DOES_NOT_EXIST" 1 1 None Down)
-    Assert.Equal(None, OverworldState.tryWarpExplicit content "RUINS_OF_ALPH_HO_OH_CHAMBER" 1 1 None Down)
+    Assert.Equal(None, OverworldState.tryWarpExplicit content "DARK_CAVE_VIOLET_ENTRANCE" 1 1 None Down)

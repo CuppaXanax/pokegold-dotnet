@@ -31,6 +31,12 @@ type MapMeta =
       Music: string
       Palette: string
       BorderBlock: int
+      /// The blockdata file stem under `maps/` (no extension) this map's layout
+      /// lives in. Many interiors **share** one file — every Poké Mart points at
+      /// `Mart`, every Pokémon Center at `Pokecenter1F` (`data/maps/blocks.asm`
+      /// stacks their `_Blocks` labels before a single `INCBIN`). Defaults to the
+      /// map's own `Name` when it has a dedicated file.
+      Blocks: string
       Connections: Connection[] }
 
 /// Build-time parsers for the three map metadata tables. All pure (text in,
@@ -138,13 +144,49 @@ module MapMetaParser =
 
         [ for (name, c, border, conns) in results -> name, c, border, List.ofSeq conns ]
 
+    /// `data/maps/blocks.asm` → `PascalName -> blk stem under maps/`. Labels are
+    /// `<MapName>_Blocks:`; one or more stacked labels precede a single
+    /// `INCBIN "maps/<file>.blk"`, so all of them resolve to that one file (this is
+    /// how every Mart shares `Mart.blk`, every Pokémon Center `Pokecenter1F.blk`).
+    let parseBlocks (text: string) : Map<string, string> =
+        let result = System.Collections.Generic.Dictionary<string, string>()
+        // Map names awaiting the next INCBIN (the stacked shared labels).
+        let pending = ResizeArray<string>()
+
+        for raw in text.Replace("\r\n", "\n").Split('\n') do
+            let body = stripComment raw
+
+            if body <> "" then
+                if body.EndsWith "_Blocks:" then
+                    pending.Add(body.Substring(0, body.Length - "_Blocks:".Length))
+                elif body.StartsWith "INCBIN" then
+                    // Pull the quoted path, strip the maps/ prefix and .blk suffix.
+                    let i = body.IndexOf '"'
+                    let j = body.LastIndexOf '"'
+
+                    if i >= 0 && j > i then
+                        let path = body.Substring(i + 1, j - i - 1)
+
+                        let stem =
+                            let p = if path.StartsWith "maps/" then path.Substring 5 else path
+                            if p.EndsWith ".blk" then p.Substring(0, p.Length - 4) else p
+
+                        for name in pending do
+                            if not (result.ContainsKey name) then
+                                result.[name] <- stem
+
+                    pending.Clear()
+
+        result |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
+
     /// Join the three tables into one `MapMeta` per map (keyed by the attributes
     /// table, which lists every real map). A map missing from `maps.asm` or
     /// `map_constants.asm` falls back to empty/zero fields rather than failing, so
     /// generation is robust to partial tables.
-    let join (constants: string) (maps: string) (attributes: string) : MapMeta list =
+    let join (constants: string) (maps: string) (attributes: string) (blocks: string) : MapMeta list =
         let consts = parseConstants constants
         let mapTable = parseMaps maps
+        let blockFiles = parseBlocks blocks
 
         [ for (name, c, border, conns) in parseAttributes attributes do
               let group, wb, hb =
@@ -169,4 +211,5 @@ module MapMetaParser =
                     Music = music
                     Palette = palette
                     BorderBlock = border
+                    Blocks = (blockFiles.TryFind name |> Option.defaultValue name)
                     Connections = Array.ofList conns } ]
