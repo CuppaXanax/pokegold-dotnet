@@ -75,8 +75,11 @@ type ScriptVm =
     { Program: ScriptProgram
       /// Index of the *next* command to run.
       Pc: int
-      /// Return addresses pushed by `scall` (command indices to resume at).
-      Stack: int list
+      /// Return addresses pushed by `scall`/`callstd` — each carries the program
+      /// to return into (the caller's own program, or a std-script program) and
+      /// the command index to resume at, so a `callstd` into the shared
+      /// std-script program returns to the right place.
+      Stack: (ScriptProgram * int) list
       /// `wScriptVar` — the scratch register every check/compare routes through.
       ScriptVar: int }
 
@@ -106,8 +109,10 @@ type ScriptStep = { World: World; Outcome: ScriptOutcome }
 module Script =
 
     /// Resolve a jump/call target label to a command index. Targets that don't
-    /// resolve within this program are cross-file references (`farscall`/`jumpstd`
-    /// into another map) we don't model yet — the branch is skipped (fall through).
+    /// resolve within this program are cross-file references (`farscall` into
+    /// another map) we don't model yet — the branch is skipped (fall through).
+    /// `jumpstd`/`callstd` are handled separately against the baked std-script
+    /// program (see [`StdScriptsData`]).
     let private targetOf (prog: ScriptProgram) (label: string) : int option = prog.Labels.TryFind label
 
     /// Suspend the VM on an effect, with the pc already advanced past the command
@@ -121,7 +126,7 @@ module Script =
     /// end the script, rather than falling through to the next command.
     let private endLike (vm: ScriptVm) : ScriptVm =
         match vm.Stack with
-        | ret :: rest -> { vm with Pc = ret; Stack = rest }
+        | (prog, ret) :: rest -> { vm with Program = prog; Pc = ret; Stack = rest }
         | [] -> { vm with Pc = vm.Program.Commands.Length }
 
     /// Run pure commands from `vm.Pc` until the script suspends on an effect or
@@ -144,6 +149,24 @@ module Script =
             match cmd with
             // ---- Control flow ----------------------------------------------
             | Sjump target -> run world (jump target)
+            // `jumpstd`/`callstd` resolve into the shared std-script program baked
+            // at build time. `jumpstd` is a tail-jump (no return pushed — the std
+            // script's `end` returns to the caller's frame, exactly like the GSC
+            // driver); `callstd` pushes a return into THIS program. An unresolved
+            // target (std program not baked) just falls through.
+            | Jumpstd target ->
+                match StdScriptsData.program.Labels.TryFind target with
+                | Some i -> run world { vm with Program = StdScriptsData.program; Pc = i }
+                | None -> run world next
+            | Callstd target ->
+                match StdScriptsData.program.Labels.TryFind target with
+                | Some i ->
+                    run world
+                        { vm with
+                            Program = StdScriptsData.program
+                            Pc = i
+                            Stack = (vm.Program, vm.Pc + 1) :: vm.Stack }
+                | None -> run world next
             | Iftrue target -> branch (vm.ScriptVar <> 0) target
             | Iffalse target -> branch (vm.ScriptVar = 0) target
             | Ifequal(v, target) -> branch (vm.ScriptVar = v) target
@@ -155,12 +178,12 @@ module Script =
                 let called =
                     { vm with
                         Pc = (match targetOf vm.Program target with Some i -> i | None -> vm.Pc + 1)
-                        Stack = (vm.Pc + 1) :: vm.Stack }
+                        Stack = (vm.Program, vm.Pc + 1) :: vm.Stack }
                 run world called
             | End ->
                 // Return from the innermost scall, or stop the script if unnested.
                 match vm.Stack with
-                | ret :: rest -> run world { vm with Pc = ret; Stack = rest }
+                | (prog, ret) :: rest -> run world { vm with Program = prog; Pc = ret; Stack = rest }
                 | [] -> { World = world; Outcome = Completed }
             | EndAll -> { World = world; Outcome = Completed }
 

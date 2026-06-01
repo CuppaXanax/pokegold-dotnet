@@ -47,3 +47,14 @@ module MapParsers =
                     Text = text
                     Movements = movements
                     ObjectConsts = objectConsts } ]
+
+    /// The shared *standard* scripts (`engine/events/std_scripts.asm`) — the
+    /// `jumpstd`/`callstd` targets (PokecenterNurseScript, bookshelves, signs, …) —
+    /// parsed into one program addressed by label.
+    let stdScripts: ScriptProgram =
+        ScriptParser.parseText (Repo.readText "engine/events/std_scripts.asm")
+
+    /// The standard scripts' text (`data/text/std_text.asm`) resolved to M5 token
+    /// strings, so std-script `writetext` labels render in-game.
+    let stdText: Map<string, string> =
+        MapText.parseText (Repo.readText "data/text/std_text.asm")

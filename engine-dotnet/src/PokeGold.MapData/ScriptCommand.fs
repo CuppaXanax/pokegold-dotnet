@@ -23,6 +23,14 @@ type ScriptCommand =
     | Scall of target: string
     /// `sjump $03` — unconditional jump.
     | Sjump of target: string
+    /// `jumpstd id` — tail-jump into a shared *standard* script (defined in
+    /// `engine/events/std_scripts.asm`, e.g. `PokecenterNurseScript`). Resolved by
+    /// the VM against the baked `StdScriptsData.program`; no return is pushed (the
+    /// std script's `end` returns to the caller's frame, or stops the script).
+    | Jumpstd of target: string
+    /// `callstd id` — call a shared standard script, pushing a return address so the
+    /// caller resumes after this command when the std script hits `end`.
+    | Callstd of target: string
     /// `iffalse $08` — jump if the script-var comparison result is false/zero.
     | Iffalse of target: string
     /// `iftrue $09` — jump if true/nonzero.
@@ -181,6 +189,11 @@ type ScriptProgram =
       Labels: Map<string, int> }
 
 module ScriptProgram =
+
+    /// The empty program: no commands, no labels. Used as a safe default for a
+    /// std-script table that hasn't been baked (the VM falls through on any
+    /// unresolved `jumpstd`/`callstd`).
+    let empty: ScriptProgram = { Commands = [||]; Labels = Map.empty }
 
     /// The command sequence starting at `label`, read until (and including) the
     /// first terminator (`End`/`EndAll`) or the end of the stream. Useful for

@@ -39,6 +39,7 @@
     <Compile Include="Data\Generated\Moves.Generated.fs" />
     <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
+    <Compile Include="Data\Generated\StdScripts.Generated.fs" />
     <Compile Include="Data\Generated\Music.Generated.fs" />
     <Compile Include="Data\Generated\Items.Generated.fs" />
     <Compile Include="Data\Generated\Marts.Generated.fs" />
@@ -180,11 +181,14 @@
     <GameDataInput Include="$(RepoRoot)maps\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\music_constants.asm" />
     <GameDataInput Include="$(RepoRoot)audio\music_pointers.asm" />
+    <GameDataInput Include="$(RepoRoot)engine\events\std_scripts.asm" />
+    <GameDataInput Include="$(RepoRoot)data\text\std_text.asm" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\StdScripts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />

@@ -73,6 +73,8 @@ module ScriptParser =
         // control flow
         | "scall" -> Some(Scall(lbl 0))
         | "sjump" -> Some(Sjump(lbl 0))
+        | "jumpstd" -> Some(Jumpstd(arg 0))
+        | "callstd" -> Some(Callstd(arg 0))
         | "iffalse" -> Some(Iffalse(lbl 0))
         | "iftrue" -> Some(Iftrue(lbl 0))
         | "ifequal" -> Some(Ifequal(i 0, lbl 1))

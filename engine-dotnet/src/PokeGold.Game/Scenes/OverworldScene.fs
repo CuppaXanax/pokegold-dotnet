@@ -62,11 +62,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Some path -> sound.PlayMusic path
         | None -> ()
 
-    /// Resolve a text label to its M5 token string; unknown labels show the label.
+    /// Resolve a text label to its M5 token string. Map-local text wins; std-script
+    /// text (nurse prompts, bookshelves, signs) is the fallback; an unknown label
+    /// shows the label itself.
     member private _.ResolveText(label: string) : string =
         match Map.tryFind label state.Text with
         | Some s -> s
-        | None -> label + "<DONE>"
+        | None ->
+            match Map.tryFind label StdScriptsData.text with
+            | Some s -> s
+            | None -> label + "<DONE>"
 
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =

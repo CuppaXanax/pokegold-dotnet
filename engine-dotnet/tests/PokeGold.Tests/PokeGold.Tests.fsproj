@@ -21,6 +21,7 @@
     <Compile Include="AudioTests.fs" />
     <Compile Include="ScriptTests.fs" />
     <Compile Include="HealTests.fs" />
+    <Compile Include="StdScriptsTests.fs" />
     <Compile Include="MapDataTests.fs" />
     <Compile Include="OverworldSfxTests.fs" />
     <Compile Include="ConnectionsTests.fs" />

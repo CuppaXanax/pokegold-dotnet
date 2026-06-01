@@ -268,6 +268,7 @@ module Emit =
           "Moves.Generated.fs", movesFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
+          "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
           "Music.Generated.fs", musicFile ()
           "Items.Generated.fs", itemsFile ()
           "Marts.Generated.fs", martsFile ()
