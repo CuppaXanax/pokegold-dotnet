@@ -55,6 +55,9 @@ type ScriptEffect =
     | WaitSfx
     /// `warp` / `warpfacing` — move the player to another map cell.
     | Warp of map: string * x: int * y: int * facing: string option
+    /// `special HealParty` — restore all party Pokémon to full HP, cleared
+    /// status, and full PP. Enacted inline by the integration layer.
+    | HealParty
 
 /// The suspended state of a running script: where execution is paused and the
 /// call/return stack and scratch var that survive across a `resume`. Opaque to
@@ -213,6 +216,12 @@ module Script =
             | Waitsfx -> suspend next world WaitSfx
             | ScriptCommand.Warp(map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, None))
             | Warpfacing(facing, map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, Some facing))
+
+            // ---- Special functions -----------------------------------------
+            // HealParty is enacted by the integration layer; all other specials
+            // (HealMachineAnim, RestartMapMusic, etc.) are cosmetic and skipped.
+            | Special "HealParty" -> suspend next world HealParty
+            | Special _ -> run world next
 
             // ---- Deferred opcodes ------------------------------------------
             // Outside the M9 slice: skip so the rest of the script still runs.

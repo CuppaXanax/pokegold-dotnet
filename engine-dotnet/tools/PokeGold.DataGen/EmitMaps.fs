@@ -79,6 +79,7 @@ module EmitMaps =
         | Refreshmap -> "Refreshmap"
         | End -> "End"
         | EndAll -> "EndAll"
+        | Special n -> sprintf "Special %s" (str n)
         | Unsupported (n, args) ->
             let a = args |> List.map str |> String.concat "; "
             sprintf "Unsupported(%s, [%s])" (str n) a

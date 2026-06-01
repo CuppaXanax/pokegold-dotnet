@@ -154,6 +154,12 @@ type ScriptCommand =
     /// `endall $92` — stop all script execution.
     | EndAll
 
+    // ---- Special functions -----------------------------------------------
+    /// `special name` — invoke a named special function. `HealParty` is
+    /// enacted by the runtime; cosmetic specials (HealMachineAnim, etc.) are
+    /// no-ops that keep the script running.
+    | Special of name: string
+
     // ---- Fallback --------------------------------------------------------
     /// Any opcode outside the M9 slice: the source mnemonic + its raw args,
     /// kept verbatim so the map still loads and coverage can be measured.

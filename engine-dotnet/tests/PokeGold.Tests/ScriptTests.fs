@@ -110,7 +110,7 @@ let ``unmodelled opcodes become Unsupported but keep parsing`` () =
              \tend\n"
 
     Assert.Equal<ScriptCommand list>(
-        [ Unsupported("special", [ "Special_FadeOutPalettes" ])
+        [ Special "Special_FadeOutPalettes"
           Unsupported("pause", [ "30" ])
           End ],
         ScriptProgram.blockAt "S" prog

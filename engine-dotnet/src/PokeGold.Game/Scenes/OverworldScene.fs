@@ -110,6 +110,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume (Some 1) world vm)
             | CheckItem item ->
                 this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
+            | HealParty ->
+                player <- { player with Party = Heal.healParty player.Party }
+                // Play the heal jingle. MUSIC_HEAL (audio/music/healpokemon.asm) is
+                // the real GSC heal track — confirmed present in the baked music table.
+                match Map.tryFind "MUSIC_HEAL" MusicData.byId with
+                | Some path -> sound.PlayMusic path
+                | None -> ()
+                this.Drive(Script.resume None world vm)
             // ----- effects out of M9.4 scope: no-op, resume -----
             | SetLastTalked _
             | FacePlayer
