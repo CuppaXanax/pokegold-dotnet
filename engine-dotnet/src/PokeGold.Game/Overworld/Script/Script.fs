@@ -1,5 +1,7 @@
 namespace PokeGold.Game.Overworld.Script
 
+open PokeGold.Game.Data
+
 /// Something the script needs the outside world to do before it can continue. The
 /// VM ([`Script`](#)) runs every *pure* command itself (control flow, flags, vars,
 /// scene ids) but **suspends** on anything that touches the player, the screen, the
@@ -58,6 +60,9 @@ type ScriptEffect =
     /// `special HealParty` — restore all party Pokémon to full HP, cleared
     /// status, and full PP. Enacted inline by the integration layer.
     | HealParty
+    /// `pokemart` — open the Poké Mart with the given mart's inventory.
+    /// Resume with None after the player closes the mart.
+    | OpenMart of martType: string * items: string list
 
 /// The suspended state of a running script: where execution is paused and the
 /// call/return stack and scratch var that survive across a `resume`. Opaque to
@@ -222,6 +227,12 @@ module Script =
             // (HealMachineAnim, RestartMapMusic, etc.) are cosmetic and skipped.
             | Special "HealParty" -> suspend next world HealParty
             | Special _ -> run world next
+
+            // ---- Mart -----------------------------------------------------
+            // Resolve the MART_* constant to its item list and suspend on OpenMart.
+            | Pokemart(martType, mart) ->
+                let items = MartsData.byConstant |> Map.tryFind mart |> Option.defaultValue []
+                suspend next world (OpenMart(martType, items))
 
             // ---- Deferred opcodes ------------------------------------------
             // Outside the M9 slice: skip so the rest of the script still runs.

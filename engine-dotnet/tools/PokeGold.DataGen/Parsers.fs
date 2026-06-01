@@ -480,3 +480,17 @@ module Parsers =
 
     /// Mart label names in the order they appear in the Marts: pointer table.
     let martOrder : string list = snd martsOnce.Value
+
+    // --- Mart constant names -----------------------------------------------
+
+    let private parseMartConstantNames () : string list =
+        let text = Repo.readText "constants/mart_constants.asm"
+        let rx = Regex(@"^\s*const\s+(MART_[A-Z0-9_]+)")
+        [ for line in text.Split('\n') do
+              let m = rx.Match line
+              if m.Success then yield m.Groups.[1].Value ]
+
+    let private martConstantNamesOnce = lazy parseMartConstantNames ()
+
+    /// MART_* constant names in declaration order (parallel to martOrder by index).
+    let martConstantNames : string list = martConstantNamesOnce.Value

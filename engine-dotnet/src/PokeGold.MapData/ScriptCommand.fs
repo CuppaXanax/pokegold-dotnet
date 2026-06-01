@@ -160,6 +160,12 @@ type ScriptCommand =
     /// no-ops that keep the script running.
     | Special of name: string
 
+    // ---- Mart ------------------------------------------------------------
+    /// `pokemart MARTTYPE_*, MART_*` — open the Poké Mart with the given
+    /// mart's inventory. `martType` is one of MARTTYPE_STANDARD/BITTER/BARGAIN/
+    /// PHARMACY; `mart` is the MART_* index constant that names the inventory.
+    | Pokemart of martType: string * mart: string
+
     // ---- Fallback --------------------------------------------------------
     /// Any opcode outside the M9 slice: the source mnemonic + its raw args,
     /// kept verbatim so the map still loads and coverage can be measured.

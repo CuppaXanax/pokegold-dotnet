@@ -581,12 +581,12 @@ let ``jumptext ends the script so consecutive sign scripts don't run together`` 
 
 [<Fact>]
 let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
-    // A script mixing an out-of-slice opcode (pokemart) with text must still
+    // A script mixing an out-of-slice opcode (trainertext) with text must still
     // reach the text — Unsupported is a no-op, not a stop.
     let prog =
         parse
             "Mixed:\n\
-             \tpokemart MARTTYPE_STANDARD, MART_AZALEA\n\
+             \ttrainertext 0\n\
              \twritetext MixedText\n\
              \tend\n"
 
@@ -594,6 +594,6 @@ let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
 
     match step.Outcome with
     | Suspended(_, ShowText(label, _)) -> Assert.Equal("MixedText", label)
-    | other -> Assert.Fail($"expected the script to run past pokemart to the text, got {other}")
+    | other -> Assert.Fail($"expected the script to run past trainertext to the text, got {other}")
 
 

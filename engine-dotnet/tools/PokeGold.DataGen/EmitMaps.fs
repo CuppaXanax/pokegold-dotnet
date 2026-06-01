@@ -80,6 +80,7 @@ module EmitMaps =
         | End -> "End"
         | EndAll -> "EndAll"
         | Special n -> sprintf "Special %s" (str n)
+        | Pokemart(mt, m) -> sprintf "Pokemart(%s, %s)" (str mt) (str m)
         | Unsupported (n, args) ->
             let a = args |> List.map str |> String.concat "; "
             sprintf "Unsupported(%s, [%s])" (str n) a

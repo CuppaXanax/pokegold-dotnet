@@ -118,6 +118,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | Some path -> sound.PlayMusic path
                 | None -> ()
                 this.Drive(Script.resume None world vm)
+            | OpenMart(_martType, items) ->
+                pending <- Some(vm, effect)
+                Push(MartScene(content, player, _martType, items, fun p -> player <- p) :> Scene)
             // ----- effects out of M9.4 scope: no-op, resume -----
             | SetLastTalked _
             | FacePlayer

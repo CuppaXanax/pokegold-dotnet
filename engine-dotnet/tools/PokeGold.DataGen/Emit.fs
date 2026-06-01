@@ -218,6 +218,19 @@ module Emit =
             sb.AppendLine(sprintf "            \"%s\"" label) |> ignore
 
         sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    /// Item lists keyed by MART_* constant name (e.g. \"MART_AZALEA\" -> item list).") |> ignore
+        sb.AppendLine("    /// Parallel to `order`: built by zipping MART_* enum names with `order`.") |> ignore
+        sb.AppendLine("    let byConstant : Map<string, string list> =") |> ignore
+        sb.AppendLine("        Map.ofArray [|") |> ignore
+
+        let itemMap = Parsers.marts |> List.map (fun m -> m.Label, m.Items) |> Map.ofList
+        for (constName, label) in List.zip Parsers.martConstantNames Parsers.martOrder do
+            let items = itemMap |> Map.tryFind label |> Option.defaultValue []
+            let itemStr = items |> List.map (fun i -> sprintf "\"%s\"" i) |> String.concat "; "
+            sb.AppendLine(sprintf "            (\"%s\", [ %s ])" constName itemStr) |> ignore
+
+        sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
     let private dexFile () : string =

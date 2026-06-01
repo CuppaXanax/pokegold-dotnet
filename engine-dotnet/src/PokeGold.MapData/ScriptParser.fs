@@ -132,6 +132,8 @@ module ScriptParser =
         | "cry" -> Some(Cry(arg 0))
         // special functions
         | "special" -> Some(Special(arg 0))
+        // mart
+        | "pokemart" -> Some(Pokemart(arg 0, arg 1))
         // map & warp
         | "warp" -> Some(Warp(arg 0, i 1, i 2))
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))
