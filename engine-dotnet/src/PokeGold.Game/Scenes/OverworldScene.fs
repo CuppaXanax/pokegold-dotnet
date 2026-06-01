@@ -121,6 +121,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | OpenMart(_martType, items) ->
                 pending <- Some(vm, effect)
                 Push(MartScene(content, player, _martType, items, fun p -> player <- p) :> Scene)
+            | OpenPc ->
+                pending <- Some(vm, effect)
+                Push(PcMenuScene(content, player, fun p -> player <- p) :> Scene)
             // ----- effects out of M9.4 scope: no-op, resume -----
             | SetLastTalked _
             | FacePlayer

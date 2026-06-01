@@ -39,6 +39,8 @@
     <Compile Include="MartDataTests.fs" />
     <Compile Include="MartTests.fs" />
     <Compile Include="StorageSaveTests.fs" />
+    <Compile Include="StorageOpsTests.fs" />
+    <Compile Include="PCBoxTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 

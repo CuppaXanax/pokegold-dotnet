@@ -63,6 +63,10 @@ type ScriptEffect =
     /// `pokemart` — open the Poké Mart with the given mart's inventory.
     /// Resume with None after the player closes the mart.
     | OpenMart of martType: string * items: string list
+    /// `special PokemonCenterPC` — open the Pokémon Center PC dispatcher
+    /// (Bill's PC / Player's PC / LOG OFF). Resume with None when the player
+    /// logs off. M12.5 will wire this to the real Pokémon Center map scripts.
+    | OpenPc
 
 /// The suspended state of a running script: where execution is paused and the
 /// call/return stack and scratch var that survive across a `resume`. Opaque to
@@ -223,9 +227,11 @@ module Script =
             | Warpfacing(facing, map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, Some facing))
 
             // ---- Special functions -----------------------------------------
-            // HealParty is enacted by the integration layer; all other specials
-            // (HealMachineAnim, RestartMapMusic, etc.) are cosmetic and skipped.
+            // HealParty is enacted by the integration layer.
+            // PokemonCenterPC opens the PC dispatcher (M12.3).
+            // All other specials (HealMachineAnim, RestartMapMusic, etc.) are cosmetic and skipped.
             | Special "HealParty" -> suspend next world HealParty
+            | Special "PokemonCenterPC" -> suspend next world OpenPc
             | Special _ -> run world next
 
             // ---- Mart -----------------------------------------------------
