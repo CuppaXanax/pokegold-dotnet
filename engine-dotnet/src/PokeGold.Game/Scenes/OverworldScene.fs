@@ -324,7 +324,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
                         |> Option.map (fun n -> n.Event.Script)
 
-                    match Triggers.actionScript objectScriptAt state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                    // A counter/desk tile in front of the player: GSC reaches one tile
+                    // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
+                    let isCounter fx fy =
+                        Collision.isCounterId (
+                            MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
+
+                    match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                     | Some label when state.Script.Labels.ContainsKey label ->
                         sound.PlaySfx "Sfx_Menu"
                         this.Drive(Script.start label world state.Script)

@@ -513,11 +513,11 @@ let ``actionScript returns the faced NPC's script`` () =
     // Gramps stands on (21, 9); a player on (21, 10) facing up faces that cell.
     Assert.Equal(
         Some "AzaleaTownGrampsScript",
-        Triggers.actionScript objAt ev 21 10 Up
+        Triggers.actionScript objAt (fun _ _ -> false) ev 21 10 Up
     )
 
     // Facing an empty cell triggers nothing.
-    Assert.Equal(None, Triggers.actionScript objAt ev 21 10 Down)
+    Assert.Equal(None, Triggers.actionScript objAt (fun _ _ -> false) ev 21 10 Down)
 
 [<Fact>]
 let ``coordToFire gates on the active scene and fires once`` () =

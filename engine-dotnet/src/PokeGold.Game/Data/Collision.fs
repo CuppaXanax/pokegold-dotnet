@@ -179,3 +179,9 @@ module Collision =
             | 5 -> Some [ Down; Left ]
             | 6 -> Some [ Up; Right ]
             | _ -> Some [ Up; Left ]
+
+    /// Whether a raw `COLL_*` id is a counter/desk tile (`COLL_COUNTER` $90 or the
+    /// unused `COLL_COUNTER_98` $98). The player talks *across* a counter to the NPC
+    /// behind it, so the action handler reaches one tile further when facing one.
+    let isCounterId (collId: byte) : bool =
+        collId = 0x90uy || collId = 0x98uy

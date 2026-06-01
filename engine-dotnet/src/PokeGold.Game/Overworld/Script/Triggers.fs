@@ -26,9 +26,13 @@ module Triggers =
     /// in front of the player. `objectScriptAt fx fy` resolves the script of whatever
     /// object currently stands on a cell — the caller supplies it over the *live*
     /// object set (so a wandering NPC is talked to where it now stands, not at its
-    /// spawn tile), filtered to visible objects.
+    /// spawn tile), filtered to visible objects. `isCounter fx fy` reports whether the
+    /// faced cell is a shop/desk counter tile: GSC reaches one tile *past* a counter to
+    /// the NPC standing behind it (so you can talk to a Mart clerk or Center nurse
+    /// across the desk), mirroring `CheckFacingObject`'s counter-distance doubling.
     let actionScript
         (objectScriptAt: int -> int -> string option)
+        (isCounter: int -> int -> bool)
         (events: MapEvents)
         (cellX: int)
         (cellY: int)
@@ -36,7 +40,11 @@ module Triggers =
         : string option =
         let fx, fy = facedCell cellX cellY facing
 
-        match objectScriptAt fx fy with
+        // Across a counter, reflect the search past the desk: (2*faced - player).
+        let ox, oy =
+            if isCounter fx fy then (2 * fx - cellX, 2 * fy - cellY) else (fx, fy)
+
+        match objectScriptAt ox oy with
         | Some s when s <> "" && s <> "ObjectEvent" -> Some s
         | _ -> MapEvents.bgAt fx fy events |> Option.bind (fun b -> if b.Script <> "" then Some b.Script else None)
 

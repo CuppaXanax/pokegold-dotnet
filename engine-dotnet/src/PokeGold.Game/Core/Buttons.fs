@@ -27,6 +27,18 @@ module Buttons =
           Start = false
           Select = false }
 
+    /// Bitwise OR of two button frames: a button is set if held in either. Used to
+    /// merge injected (debug-driven) input with the host's physical input.
+    let union (a: Buttons) (b: Buttons) : Buttons =
+        { Up = a.Up || b.Up
+          Down = a.Down || b.Down
+          Left = a.Left || b.Left
+          Right = a.Right || b.Right
+          A = a.A || b.A
+          B = a.B || b.B
+          Start = a.Start || b.Start
+          Select = a.Select || b.Select }
+
     /// Bitwise AND of two button frames: a button is set only if held in both.
     let intersect (a: Buttons) (b: Buttons) : Buttons =
         { Up = a.Up && b.Up
@@ -48,3 +60,22 @@ module Buttons =
           B = a.B && not mask.B
           Start = a.Start && not mask.Start
           Select = a.Select && not mask.Select }
+
+    /// Parse a `+`-separated token string (e.g. `up`, `a`, `up+a`) into a button
+    /// frame. Unknown tokens are ignored. Used by the debug input-injection commands.
+    let parse (tokens: string) : Buttons =
+        let toks =
+            tokens.Split([| '+'; ',' |], System.StringSplitOptions.RemoveEmptyEntries)
+            |> Array.map (fun t -> t.Trim().ToLowerInvariant())
+            |> Set.ofArray
+
+        let has names = names |> List.exists toks.Contains
+
+        { Up = has [ "up"; "u" ]
+          Down = has [ "down"; "d" ]
+          Left = has [ "left"; "l" ]
+          Right = has [ "right"; "r" ]
+          A = has [ "a" ]
+          B = has [ "b" ]
+          Start = has [ "start" ]
+          Select = has [ "select" ] }

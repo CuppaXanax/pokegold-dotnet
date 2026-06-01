@@ -175,9 +175,25 @@ let ``actionScript talks to a wandering NPC at its current cell, not its spawn``
         |> Option.map (fun n -> n.Event.Script)
 
     // Facing the NPC's current cell (7,5) talks to it...
-    Assert.Equal(Some "WandererScript", Triggers.actionScript objectScriptAt MapEvents.empty 8 5 Left)
+    Assert.Equal(Some "WandererScript", Triggers.actionScript objectScriptAt (fun _ _ -> false) MapEvents.empty 8 5 Left)
     // ...while facing the now-empty spawn tile (5,5) triggers nothing (no ghost).
-    Assert.Equal(None, Triggers.actionScript objectScriptAt MapEvents.empty 6 5 Left)
+    Assert.Equal(None, Triggers.actionScript objectScriptAt (fun _ _ -> false) MapEvents.empty 6 5 Left)
+
+[<Fact>]
+let ``actionScript reaches across a counter to the NPC behind it`` () =
+    // A Mart clerk / Center nurse stands behind a desk: the player faces the counter
+    // tile, and GSC reflects the object search one tile further (2*faced - player).
+    // Clerk on (3,1), counter on (3,2), player on (3,3) facing up.
+    let objectScriptAt fx fy =
+        if fx = 3 && fy = 1 then Some "ClerkScript" else None
+
+    // (3,2) is a counter tile; everything else is plain floor.
+    let isCounter fx fy = fx = 3 && fy = 2
+
+    // Facing the counter reaches the clerk behind it.
+    Assert.Equal(Some "ClerkScript", Triggers.actionScript objectScriptAt isCounter MapEvents.empty 3 3 Up)
+    // Without the counter, the faced cell (3,2) is empty, so nothing is triggered.
+    Assert.Equal(None, Triggers.actionScript objectScriptAt (fun _ _ -> false) MapEvents.empty 3 3 Up)
 
 [<Fact>]
 let ``hidden event-gated objects neither block the player nor wander`` () =

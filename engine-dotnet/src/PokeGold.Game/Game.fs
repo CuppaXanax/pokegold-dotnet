@@ -33,6 +33,12 @@ type Game() =
     /// as the player releases each one.
     let mutable inputMask = Buttons.none
 
+    /// Debug-injected input: a queue of button frames to OR into the host's physical
+    /// input, one per Tick, until drained. Lets the debug pipe (an agent or a test)
+    /// drive the *real* input path — walking, talking, opening menus — exactly as a
+    /// player would. Mutated only on the game thread (from `RunDebugCommand`).
+    let injected = Queue<Buttons>()
+
     do scenes.Push(overworld :> Scene)
 
     /// Make the given overworld scene the sole, bottom scene (used on load).
@@ -87,6 +93,23 @@ type Game() =
                 sprintf "wrote %d×%d screenshot: %s" Display.Width Display.Height path
             with ex ->
                 sprintf "screenshot failed: %s" ex.Message
+        // Inject input frames into the real input path. `hold <keys> [frames]` holds
+        // the given buttons (e.g. `up`, `a`, `up+a`) for N frames (default 1); `press`
+        // is shorthand for a one-frame tap. A grid step is 16 frames, so `hold up 16`
+        // walks one cell. Lets an agent/test walk, talk and open menus over the pipe.
+        | "hold" | "press" ->
+            if parts.Length < 2 then "usage: hold <keys> [frames]   e.g. hold up 16"
+            else
+                let frame1 = Buttons.parse parts.[1]
+                let n =
+                    if parts.[0] = "press" then 1
+                    elif parts.Length > 2 then
+                        match System.Int32.TryParse parts.[2] with
+                        | true, v -> max 1 v
+                        | _ -> 1
+                    else 1
+                for _ in 1 .. n do injected.Enqueue frame1
+                sprintf "ok: injected %s for %d frame(s)" parts.[1] n
         | _ -> DebugCommands.dispatch overworld frame top line
 
     /// Fill `buffer` with the next `nFrames` interleaved stereo sample-frames
@@ -100,6 +123,12 @@ type Game() =
         // Apply any pending debug commands on the game thread before the scene
         // updates, so inspectors and mutations see this frame's starting state.
         debug.Pump(this.RunDebugCommand)
+
+        // Merge one frame of debug-injected input (if any) over the physical input,
+        // so a pipe client can drive the real input path frame-by-frame.
+        let buttons =
+            if injected.Count > 0 then Buttons.union buttons (injected.Dequeue())
+            else buttons
 
         // Shrink the carry-over mask to buttons that are *still* held (a release
         // clears that button), then hide the remaining masked buttons from the

@@ -38,6 +38,8 @@ module DebugCommands =
               "  frame                     current frame counter"
               "  scene                     active (top) scene type"
               "  screenshot [path]         write the framebuffer to a PNG"
+              "  hold <keys> [frames]      inject input (e.g. up, a, up+a); 16 frames = 1 cell"
+              "  press <keys>              inject a one-frame button tap"
               "  player                    map, cell, facing, motion, pixel"
               "  map                       map id, size, camera, neighbours"
               "  npcs                      live overworld objects"
