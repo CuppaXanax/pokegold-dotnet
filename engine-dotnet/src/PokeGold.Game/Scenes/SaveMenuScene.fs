@@ -29,17 +29,32 @@ type SaveMenuScene(content: Content, playerName: string, onSave: unit -> unit) =
     let mutable yes = true
     let input = EdgeDetector()
 
-    // Box geometry in 8-px tiles; screen is 20 × 18 tiles.
-    // Placed in the top-right corner (same anchor as YesNoScene) but 3 tiles wider
-    // to accommodate the "SAVE the game?" prompt line.
+    // GSC shows the prompt in the bottom speech textbox ("Would you like to /
+    // save the game?") with a separate YES/NO box in the top-right corner. Box
+    // geometry in 8-px tiles; screen is 20 × 18 tiles.
+
+    // Bottom speech textbox: cols 0–19, rows 12–17 (matches TextRenderer).
     [<Literal>]
-    let Left = 9
+    let PromptLeft = 0
+
+    [<Literal>]
+    let PromptTop = 12
+
+    [<Literal>]
+    let PromptWidth = 20
+
+    [<Literal>]
+    let PromptHeight = 6
+
+    // YES/NO box in the top-right corner (matches YesNoScene).
+    [<Literal>]
+    let Left = 13
 
     [<Literal>]
     let Top = 0
 
     [<Literal>]
-    let Width = 11
+    let Width = 6
 
     [<Literal>]
     let Height = 6
@@ -75,11 +90,17 @@ type SaveMenuScene(content: Content, playerName: string, onSave: unit -> unit) =
         member _.Render(fb: Framebuffer) =
             match phase with
             | Confirming ->
+                // Prompt lives in the bottom speech textbox, two lines, exactly
+                // like GSC's _WouldYouLikeToSaveTheGameText (no overflow).
+                WindowRenderer.drawBox fb content.Font palette PromptLeft PromptTop PromptWidth PromptHeight
+                WindowRenderer.drawString fb content.Font palette (PromptLeft + 1) (PromptTop + 2) "Would you like to"
+                WindowRenderer.drawString fb content.Font palette (PromptLeft + 1) (PromptTop + 4) "save the game?"
+
+                // YES/NO choice box in the top-right corner.
                 WindowRenderer.drawBox fb content.Font palette Left Top Width Height
-                WindowRenderer.drawString fb content.Font palette (Left + 1) (Top + 1) "SAVE the game?"
-                WindowRenderer.drawString fb content.Font palette (Left + 2) (Top + 3) "YES"
-                WindowRenderer.drawString fb content.Font palette (Left + 2) (Top + 4) "NO"
-                let cursorRow = if yes then Top + 3 else Top + 4
+                WindowRenderer.drawString fb content.Font palette (Left + 2) (Top + 1) "YES"
+                WindowRenderer.drawString fb content.Font palette (Left + 2) (Top + 3) "NO"
+                let cursorRow = if yes then Top + 1 else Top + 3
                 WindowRenderer.drawCursor fb content.Font palette (Left + 1) cursorRow
             | WaitingToPop ->
                 ()
