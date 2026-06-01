@@ -63,8 +63,7 @@ type PcMenuScene(content: Content, player: PlayerState, onChange: PlayerState ->
                     // BILL'S PC → push box storage scene.
                     Push(PCBoxScene(content, currentPlayer, fun p -> currentPlayer <- p; onChange p) :> Scene)
                 | 1 ->
-                    // PLAYER'S PC — stub; M12.4 wires PC item storage / mailbox.
-                    Push(TextBoxScene.Of(content, "PLAYER'S PC — coming in M12.4!<DONE>") :> Scene)
+                    Push(PlayerPCScene(content, currentPlayer, fun p -> currentPlayer <- p; onChange p) :> Scene)
                 | _ ->
                     Pop  // LOG OFF
             elif edges.B then

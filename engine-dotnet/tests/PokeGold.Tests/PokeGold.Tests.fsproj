@@ -41,6 +41,8 @@
     <Compile Include="StorageSaveTests.fs" />
     <Compile Include="StorageOpsTests.fs" />
     <Compile Include="PCBoxTests.fs" />
+    <Compile Include="PcItemTests.fs" />
+    <Compile Include="PlayerPCTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
   </ItemGroup>
 

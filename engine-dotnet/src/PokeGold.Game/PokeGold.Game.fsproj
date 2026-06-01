@@ -95,6 +95,7 @@
     <Compile Include="Player\Storage.fs" />
     <Compile Include="Player\Player.fs" />
     <Compile Include="Player\BoxOps.fs" />
+    <Compile Include="Player\PcItemOps.fs" />
     <Compile Include="Player\DebugSeed.fs" />
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
@@ -118,6 +119,7 @@
     <Compile Include="Scenes\PackScene.fs" />
     <Compile Include="Scenes\MartScene.fs" />
     <Compile Include="Scenes\PCBoxScene.fs" />
+    <Compile Include="Scenes\PlayerPCScene.fs" />
     <Compile Include="Scenes\PcMenuScene.fs" />
     <Compile Include="Scenes\PokedexScene.fs" />
     <Compile Include="Scenes\OptionsScene.fs" />
