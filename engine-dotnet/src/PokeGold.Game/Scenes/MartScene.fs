@@ -43,8 +43,14 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
     let ListWidth  = 20
     [<Literal>]
     let ListHeight = 12
+    // Rightmost interior column (just inside the right border) — prices end here.
     [<Literal>]
-    let VisibleItems = 8   // rows ListTop+2 .. ListTop+9
+    let ListRight  = 18
+    // Each item spans two rows (name on top, price right-aligned below), matching
+    // GSC's buy menu (`MenuHeader_Buy.PrintBCDPrices` places the price one tile row
+    // below the item name), so four items are visible at a time.
+    [<Literal>]
+    let VisibleItems = 4   // 4 items x 2 rows = rows ListTop+2 .. ListTop+9
 
     // Info/money box: full width, rows 12-17.
     [<Literal>]
@@ -117,47 +123,47 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
         WindowRenderer.drawBox fb content.Font palette ListLeft ListTop ListWidth ListHeight
         WindowRenderer.drawString fb content.Font palette (ListLeft + 2) (ListTop + 1) title
 
+    /// Right-align an encoded string so its last glyph sits at column `ListRight`.
+    let rightCol (s: string) = ListRight - s.Length + 1
+
     let renderBuyItems (fb: Framebuffer) =
         let vis = min buyMenu.Visible (buyMenu.Count - buyMenu.Top)
-        let labels =
-            [| for i in 0 .. vis - 1 do
-                   let idx = buyMenu.Top + i
-                   if idx < items.Length then
-                       let id    = items.[idx]
-                       let price = itemPrice id
-                       let name  = truncate 9 (itemName id)
-                       yield sprintf "%s P%d" name price
-                   else
-                       yield "CANCEL" |]
-        WindowRenderer.drawList
-            fb content.Font palette
-            (ListLeft + 1) (ListTop + 2)
-            (labels |> Array.toSeq)
-            (buyMenu.Cursor - buyMenu.Top)
+        for i in 0 .. vis - 1 do
+            let idx     = buyMenu.Top + i
+            let nameRow = ListTop + 2 + i * 2
+            if idx = buyMenu.Cursor then
+                WindowRenderer.drawCursor fb content.Font palette (ListLeft + 1) nameRow
+            if idx < items.Length then
+                let id    = items.[idx]
+                let name  = truncate 12 (itemName id)
+                let price = sprintf "¥%d" (itemPrice id)
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 2) nameRow name
+                WindowRenderer.drawString fb content.Font palette (rightCol price) (nameRow + 1) price
+            else
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 2) nameRow "CANCEL"
 
     let renderSellItems (fb: Framebuffer) =
         let sellable = sellableItems currentPlayer.Bag
         let vis = min sellMenu.Visible (sellMenu.Count - sellMenu.Top)
-        let labels =
-            [| for i in 0 .. vis - 1 do
-                   let idx = sellMenu.Top + i
-                   if idx < sellable.Length then
-                       let (id, qty) = sellable.[idx]
-                       let sellPrc   = Money.sellPrice (itemPrice id) 1
-                       let name      = truncate 8 (itemName id)
-                       yield sprintf "%s x%d P%d" name qty sellPrc
-                   else
-                       yield "CANCEL" |]
-        WindowRenderer.drawList
-            fb content.Font palette
-            (ListLeft + 1) (ListTop + 2)
-            (labels |> Array.toSeq)
-            (sellMenu.Cursor - sellMenu.Top)
+        for i in 0 .. vis - 1 do
+            let idx     = sellMenu.Top + i
+            let nameRow = ListTop + 2 + i * 2
+            if idx = sellMenu.Cursor then
+                WindowRenderer.drawCursor fb content.Font palette (ListLeft + 1) nameRow
+            if idx < sellable.Length then
+                let (id, qty) = sellable.[idx]
+                let sellPrc   = Money.sellPrice (itemPrice id) 1
+                let name      = sprintf "%s x%d" (truncate 9 (itemName id)) qty
+                let price     = sprintf "¥%d" sellPrc
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 2) nameRow name
+                WindowRenderer.drawString fb content.Font palette (rightCol price) (nameRow + 1) price
+            else
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 2) nameRow "CANCEL"
 
     let renderInfoBox (fb: Framebuffer) (line1: string) (line2: string) =
         WindowRenderer.drawBox fb content.Font palette InfoLeft InfoTop InfoWidth InfoHeight
         WindowRenderer.drawString fb content.Font palette (InfoLeft + 1) (InfoTop + 1) "MONEY"
-        WindowRenderer.drawString fb content.Font palette (InfoLeft + 1) (InfoTop + 2) (sprintf "P%d" currentPlayer.Money)
+        WindowRenderer.drawString fb content.Font palette (InfoLeft + 1) (InfoTop + 2) (sprintf "¥%d" currentPlayer.Money)
         if line1 <> "" then
             WindowRenderer.drawString fb content.Font palette (InfoLeft + 1) (InfoTop + 4) (truncate 18 line1)
         if line2 <> "" then
@@ -315,7 +321,7 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
                         currentPlayer <- { currentPlayer with Money = newMoney; Bag = newBag }
                         onChange currentPlayer
                         let earned = Money.sellPrice price qty
-                        mode <- ShowMsg(sprintf "Got P%d!" earned)
+                        mode <- ShowMsg(sprintf "Got ¥%d!" earned)
                     | Error Mart.CantSell ->
                         mode <- ShowMsg "Can't sell that!"
                     | Error Mart.NotInBag ->
@@ -351,7 +357,7 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
                 let priceInfo =
                     if buyMenu.Cursor < items.Length then
                         let id = items.[buyMenu.Cursor]
-                        sprintf "P%d each" (itemPrice id)
+                        sprintf "¥%d each" (itemPrice id)
                     else ""
                 renderInfoBox fb priceInfo ""
 
@@ -362,8 +368,8 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
                 let total = Money.buyTotal price qty
                 renderQtyOverlay fb
                     (sprintf "HOW MANY? (max %d)" (maxAffordable price))
-                    (sprintf "x%d  P%d" qty total)
-                renderInfoBox fb (sprintf "P%d each" price) (sprintf "Total: P%d" total)
+                    (sprintf "x%d  ¥%d" qty total)
+                renderInfoBox fb (sprintf "¥%d each" price) (sprintf "Total: ¥%d" total)
 
             | Selling | SellWait _ ->
                 renderListBox fb "SELL"
@@ -373,7 +379,7 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
                     let sellable = sellableItems currentPlayer.Bag
                     if sellMenu.Cursor < sellable.Length then
                         let (id, _) = sellable.[sellMenu.Cursor]
-                        sprintf "P%d each" (Money.sellPrice (itemPrice id) 1)
+                        sprintf "¥%d each" (Money.sellPrice (itemPrice id) 1)
                     else ""
                 renderInfoBox fb sellInfo ""
 
@@ -384,8 +390,8 @@ type MartScene(content: Content, initialPlayer: PlayerState, martType: string, i
                 let earned = Money.sellPrice price qty
                 renderQtyOverlay fb
                     "HOW MANY?"
-                    (sprintf "x%d  earn P%d" qty earned)
-                renderInfoBox fb (sprintf "Sell P%d each" (Money.sellPrice price 1)) (sprintf "Total: P%d" earned)
+                    (sprintf "x%d  earn ¥%d" qty earned)
+                renderInfoBox fb (sprintf "Sell ¥%d each" (Money.sellPrice price 1)) (sprintf "Total: ¥%d" earned)
 
             | ShowMsg msg ->
                 renderListBox fb "MART"

@@ -14,6 +14,18 @@ let ``player sprite loads as six 16x16 frames`` () =
         Assert.Equal(Sprite.Size * Sprite.Size, f.Length)
 
 [<Fact>]
+let ``a still sprite with fewer frames loads without throwing`` () =
+    // The Pokemon Center nurse only ever stands behind her counter, so her PNG
+    // ships just the three standing frames (48 px tall) instead of the full six.
+    // ofTiles must derive the frame count from the tile count; hard-coding six
+    // made loadNamed throw and the nurse render as nothing (issue: "no Nurse").
+    let s = Sprite.loadNamed "nurse"
+    Assert.Equal(3, s.Frames.Length)
+
+    for f in s.Frames do
+        Assert.Equal(Sprite.Size * Sprite.Size, f.Length)
+
+[<Fact>]
 let ``sprite draw is transparent on index 0 and opaque elsewhere`` () =
     // A frame that is index 0 everywhere except one index-1 pixel: only that
     // pixel should be written (index 0 is transparent).

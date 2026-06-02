@@ -28,10 +28,30 @@ type TextToken =
 /// Decoding a raw character-code stream into tokens.
 module TextStream =
 
+    /// Static dictionary expansions (`CheckDict`'s `print_name` entries in
+    /// `home/text.asm`) for control codes below $60 that place a fixed glyph
+    /// string rather than a single tile. The text engine substitutes these at
+    /// print time, e.g. `#` ($54) expands to "POKé". The expansion is itself
+    /// charmap-encoded so it resolves to real glyph tiles (P, O, K, é, …).
+    /// Name placeholders (<PLAYER>, <RIVAL>, <MOM>, …) depend on save data and
+    /// are handled by the caller, not here.
+    let private dictExpansions: Map<byte, byte[]> =
+        [ 0x24uy, "<PO><KE>" // <POKE>
+          0x4auy, "<PK><MN>" // <PKMN>
+          0x54uy, "POKé" // '#'
+          0x56uy, "……" // <……>
+          0x5buy, "PC" // <PC>
+          0x5cuy, "TM" // <TM>
+          0x5duy, "TRAINER" // <TRAINER>
+          0x5euy, "ROCKET" ] // <ROCKET>
+        |> List.map (fun (c, s) -> c, Charmap.encode s)
+        |> Map.ofList
+
     /// Decode a code stream into tokens, stopping at the first terminator/`<DONE>`
     /// (which is emitted as a final `Done`). Glyph codes (≥ $60) pass through;
-    /// recognized control codes map to their action; any other control code is
-    /// ignored (those are higher-level substitutions handled in later milestones).
+    /// recognized control codes map to their action; static dictionary codes are
+    /// expanded into their glyph runs; any other control code is ignored (those are
+    /// higher-level substitutions handled in later milestones).
     let decode (codes: byte[]) : TextToken list =
         let rec loop i acc =
             if i >= codes.Length then
@@ -44,6 +64,13 @@ module TextStream =
                 elif c >= 0x60uy then
                     loop (i + 1) (Glyph c :: acc)
                 else
+                    match Map.tryFind c dictExpansions with
+                    | Some expansion ->
+                        // Splice the expansion's glyphs in place of the dict code.
+                        let glyphs = expansion |> Array.toList |> List.map Glyph |> List.rev
+                        loop (i + 1) (glyphs @ acc)
+                    | None ->
+
                     let token =
                         if c = Charmap.Line then Some Line
                         elif c = Charmap.Next then Some Next

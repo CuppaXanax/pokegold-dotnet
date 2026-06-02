@@ -34,6 +34,22 @@ let ``decode stops at the terminator code, ignoring trailing bytes`` () =
     let tokens = TextStream.decode (Charmap.encode "A@B")
     Assert.Equal<TextToken list>([ Glyph 0x80uy; Done ], tokens)
 
+[<Fact>]
+let ``the POKe dictionary code expands to its glyph run`` () =
+    // '#' ($54) is a dictionary control code the text engine expands to "POKé"
+    // (home/text.asm PlacePOKeText). Previously it was silently dropped (it is
+    // below $60 and not a recognized control code), so the "POKéMON CENTER" sign
+    // lost its leading glyphs. It must expand to the encoded glyph run instead.
+    let expected = Charmap.encode "POKé" |> Array.toList |> List.map Glyph
+    let tokens = TextStream.decode [| 0x54uy |]
+    Assert.Equal<TextToken list>(expected @ [ Done ], tokens)
+
+[<Fact>]
+let ``a hash in source text decodes to POKe glyphs, not nothing`` () =
+    let tokens = TextStream.ofString "#MON"
+    let glyphs = Charmap.encode "POKéMON" |> Array.toList |> List.map Glyph
+    Assert.Equal<TextToken list>(glyphs @ [ Done ], tokens)
+
 let private none = Buttons.none
 let private pressA = { Buttons.none with A = true }
 
