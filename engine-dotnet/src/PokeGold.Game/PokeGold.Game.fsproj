@@ -41,6 +41,7 @@
     <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\Generated\StdScripts.Generated.fs" />
     <Compile Include="Data\Generated\Music.Generated.fs" />
+    <Compile Include="Data\Generated\Songs.Generated.fs" />
     <Compile Include="Data\Generated\Items.Generated.fs" />
     <Compile Include="Data\Generated\Marts.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
@@ -73,7 +74,6 @@
     <!-- Audio: parse the GSC sound script, sequence + software-synth the 4 GB
          channels to PCM (pure, no MonoGame; the host owns the sound device). -->
     <Compile Include="Audio\AudioData.fs" />
-    <Compile Include="Audio\SoundCommand.fs" />
     <Compile Include="Audio\SongParser.fs" />
     <Compile Include="Audio\Apu.fs" />
     <Compile Include="Audio\ApuChip.fs" />
@@ -182,6 +182,8 @@
     <GameDataInput Include="$(RepoRoot)maps\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\music_constants.asm" />
     <GameDataInput Include="$(RepoRoot)audio\music_pointers.asm" />
+    <GameDataInput Include="$(RepoRoot)audio\music\*.asm" />
+    <GameDataInput Include="$(RepoRoot)audio\sfx.asm" />
     <GameDataInput Include="$(RepoRoot)engine\events\std_scripts.asm" />
     <GameDataInput Include="$(RepoRoot)data\text\std_text.asm" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
@@ -191,6 +193,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\StdScripts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Music.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Songs.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />

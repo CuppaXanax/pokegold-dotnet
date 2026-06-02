@@ -270,6 +270,7 @@ module Emit =
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
           "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
           "Music.Generated.fs", musicFile ()
+          "Songs.Generated.fs", EmitSongs.render ()
           "Items.Generated.fs", itemsFile ()
           "Marts.Generated.fs", martsFile ()
           "Dex.Generated.fs", dexFile () ]

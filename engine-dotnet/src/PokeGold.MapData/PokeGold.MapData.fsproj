@@ -18,6 +18,8 @@
     <Compile Include="MapMeta.fs" />
     <Compile Include="MovementScript.fs" />
     <Compile Include="GeneratedMap.fs" />
+    <Compile Include="AudioTypes.fs" />
+    <Compile Include="SongAsm.fs" />
   </ItemGroup>
 
 </Project>
