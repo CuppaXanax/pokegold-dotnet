@@ -59,6 +59,17 @@ module Effects =
         | "EFFECT_POISON" -> [ InflictPoison ]
         | "EFFECT_TOXIC" -> [ InflictToxic ]
         | "EFFECT_PARALYZE" -> [ InflictParalyze ]
+        | "EFFECT_CONFUSE" -> [ InflictConfuse ]
+        | "EFFECT_LEECH_SEED" -> [ ApplyLeechSeed ]
+        | "EFFECT_TRAP_TARGET" -> [ Damage; TrapTarget ]
+        | "EFFECT_SUBSTITUTE" -> [ CreateSubstitute ]
+        | "EFFECT_MIST" -> [ SetMist ]
+        | "EFFECT_FOCUS_ENERGY" -> [ SetFocusEnergy ]
+        | "EFFECT_MEAN_LOOK" -> [ SetMeanLook ]
+        // EFFECT_FLINCH_HIT is a secondary-on-hit effect (M13.6 wires the
+        // chance roll); here we map it as Damage + SetFlinch so the command
+        // exists and can be tested. M13.6 will gate SetFlinch behind EffectChance.
+        | "EFFECT_FLINCH_HIT" -> [ Damage; SetFlinch ]
         | _ -> if move.Power > 0 then [ Damage ] else []
 
     /// Apply one effect command to a MoveContext. Returns the updated context
@@ -67,7 +78,19 @@ module Effects =
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            // Substitute absorbs damage (effect_commands.asm CheckSubstitute).
+            let foe, subBroke =
+                match ctx.Foe.Volatile.Substitute with
+                | Some subHp ->
+                    let remaining = subHp - dmg
+                    if remaining <= 0 then
+                        let vol = { ctx.Foe.Volatile with Substitute = None }
+                        { ctx.Foe with Volatile = vol }, true
+                    else
+                        let vol = { ctx.Foe.Volatile with Substitute = Some remaining }
+                        { ctx.Foe with Volatile = vol }, false
+                | None ->
+                    { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false
 
             let notes =
                 [ if ctx.Crit then "A critical hit!"
@@ -76,7 +99,8 @@ module Effects =
                       | 0 -> $"It doesn't affect {foe.Species.Name}..."
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."
-                      | _ -> () ]
+                      | _ -> ()
+                  if subBroke then $"{foe.Species.Name}'s substitute faded!" ]
 
             { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
 
@@ -89,7 +113,13 @@ module Effects =
             { ctx with User = user; Messages = ctx.Messages @ notes }
 
         | LowerTargetStat s ->
-            if stage s ctx.Foe <= -6 then
+            // Blocked by Mist (move_effects/mist.asm).
+            if ctx.Foe.Volatile.Mist then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is protected by mist!" ] }
+            // Blocked by Substitute.
+            elif ctx.Foe.Volatile.Substitute.IsSome then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            elif stage s ctx.Foe <= -6 then
                 { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name}'s {statName s} won't go lower!" ] }
             else
                 let foe = shiftStage s -1 ctx.Foe
@@ -105,6 +135,11 @@ module Effects =
         | InflictSleep ->
             // BattleCommand_SleepTarget (effect_commands.asm l.3552).
             // Fails if: foe already asleep, foe already has any status, attack missed.
+            // Blocked by substitute.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
             match ctx.Foe.Status with
             | Sleep _ ->
                 { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already asleep!" ] }
@@ -125,6 +160,11 @@ module Effects =
         | InflictPoison ->
             // BattleCommand_Poison (effect_commands.asm l.3672).
             // Immune: Poison-type, already has a status.
+            // Blocked by substitute.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
             let poisonType = TypeChart.value "POISON"
             if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
                 { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
@@ -141,6 +181,11 @@ module Effects =
         | InflictToxic ->
             // BattleCommand_Poison with EFFECT_TOXIC path (effect_commands.asm l.3735).
             // Same immunities as Poison, but sets BadPoison with counter starting at 0.
+            // Blocked by substitute.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
             let poisonType = TypeChart.value "POISON"
             if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
                 { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
@@ -158,6 +203,11 @@ module Effects =
             // BattleCommand_Paralyze (effect_commands.asm l.5788).
             // Gen 2: NO electric-type immunity for paralysis.
             // Fails if: already paralyzed, already has any status.
+            // Blocked by substitute.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
             match ctx.Foe.Status with
             | Paralysis ->
                 { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already paralyzed!" ] }
@@ -166,6 +216,122 @@ module Effects =
                 { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} is paralyzed! It may be unable to move!" ] }
             | _ ->
                 { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        // --- M13.4: volatile status commands ---
+
+        | InflictConfuse ->
+            // BattleCommand_Confuse (effect_commands.asm l.5707).
+            // Blocked by substitute. Fails if already confused.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
+            if ctx.Foe.Volatile.Confusion.IsSome then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already confused!" ] }
+            else
+                // 2-5 turns: BattleRandom AND %11 + 2
+                let roll, rng' = Rng.next ctx.Rng
+                let turns = (roll &&& 3) + 2
+                let vol = { ctx.Foe.Volatile with Confusion = Some turns }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} became confused!" ] }
+
+        | SetFlinch ->
+            // BattleCommand_FlinchTarget (effect_commands.asm l.5314).
+            // Blocked by substitute, frozen/sleeping target, or if user went second.
+            // The "went first" check is handled by the caller (M13.6 secondary system);
+            // here we just set the flag. The pre-move gate ignores Flinch if the
+            // flinched mon moved first (see preMoveStatusCheck).
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ -> ctx
+            | None ->
+            match ctx.Foe.Status with
+            | Freeze | Sleep _ -> ctx
+            | _ ->
+                let vol = { ctx.Foe.Volatile with Flinch = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe }
+
+        | ApplyLeechSeed ->
+            // BattleCommand_LeechSeed (move_effects/leech_seed.asm).
+            // Blocked by substitute, Grass-type, already seeded.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} evaded the attack!" ] }
+            | None ->
+            let grassType = TypeChart.value "GRASS"
+            if ctx.Foe.Species.Type1 = grassType || ctx.Foe.Species.Type2 = grassType then
+                { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
+            elif ctx.Foe.Volatile.LeechSeed then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} evaded the attack!" ] }
+            else
+                let vol = { ctx.Foe.Volatile with LeechSeed = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was seeded!" ] }
+
+        | TrapTarget ->
+            // BattleCommand_TrapTarget (effect_commands.asm l.5569).
+            // Blocked by substitute. Fails if already trapped.
+            // Counter: BattleRandom AND %11 + 3 = 3-6 internal turns (2-5 chip turns).
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ -> ctx
+            | None ->
+            if ctx.Foe.Volatile.Trapped.IsSome then ctx
+            else
+                let roll, rng' = Rng.next ctx.Rng
+                let turns = (roll &&& 3) + 3
+                let vol = { ctx.Foe.Volatile with Trapped = Some turns }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} was trapped!" ] }
+
+        | CreateSubstitute ->
+            // BattleCommand_Substitute (move_effects/substitute.asm).
+            // Cost = MaxHP / 4. Fails if already has sub or HP <= cost.
+            if ctx.User.Volatile.Substitute.IsSome then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} already has a substitute!" ] }
+            else
+                let cost = ctx.User.MaxHp / 4
+                if ctx.User.Hp <= cost then
+                    { ctx with Messages = ctx.Messages @ [ "It's too weak to make a substitute!" ] }
+                else
+                    let user = { ctx.User with Hp = ctx.User.Hp - cost
+                                               Volatile = { ctx.User.Volatile with Substitute = Some cost } }
+                    // Creating a substitute breaks existing trap (faithful to disassembly l.45-56).
+                    let user =
+                        { user with Volatile = { user.Volatile with Trapped = None } }
+                    { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} made a substitute!" ] }
+
+        | SetMist ->
+            // BattleCommand_Mist (move_effects/mist.asm).
+            if ctx.User.Volatile.Mist then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let vol = { ctx.User.Volatile with Mist = true }
+                let user = { ctx.User with Volatile = vol }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name}'s shrouded in mist!" ] }
+
+        | SetFocusEnergy ->
+            // BattleCommand_FocusEnergy (move_effects/focus_energy.asm).
+            if ctx.User.Volatile.FocusEnergy then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let vol = { ctx.User.Volatile with FocusEnergy = true }
+                let user = { ctx.User with Volatile = vol }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} is getting pumped!" ] }
+
+        | SetMeanLook ->
+            // BattleCommand_MeanLook (move_effects/mean_look.asm).
+            // Sets CantEscape on the target. Blocked by substitute.
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
+            if ctx.Foe.Volatile.CantEscape then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let vol = { ctx.Foe.Volatile with CantEscape = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} can't escape now!" ] }
 
     /// Legacy apply: wraps applyCtx for callers that don't need the full context.
     let apply

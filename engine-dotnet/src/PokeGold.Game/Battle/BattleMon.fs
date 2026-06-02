@@ -16,20 +16,28 @@ type StatusCondition =
     | Paralysis
 
 /// Per-battle volatile status flags that reset on switch-out.
-/// Later slices (M13.4, M13.7, M13.8) populate and consume these fields;
-/// M13.0 only defines the data shape and a neutral default.
+/// M13.0 defined the data shape; M13.4 added Mist/CantEscape and implements
+/// confusion, flinch, leech seed, trap/wrap, substitute, focus energy, mist,
+/// and mean look. M13.7 will implement charging/recharge/rampage.
 type VolatileStatus =
     { /// Confusion turns remaining; None = not confused.
+      /// Set by EFFECT_CONFUSE (2-5 turns). Each pre-move gate decrements;
+      /// at 0 the mon snaps out. While confused, 50% chance of self-hit.
       Confusion: int option
       /// Set when a move with a flinch secondary fires; cleared each turn.
+      /// Flinch only blocks if the flincher moved first that turn.
       Flinch: bool
-      /// Leech Seed is active on this mon.
+      /// Leech Seed is active on this mon. End-of-turn: drain MaxHP/8 (min 1),
+      /// heal the other side by that amount.
       LeechSeed: bool
       /// Substitute HP remaining; None = no substitute.
+      /// Absorbs damage and blocks incoming status + stat drops while up.
       Substitute: int option
       /// Trapped/wrapped turns remaining; None = not trapped.
+      /// Internal counter 3-6 (2-5 damaging turns). End-of-turn: decrement;
+      /// at 0 release, else chip MaxHP/16 (min 1). Prevents fleeing.
       Trapped: int option
-      /// Focus Energy is active (crit stage +1).
+      /// Focus Energy is active (crit stage +1). Read by CriticalHit.critStage.
       FocusEnergy: bool
       /// Charging a two-turn move (e.g. Fly, Dig); None = not charging.
       /// Later slices will refine this to carry the move being charged.
@@ -37,7 +45,13 @@ type VolatileStatus =
       /// Must recharge this turn (e.g. after Hyper Beam).
       Recharge: bool
       /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
-      Rampage: int option }
+      Rampage: int option
+      /// Mist is active: blocks opponent's stat-lowering moves.
+      /// Extension point for M13.6 (stat-stage family).
+      Mist: bool
+      /// Mean Look / Spider Web: prevents fleeing. Cleared on switch-out.
+      /// Extension point for M13.7 (multi-turn family) and M14 (switching).
+      CantEscape: bool }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -50,7 +64,9 @@ module VolatileStatus =
           FocusEnergy = false
           Charging = None
           Recharge = false
-          Rampage = None }
+          Rampage = None
+          Mist = false
+          CantEscape = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;

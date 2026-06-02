@@ -63,6 +63,29 @@ type EffectCommand =
     /// Paralyze the target (EFFECT_PARALYZE). Blocked if target already statused.
     /// Gen 2 has NO electric-type paralysis immunity.
     | InflictParalyze
+    // --- M13.4: volatile status commands ---
+    /// Confuse the target (EFFECT_CONFUSE). 2-5 turns via Rng (rand & 3 + 2).
+    /// Blocked if target already confused or has a substitute.
+    | InflictConfuse
+    /// Set Flinch on the target (EFFECT_FLINCH_HIT secondary).
+    /// Only effective if the user moved first. The pre-move gate checks the flag.
+    /// M13.6 will wire the secondary-on-hit chance; M13.4 provides the command.
+    | SetFlinch
+    /// Seed the target with Leech Seed (EFFECT_LEECH_SEED).
+    /// Blocked if target is Grass-type or already seeded.
+    | ApplyLeechSeed
+    /// Trap the target for 3-6 internal turns (EFFECT_TRAP_TARGET).
+    /// Blocked if target already trapped or has a substitute.
+    | TrapTarget
+    /// Create a substitute (EFFECT_SUBSTITUTE). Costs MaxHP/4 from user.
+    /// Fails if user HP <= MaxHP/4 or already has a substitute.
+    | CreateSubstitute
+    /// Set Mist on the user (EFFECT_MIST). Blocks stat-lowering moves.
+    | SetMist
+    /// Set Focus Energy on the user (EFFECT_FOCUS_ENERGY). Crit stage +1.
+    | SetFocusEnergy
+    /// Prevent the target from fleeing (EFFECT_MEAN_LOOK).
+    | SetMeanLook
 
 /// Context threaded through effect-command execution for a single move.
 /// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose

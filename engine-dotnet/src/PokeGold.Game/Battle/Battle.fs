@@ -45,13 +45,19 @@ module Battle =
     /// Pre-move status gate, faithful to `CheckTurn` / `BattleCommand_CheckTurn`
     /// in `engine/battle/effect_commands.asm` (l.121-342).
     ///
-    /// Gate order (M13.3 — non-volatile only; M13.4 adds flinch/confusion):
-    ///   1. Sleep — decrement counter; wake at 0, else "fast asleep!" (no RNG draw)
-    ///   2. Freeze — "frozen solid!"; Flame Wheel / Sacred Fire self-defrost (no RNG)
-    ///   3. Paralysis — 25% full-para (1 RNG draw: roll < 64 = can't act)
-    ///   (Flinch, Confusion, Attract — M13.4)
-    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (rng: Rng)
-        : bool * BattleMon * string list * Rng =
+    /// Gate order (M13.3 non-volatile + M13.4 volatile):
+    ///   1. Sleep -- decrement counter; wake at 0, else "fast asleep!" (no RNG draw)
+    ///   2. Freeze -- "frozen solid!"; Flame Wheel / Sacred Fire self-defrost (no RNG)
+    ///   3. Flinch -- flinched can't move (no RNG draw). Cleared after check.
+    ///   4. Paralysis -- 25% full-para (1 RNG draw: roll < 64 = can't act)
+    ///   5. Confusion -- dec counter; at 0 snap out; else 50% self-hit (1 RNG draw)
+    ///   (6. Attract -- M13.6)
+    ///
+    /// Returns: (canAct, confusionSelfHit, updatedUser, messages, rng)
+    /// When confusionSelfHit = true, the caller must apply a 40-power typeless
+    /// physical hit from the user to itself (using user's own atk/def).
+    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (userMovedFirst: bool) (rng: Rng)
+        : bool * bool * BattleMon * string list * Rng =
 
         // 1. Sleep gate
         match user.Status with
@@ -59,38 +65,92 @@ module Battle =
             let remaining = turnsLeft - 1
             if remaining = 0 then
                 let user' = { user with Status = Healthy }
-                // Mon wakes up; it CAN act this turn (faithful to GSC: woke_up then
-                // continues through the remaining gates).
-                (true, user', [ $"{user.Species.Name} woke up!" ], rng)
+                (true, false, user', [ $"{user.Species.Name} woke up!" ], rng)
             else
                 let user' = { user with Status = Sleep remaining }
-                (false, user', [ $"{user.Species.Name} is fast asleep!" ], rng)
+                (false, false, user', [ $"{user.Species.Name} is fast asleep!" ], rng)
         | _ ->
 
         // 2. Freeze gate
         match user.Status with
         | Freeze ->
-            // Flame Wheel and Sacred Fire self-defrost (effect_commands.asm l.209-213).
-            // The move has already been selected; we check the user's chosen move via
-            // the move that will be passed to executeMove. However, preMoveStatusCheck
-            // receives only user/foe/rng — the move is resolved by the caller. We use
-            // a simplified approach: frozen always blocks. The self-defrost for
-            // Flame Wheel / Sacred Fire is a documented hook for M13.6/M13.7.
-            // (The end-of-turn HandleDefrost gives the 10% random thaw.)
-            (false, user, [ $"{user.Species.Name} is frozen solid!" ], rng)
+            (false, false, user, [ $"{user.Species.Name} is frozen solid!" ], rng)
         | _ ->
 
-        // 3. Paralysis full-para gate (25% = 64/256)
+        // 3. Flinch gate (effect_commands.asm l.223-233).
+        // Flinch only matters if the flinch flag was set by the opponent who
+        // moved first. Since moves execute in speed order and flinch is set
+        // during the first mover's executeMove, if userMovedFirst is true the
+        // flag cannot have been set yet, so we skip the gate.
+        let user, flinchBlock =
+            if user.Volatile.Flinch then
+                let cleared = { user with Volatile = { user.Volatile with Flinch = false } }
+                if not userMovedFirst then (cleared, true)
+                else (cleared, false)
+            else (user, false)
+        if flinchBlock then
+            (false, false, user, [ $"{user.Species.Name} flinched!" ], rng)
+        else
+
+        // 4. Paralysis full-para gate (25% = 64/256)
         match user.Status with
         | Paralysis ->
             let roll, rng' = Rng.next rng
             if roll < 64 then
-                (false, user, [ $"{user.Species.Name} is fully paralyzed!" ], rng')
+                (false, false, user, [ $"{user.Species.Name} is fully paralyzed!" ], rng')
             else
-                (true, user, [], rng')
+                (true, false, user, [], rng')
         | _ ->
 
-        (true, user, [], rng)
+        // 5. Confusion gate (effect_commands.asm l.253-288).
+        match user.Volatile.Confusion with
+        | Some turns ->
+            let remaining = turns - 1
+            if remaining = 0 then
+                // Snap out.
+                let vol = { user.Volatile with Confusion = None }
+                let user' = { user with Volatile = vol }
+                (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng)
+            else
+                let vol = { user.Volatile with Confusion = Some remaining }
+                let user' = { user with Volatile = vol }
+                let msgs = [ $"{user.Species.Name} is confused!" ]
+                // 50% self-hit: BattleRandom; cp 128; jr nc, .not_confused
+                let roll, rng' = Rng.next rng
+                if roll < 128 then
+                    // Self-hit: caller applies the 40-power typeless physical hit.
+                    (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], rng')
+                else
+                    (true, false, user', msgs, rng')
+        | None ->
+
+        (true, false, user, [], rng)
+
+    // -- Phase: confusion self-hit -------------------------------------------
+
+    /// 40-power typeless physical self-hit (HitSelfInConfusion,
+    /// effect_commands.asm l.2861). Uses the user's own Attack vs own Defense,
+    /// no crit, no type effectiveness, no STAB, max roll (255).
+    /// Faithful to HitSelfInConfusion + BattleCommand_DamageCalc with the
+    /// confusion-specific overrides (typeless = type 0xFF, wCriticalHit = 0).
+    let private confusionSelfHitDamage (user: BattleMon) : int =
+        let atk =
+            let raw = BattleMon.effectiveAttack user
+            if user.Status = Burn then max 1 (raw / 2) else raw
+        let def = BattleMon.effectiveDefense user
+        // (((2*Level/5 + 2) * 40 * Atk) / Def) / 50 + 2
+        let mutable d = 2 * user.Level / 5 + 2
+        d <- d * 40
+        d <- d * atk
+        d <- d / def
+        d <- d / 50
+        // No crit doubling. Cap + min damage floor.
+        d <- min 997 d + 2
+        // No STAB, no type effectiveness. Max roll (faithful: confusion
+        // self-hit uses a fixed spread; the disassembly calls DamageCalc
+        // which does roll, but confusion doesn't re-roll — we use 255).
+        d <- d * 255 / 255
+        d
 
     // -- Phase: accuracy / miss check (CheckHit) ------------------------------
 
@@ -237,6 +297,44 @@ module Battle =
                 (m, [], rng')
         | _ -> (m, [], rng)
 
+    /// Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
+    /// Decrement trap counter; at 0 release, else chip MaxHP/16 (min 1).
+    /// If the mon has a substitute, wrap is suppressed (faithful to l.1183).
+    let private applyWrap (m: BattleMon) : BattleMon * string list =
+        if BattleMon.isFainted m then (m, [])
+        else
+        match m.Volatile.Trapped with
+        | None -> (m, [])
+        | Some _ when m.Volatile.Substitute.IsSome ->
+            // Substitute suppresses wrap chip (core.asm l.1183).
+            (m, [])
+        | Some turns ->
+            let remaining = turns - 1
+            if remaining = 0 then
+                let vol = { m.Volatile with Trapped = None }
+                let m' = { m with Volatile = vol }
+                (m', [ $"{m.Species.Name} was released!" ])
+            else
+                let chip = max 1 (m.MaxHp / 16)
+                let vol = { m.Volatile with Trapped = Some remaining }
+                let m' = { m with Hp = max 0 (m.Hp - chip); Volatile = vol }
+                (m', [ $"{m.Species.Name} is hurt by the trap!" ])
+
+    /// Leech Seed drain (ResidualDamage, core.asm l.1008-1029).
+    /// Drains MaxHP/8 (min 1) from the seeded mon and heals the other side.
+    /// Returns (seeded, other, msgs).
+    let private applyLeechSeed (seeded: BattleMon) (other: BattleMon) : BattleMon * BattleMon * string list =
+        if BattleMon.isFainted seeded then (seeded, other, [])
+        else
+        if not seeded.Volatile.LeechSeed then (seeded, other, [])
+        else
+            let drain = max 1 (seeded.MaxHp / 8)
+            let actualDrain = min seeded.Hp drain
+            let seeded' = { seeded with Hp = max 0 (seeded.Hp - drain) }
+            let healed = min other.MaxHp (other.Hp + actualDrain)
+            let other' = { other with Hp = healed }
+            (seeded', other', [ $"{seeded.Species.Name}'s health is sapped by Leech Seed!" ])
+
     let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng)
         : BattleMon * BattleMon * string list * Rng =
         let mutable p = player
@@ -244,7 +342,18 @@ module Battle =
         let mutable r = rng
         let mutable msgs: string list = []
 
-        // Slots 1-5: stubs (future sight, weather, wrap, perish, items)
+        // Slot 1: Future Sight countdown — stub (M13.7)
+        // Slot 2: Weather (sandstorm chip, timer) — stub (M13.8)
+
+        // Slot 3: Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
+        // Player then enemy.
+        let p', pWrapMsgs = applyWrap p
+        p <- p'; msgs <- msgs @ pWrapMsgs
+        let e', eWrapMsgs = applyWrap e
+        e <- e'; msgs <- msgs @ eWrapMsgs
+
+        // Slot 4: Perish Song countdown — stub (M13.8)
+        // Slot 5: Leftovers / items — stub (items scope)
 
         // Slot 6: Defrost (10% thaw). Player then enemy.
         let p', pDefMsgs, r' = applyDefrost p r
@@ -252,17 +361,26 @@ module Battle =
         let e', eDefMsgs, r' = applyDefrost e r
         e <- e'; r <- r'; msgs <- msgs @ eDefMsgs
 
-        // Slot 7: Poison/Toxic tick. Player then enemy.
+        // Slot 7: Poison/Toxic/Burn tick (ResidualDamage PSN|BRN path).
+        // Player then enemy.
         let p', pPsnMsgs = applyResidual p
         p <- p'; msgs <- msgs @ pPsnMsgs
         let e', ePsnMsgs = applyResidual e
         e <- e'; msgs <- msgs @ ePsnMsgs
 
-        // Slots 8+: Burn is handled by applyResidual above (same path as poison
-        // in the disassembly — ResidualDamage checks PSN|BRN together).
+        // Slot 8: Leech Seed drain (ResidualDamage, core.asm l.1008).
+        // Player-seeded drains to enemy, then enemy-seeded drains to player.
+        let p', e', pSeedMsgs = applyLeechSeed p e
+        p <- p'; e <- e'; msgs <- msgs @ pSeedMsgs
+        let e', p', eSeedMsgs = applyLeechSeed e p
+        p <- p'; e <- e'; msgs <- msgs @ eSeedMsgs
 
-        // Slots 9-15: stubs (leech seed, nightmare, curse, safeguard, screens,
-        // encore, disable — M13.4/M13.8)
+        // Slot 9: Nightmare — stub (M13.8: requires Sleep check, chip MaxHP/4)
+        // Slot 10: Curse chip — stub (M13.8: ghost-type curse, chip MaxHP/4)
+        // Slot 11: Safeguard timer — stub (M13.8)
+        // Slot 12: Reflect/Light Screen timer — stub (M13.8)
+        // Slot 13: Encore timer — stub (M13.9)
+        // Slot 14: Disable timer — stub (M13.9)
 
         (p, e, msgs, r)
 
@@ -344,12 +462,27 @@ module Battle =
                     if playerIsUser then player, enemy, playerMv, playerMvIndex, playerStruggle
                     else enemy, player, enemyMv, enemyMvIndex, enemyStruggle
 
+                // Did this user move first this turn?
+                let userMovedFirst =
+                    if playerIsUser then playerFirst else not playerFirst
+
                 // Phase: pre-move status gates
-                let canAct, user, gateMsgs, rng' = preMoveStatusCheck user foe rng
+                let canAct, selfHit, user, gateMsgs, rng' = preMoveStatusCheck user foe userMovedFirst rng
                 rng <- rng'
                 msgs <- msgs @ gateMsgs
 
-                if not canAct then
+                if selfHit then
+                    // Confusion self-hit: 40-power typeless physical, user hits itself.
+                    let dmg = confusionSelfHitDamage user
+                    let user = { user with Hp = max 0 (user.Hp - dmg) }
+                    if playerIsUser then player <- user else enemy <- user
+                    // Check if self-hit caused a faint.
+                    let faintOutcome, faintMsgs = faintCheck player enemy
+                    msgs <- msgs @ faintMsgs
+                    match faintOutcome with
+                    | Some o -> outcome <- Some o; false
+                    | None -> true
+                elif not canAct then
                     if playerIsUser then player <- user else enemy <- user
                     true
                 else
@@ -359,7 +492,7 @@ module Battle =
                 rng <- rng'
                 msgs <- msgs @ moveMsgs
 
-                // Phase: deduct PP (Struggle does not consume PP —
+                // Phase: deduct PP (Struggle does not consume PP --
                 // effect_commands.asm l.974: cp STRUGGLE; ret z)
                 let user =
                     if isStruggle then user
@@ -406,10 +539,15 @@ module Battle =
             Outcome = outcome
             Rng = rng }
 
-    /// The player flees the battle (always succeeds in the slice).
+    /// The player flees the battle. Blocked if the player is trapped (Wrap/Bind)
+    /// or locked in by Mean Look / Spider Web.
     let run (s: BattleState) : BattleState =
         if isOver s then
             s
+        elif s.Player.Volatile.Trapped.IsSome then
+            { s with Messages = [ $"{s.Player.Species.Name} is trapped and can't escape!" ] }
+        elif s.Player.Volatile.CantEscape then
+            { s with Messages = [ $"{s.Player.Species.Name} can't escape!" ] }
         else
             { s with
                 Messages = [ "Got away safely!" ]

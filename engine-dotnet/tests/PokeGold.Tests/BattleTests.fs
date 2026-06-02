@@ -1117,3 +1117,410 @@ let ``paralysis affects turn order via speed`` () =
                  with Status = Paralysis }
     let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
     Assert.True(BattleMon.effectiveSpeed user < BattleMon.effectiveSpeed foe)
+
+// ============================================================================
+//  M13.4 — Volatile status core tests
+// ============================================================================
+
+// Helper moves for volatile-status tests.
+let private confuseMove =
+    move "CONFUSE_RAY" "EFFECT_CONFUSE" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+let private leechSeedMove =
+    move "LEECH_SEED" "EFFECT_LEECH_SEED" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+let private wrapMove =
+    move "WRAP" "EFFECT_TRAP_TARGET" 15 (ty "NORMAL")
+
+let private substituteMove =
+    move "SUBSTITUTE" "EFFECT_SUBSTITUTE" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+let private focusEnergyMove =
+    move "FOCUS_ENERGY" "EFFECT_FOCUS_ENERGY" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+let private mistMove =
+    move "MIST" "EFFECT_MIST" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+let private meanLookMove =
+    move "MEAN_LOOK" "EFFECT_MEAN_LOOK" 0 (ty "NORMAL")
+    |> fun m -> { m with Accuracy = 100 }
+
+// -- Confusion ----------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_CONFUSE sets confusion on target with 2-5 turns`` () =
+    // Player faster (speed 200 vs 1). Uses Confuse Ray (acc 100 -> auto-hit).
+    // RNG draws: rollHit crit (draw 0) + spread (draw 1), then confusion turns (draw 2).
+    // Seed 42: draw 2 = 165, 165 & 3 = 1, +2 = 3 turns.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ confuseMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "became confused!")
+
+[<Fact>]
+let ``confused mon has 50 percent chance of self-hit`` () =
+    // Set confusion directly (3 turns). Player faster.
+    // On enemy's turn: confusion dec 3->2, then self-hit roll.
+    // Use a seed where the self-hit roll < 128 after the player's move draws.
+    // Player uses Growl (no Damage command -> still consumes crit+spread rollHit draws).
+    // Player preMoveCheck: no draws (healthy).
+    // Player executeMove: checkHit (acc 100 -> auto-hit, no draw), rollHit (draw 0, 1).
+    // Enemy preMoveCheck: confusion gate: dec, roll draw 2.
+    // Seed 42: draw 2 = 165. 165 >= 128 -> no self-hit.
+    // Need draw 2 < 128. Seed 7: draw 2 = 116 < 128 -> self-hit!
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Confusion = Some 3 } }
+    let state = Battle.create user foe 7u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is confused!")
+    Assert.Contains(after.Messages, fun m -> m.Contains "hurt itself in its confusion!")
+    // Verify enemy took self-hit damage (40-power, atk 30, def 25, L10).
+    // Self-hit: (2*10/5+2)*40*30/25/50 = 6*40*30/25/50 = 5. min 997 5 + 2 = 7. *255/255=7
+    Assert.True(after.Enemy.Hp < 100)
+
+[<Fact>]
+let ``confused mon snaps out when counter reaches 0`` () =
+    // Set confusion to 1 turn remaining. On next turn, dec 1->0 -> snap out.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Confusion = Some 1 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "snapped out of confusion!")
+    Assert.Equal(None, after.Enemy.Volatile.Confusion)
+
+[<Fact>]
+let ``EFFECT_CONFUSE fails on already confused target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ confuseMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Confusion = Some 3 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is already confused!")
+
+// -- Flinch -------------------------------------------------------------------
+
+[<Fact>]
+let ``flinched mon cannot move when opponent moved first`` () =
+    // Enemy is slower (speed 1) and has Flinch set.
+    // Player acts first (faster), enemy's flinch gate blocks.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ strongHit ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Flinch = true } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "flinched!")
+
+[<Fact>]
+let ``flinch is ignored when the flinched mon moved first`` () =
+    // Enemy is FASTER (speed 200) and has Flinch set.
+    // Enemy moves first -> flinch doesn't block (user hasn't set it yet).
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 1
+                 with Moves = [ strongHit ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 200
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Flinch = true } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // Flinch is cleared but doesn't prevent action.
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "flinched!")
+    Assert.False(after.Enemy.Volatile.Flinch)
+
+[<Fact>]
+let ``flinch is cleared after the pre-move gate`` () =
+    // Even if flinch blocked, the flag should be cleared.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ strongHit ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Flinch = true } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.False(after.Enemy.Volatile.Flinch)
+
+// -- Leech Seed ---------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_LEECH_SEED seeds the target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ leechSeedMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was seeded!")
+    Assert.True(after.Enemy.Volatile.LeechSeed)
+
+[<Fact>]
+let ``EFFECT_LEECH_SEED fails on Grass-type target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ leechSeedMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "GRASS") (ty "GRASS") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "doesn't affect")
+    Assert.False(after.Enemy.Volatile.LeechSeed)
+
+[<Fact>]
+let ``EFFECT_LEECH_SEED fails on already seeded target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ leechSeedMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with LeechSeed = true } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "evaded")
+
+[<Fact>]
+let ``leech seed drains MaxHp div 8 and heals the other side`` () =
+    // Enemy is seeded, has 100 HP / 100 MaxHp. Player has 150/200 HP.
+    // End-of-turn: drain = max(1, 100/8) = 12. Enemy loses 12, player gains 12.
+    // Use non-damaging moves (Growl) so no combat damage interferes.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40]; Hp = 150 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ growl ]; Pp = [40];
+                     Volatile = { VolatileStatus.empty with LeechSeed = true } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "sapped by Leech Seed!")
+    // Drain = max(1, 100/8) = 12
+    Assert.Equal(100 - 12, after.Enemy.Hp)
+    Assert.Equal(min 200 (150 + 12), after.Player.Hp)
+
+// -- Trap / Wrap --------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_TRAP_TARGET traps the foe for 3-6 turns`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ wrapMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was trapped!")
+    Assert.True(after.Enemy.Volatile.Trapped.IsSome)
+
+[<Fact>]
+let ``trapped mon takes 1-16th MaxHp chip each end-of-turn`` () =
+    // Foe already trapped (counter 3). End-of-turn: dec to 2, chip = max(1, 100/16) = 6.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ growl ]; Pp = [40];
+                     Volatile = { VolatileStatus.empty with Trapped = Some 3 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is hurt by the trap!")
+    // Chip = max(1, 100/16) = 6. Foe HP = 100 - 6 = 94.
+    Assert.Equal(94, after.Enemy.Hp)
+    Assert.Equal(Some 2, after.Enemy.Volatile.Trapped)
+
+[<Fact>]
+let ``trapped mon is released when counter reaches 0`` () =
+    // Foe trapped at counter 1. End-of-turn: dec to 0 -> release (no chip).
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ growl ]; Pp = [40];
+                     Volatile = { VolatileStatus.empty with Trapped = Some 1 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was released!")
+    Assert.Equal(None, after.Enemy.Volatile.Trapped)
+    Assert.Equal(100, after.Enemy.Hp) // No chip on release turn.
+
+[<Fact>]
+let ``trapped player cannot flee`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Trapped = Some 2 } }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.run state
+    Assert.Contains(after.Messages, fun m -> m.Contains "trapped and can't escape!")
+    Assert.Equal(None, after.Outcome)
+
+// -- Substitute ---------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_SUBSTITUTE creates a substitute at MaxHp div 4 cost`` () =
+    // User has 200 MaxHp, 200 Hp. Cost = 200/4 = 50. Sub HP = 50.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ substituteMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "made a substitute!")
+    Assert.Equal(Some 50, after.Player.Volatile.Substitute)
+    Assert.Equal(150, after.Player.Hp)
+
+[<Fact>]
+let ``substitute fails when HP is too low`` () =
+    // User has 200 MaxHp but only 40 Hp. Cost = 50 > 40. Fail.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ substituteMove ]; Pp = [10]; Hp = 40 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "too weak to make a substitute!")
+    Assert.Equal(None, after.Player.Volatile.Substitute)
+
+[<Fact>]
+let ``substitute absorbs damage instead of mon HP`` () =
+    // Foe has a substitute with 50 HP. Player hits foe with a strong move.
+    // Damage goes to sub, not to foe HP.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200
+                 with Moves = [ strongHit ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Substitute = Some 50 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // Foe's HP should be unchanged; sub HP should have decreased.
+    Assert.Equal(100, after.Enemy.Hp)
+
+[<Fact>]
+let ``substitute breaks when reduced to 0 or below`` () =
+    // Foe has sub with 5 HP. Strong hit exceeds 5 -> sub breaks.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200
+                 with Moves = [ strongHit ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Substitute = Some 5 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "substitute faded!")
+    Assert.Equal(None, after.Enemy.Volatile.Substitute)
+    // Foe's actual HP untouched (excess damage doesn't overflow to HP).
+    Assert.Equal(100, after.Enemy.Hp)
+
+[<Fact>]
+let ``substitute blocks status infliction`` () =
+    let sleepMove = move "SLEEP_POWDER" "EFFECT_SLEEP" 0 (ty "NORMAL")
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ sleepMove ]; Pp = [15] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Substitute = Some 50 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // Sleep should not be applied (blocked by sub).
+    Assert.Equal(Healthy, after.Enemy.Status)
+
+[<Fact>]
+let ``substitute blocks stat-lowering moves`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ growl ]; Pp = [40] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Substitute = Some 50 } }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // Growl should fail to lower Attack (blocked by sub).
+    Assert.Equal(0, after.Enemy.AtkStage)
+
+// -- Focus Energy -------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_FOCUS_ENERGY sets the FocusEnergy flag`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ focusEnergyMove ]; Pp = [30] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is getting pumped!")
+    Assert.True(after.Player.Volatile.FocusEnergy)
+
+[<Fact>]
+let ``focus energy already active fails`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ focusEnergyMove ]; Pp = [30];
+                     Volatile = { VolatileStatus.empty with FocusEnergy = true } }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "But it failed!")
+
+[<Fact>]
+let ``focus energy increases crit stage by 1`` () =
+    // CriticalHit.critStage returns higher stage with FocusEnergy=true.
+    let normalMove = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let stageWithout = CriticalHit.critStage false normalMove
+    let stageWith = CriticalHit.critStage true normalMove
+    Assert.Equal(stageWithout + 1, stageWith)
+
+// -- Mist ---------------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_MIST sets the Mist flag`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ mistMove ]; Pp = [30] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "shrouded in mist!")
+    Assert.True(after.Player.Volatile.Mist)
+
+[<Fact>]
+let ``mist blocks opponent stat-lowering moves`` () =
+    // Foe uses Growl on player who has Mist.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 1
+                 with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with Mist = true } }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 200
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "protected by mist!")
+    Assert.Equal(0, after.Player.AtkStage) // Attack not lowered.
+
+// -- Mean Look ----------------------------------------------------------------
+
+[<Fact>]
+let ``EFFECT_MEAN_LOOK sets CantEscape on foe`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ meanLookMove ]; Pp = [5] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "can't escape now!")
+    Assert.True(after.Enemy.Volatile.CantEscape)
+
+[<Fact>]
+let ``mean look blocks player from fleeing`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 10 200 30 25 200
+                 with Moves = [ strongHit ]; Pp = [35];
+                     Volatile = { VolatileStatus.empty with CantEscape = true } }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.run state
+    Assert.Contains(after.Messages, fun m -> m.Contains "can't escape!")
+    Assert.Equal(None, after.Outcome)
