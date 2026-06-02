@@ -85,6 +85,7 @@
     <!-- Battle: immutable battlers + Gen-2 damage, effect commands, turn loop. -->
     <Compile Include="Battle\BattleMon.fs" />
     <Compile Include="Battle\Damage.fs" />
+    <Compile Include="Battle\EffectCommand.fs" />
     <Compile Include="Battle\Effects.fs" />
     <Compile Include="Battle\Battle.fs" />
     <!-- Player: persistent party, bag, dex state. -->

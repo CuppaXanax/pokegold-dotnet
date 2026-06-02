@@ -2,22 +2,14 @@ namespace PokeGold.Game.Battle
 
 open PokeGold.Game.Data
 
-/// One of the five battle stats a stage modifier can target.
-type Stat =
-    | Attack
-    | Defense
-    | Speed
-    | SpAttack
-    | SpDefense
-
-/// The battle-effect command language: a small DU mirroring the disassembly's
-/// per-move effect scripts (`engine/battle/move_effects/…`). A move's effect
-/// constant maps to a sequence of these, which the turn loop interprets. The
-/// slice covers the damaging hit plus single-stage stat drops/raises.
-type EffectCommand =
-    | Damage
-    | LowerTargetStat of Stat
-    | RaiseUserStat of Stat
+// ---------------------------------------------------------------------------
+//  Effects.fs -- effect dispatch + interpreter
+//
+//  The `Stat` and `EffectCommand` DUs live in EffectCommand.fs so that
+//  parallel family slices (M13.5-M13.8) can add cases with minimal merge
+//  contention. This file owns `forMove` (mapping EFFECT_* strings to command
+//  lists) and `apply` (interpreting one command).
+// ---------------------------------------------------------------------------
 
 module Effects =
 

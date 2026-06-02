@@ -2,8 +2,58 @@ namespace PokeGold.Game.Battle
 
 open PokeGold.Game.Data
 
+/// Non-volatile status condition (constants/pokemon_data_constants.asm).
+/// A mon has exactly one (or Healthy). Sleep carries a counter (1-7 turns),
+/// BadPoison (Toxic) carries a ramp counter that grows each end-of-turn tick.
+/// Behavior is NOT implemented here -- see M13.3.
+type StatusCondition =
+    | Healthy
+    | Sleep of turnsLeft: int
+    | Poison
+    | BadPoison of counter: int
+    | Burn
+    | Freeze
+    | Paralysis
+
+/// Per-battle volatile status flags that reset on switch-out.
+/// Later slices (M13.4, M13.7, M13.8) populate and consume these fields;
+/// M13.0 only defines the data shape and a neutral default.
+type VolatileStatus =
+    { /// Confusion turns remaining; None = not confused.
+      Confusion: int option
+      /// Set when a move with a flinch secondary fires; cleared each turn.
+      Flinch: bool
+      /// Leech Seed is active on this mon.
+      LeechSeed: bool
+      /// Substitute HP remaining; None = no substitute.
+      Substitute: int option
+      /// Trapped/wrapped turns remaining; None = not trapped.
+      Trapped: int option
+      /// Focus Energy is active (crit stage +1).
+      FocusEnergy: bool
+      /// Charging a two-turn move (e.g. Fly, Dig); None = not charging.
+      /// Later slices will refine this to carry the move being charged.
+      Charging: int option
+      /// Must recharge this turn (e.g. after Hyper Beam).
+      Recharge: bool
+      /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
+      Rampage: int option }
+
+module VolatileStatus =
+    /// Neutral/empty volatile status -- no flags set.
+    let empty : VolatileStatus =
+        { Confusion = None
+          Flinch = false
+          LeechSeed = false
+          Substitute = None
+          Trapped = None
+          FocusEnergy = false
+          Charging = None
+          Recharge = false
+          Rampage = None }
+
 /// A combatant in a battle: a species at a level with derived stats, current HP,
-/// a move set, and per-stat stage modifiers (−6..+6). Everything is immutable;
+/// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;
 /// the turn loop produces new `BattleMon` values rather than mutating.
 type BattleMon =
     { Species: BaseStats
@@ -16,11 +66,21 @@ type BattleMon =
       SpAttack: int
       SpDefense: int
       Moves: MoveData list
+      /// Current PP for each move, parallel to Moves. Init from MoveData.Pp.
+      Pp: int list
+      /// Non-volatile status condition.
+      Status: StatusCondition
       AtkStage: int
       DefStage: int
       SpdStage: int
       SpAtkStage: int
-      SpDefStage: int }
+      SpDefStage: int
+      /// Accuracy stage (-6..+6). Used by M13.1 hit check.
+      AccStage: int
+      /// Evasion stage (-6..+6). Used by M13.1 hit check.
+      EvaStage: int
+      /// Per-battle volatile status flags. See VolatileStatus type.
+      Volatile: VolatileStatus }
 
 module BattleMon =
 
@@ -63,7 +123,8 @@ module BattleMon =
     let calcStat baseStat level = statCore baseStat level + 5
 
     /// Build a battler from species data at a level with the given moves,
-    /// starting at full HP with neutral stat stages.
+    /// starting at full HP with neutral stat stages, healthy status, full PP,
+    /// and empty volatile flags.
     let ofSpecies (species: BaseStats) (level: int) (moves: MoveData list) : BattleMon =
         let maxHp = calcHp species.Hp level
 
@@ -77,8 +138,13 @@ module BattleMon =
           SpAttack = calcStat species.SpAttack level
           SpDefense = calcStat species.SpDefense level
           Moves = moves
+          Pp = moves |> List.map (fun m -> m.Pp)
+          Status = Healthy
           AtkStage = 0
           DefStage = 0
           SpdStage = 0
           SpAtkStage = 0
-          SpDefStage = 0 }
+          SpDefStage = 0
+          AccStage = 0
+          EvaStage = 0
+          Volatile = VolatileStatus.empty }

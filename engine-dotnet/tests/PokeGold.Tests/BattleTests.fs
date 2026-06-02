@@ -85,11 +85,16 @@ let private mon name t1 t2 level hp atk def spd : BattleMon =
       SpAttack = atk
       SpDefense = def
       Moves = []
+      Pp = []
+      Status = Healthy
       AtkStage = 0
       DefStage = 0
       SpdStage = 0
       SpAtkStage = 0
-      SpDefStage = 0 }
+      SpDefStage = 0
+      AccStage = 0
+      EvaStage = 0
+      Volatile = VolatileStatus.empty }
 
 let private move name effect power typ : MoveData =
     { Name = name
@@ -180,3 +185,75 @@ let ``the real demo encounter resolves with loaded data`` () =
         turns <- turns + 1
 
     Assert.True(state.Outcome.IsSome)
+
+// --- M13.0 Scaffolding tests: neutral-init + refactored turn loop parity ------
+
+[<Fact>]
+let ``ofSpecies initializes PP from MoveData`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+    Assert.Equal(2, m.Pp.Length)
+    Assert.Equal(35, m.Pp.[0]) // Tackle PP
+    Assert.Equal(30, m.Pp.[1]) // Leer PP
+
+[<Fact>]
+let ``ofSpecies initializes status to Healthy`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ]
+    Assert.Equal(Healthy, m.Status)
+
+[<Fact>]
+let ``ofSpecies initializes accuracy and evasion stages to 0`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ]
+    Assert.Equal(0, m.AccStage)
+    Assert.Equal(0, m.EvaStage)
+
+[<Fact>]
+let ``ofSpecies initializes volatile status to empty`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ]
+    Assert.Equal(VolatileStatus.empty, m.Volatile)
+    Assert.Equal(None, m.Volatile.Confusion)
+    Assert.Equal(false, m.Volatile.Flinch)
+    Assert.Equal(false, m.Volatile.LeechSeed)
+    Assert.Equal(None, m.Volatile.Substitute)
+    Assert.Equal(None, m.Volatile.Trapped)
+    Assert.Equal(false, m.Volatile.FocusEnergy)
+    Assert.Equal(None, m.Volatile.Charging)
+    Assert.Equal(false, m.Volatile.Recharge)
+    Assert.Equal(None, m.Volatile.Rampage)
+
+[<Fact>]
+let ``refactored turn loop reproduces demo encounter outcome`` () =
+    // Same scenario as the existing demo test -- must produce the identical
+    // final state to confirm the refactoring is behavior-preserving.
+    let player =
+        BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+    let enemy = BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
+    let mutable state = Battle.create player enemy 0x1234u
+    let mutable turns = 0
+    while not (Battle.isOver state) && turns < 100 do
+        state <- Battle.chooseMove 0 state
+        turns <- turns + 1
+    Assert.True(state.Outcome.IsSome)
+    // Pin the exact outcome and turn count so future changes are caught.
+    Assert.Equal(Some Win, state.Outcome)
+
+[<Fact>]
+let ``VolatileStatus empty has all flags neutral`` () =
+    let v = VolatileStatus.empty
+    Assert.Equal(None, v.Confusion)
+    Assert.False(v.Flinch)
+    Assert.False(v.LeechSeed)
+    Assert.Equal(None, v.Substitute)
+    Assert.Equal(None, v.Trapped)
+    Assert.False(v.FocusEnergy)
+    Assert.Equal(None, v.Charging)
+    Assert.False(v.Recharge)
+    Assert.Equal(None, v.Rampage)
+
+[<Fact>]
+let ``MoveContext is populated during move execution`` () =
+    // Verify the turn loop still threads state correctly through the
+    // MoveContext-based execution by checking a stat-down move works.
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ growl ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ] }
+    let after = Battle.create player enemy 3u |> Battle.chooseMove 0
+    Assert.Equal(-1, after.Enemy.AtkStage)

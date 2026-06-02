@@ -20,6 +20,18 @@ module Rng =
         let s = r.State * 1103515245u + 12345u
         int ((s >>> 16) &&& 0xFFu), { State = s }
 
+/// Context threaded through effect-command execution for a single move.
+/// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose
+/// cleanly via fold. Later slices may add fields (e.g. hitCount, lastDamage).
+type MoveContext =
+    { User: BattleMon
+      Foe: BattleMon
+      Move: MoveData
+      Crit: bool
+      Roll: int
+      Rng: Rng
+      Messages: string list }
+
 /// The full state of a wild battle. Immutable: each turn produces a new state.
 /// `Messages` is the queue of lines the battle scene reveals one at a time;
 /// `Outcome` is set once the battle resolves.
@@ -33,7 +45,7 @@ type BattleState =
 module Battle =
 
     /// Stage-0 critical hit chance from `data/battle/critical_hit_chances.asm`
-    /// (`1 out_of 15` ≈ 17/256).
+    /// (`1 out_of 15` ~ 17/256).
     [<Literal>]
     let private CritThreshold = 17
 
@@ -47,7 +59,29 @@ module Battle =
 
     let isOver (s: BattleState) : bool = s.Outcome.IsSome
 
-    // Roll a critical hit and the 85–100% damage spread for one hit.
+    // -----------------------------------------------------------------------
+    //  Turn phases (faithful to effect_commands.asm DoMove/DoTurn ordering)
+    //
+    //  select -> pre-move status gates -> execute move -> secondary effects
+    //         -> faint check -> end-of-turn residuals -> end-of-turn faint check
+    //
+    //  Each phase is a small pure function. The orchestrator (chooseMove) calls
+    //  them in order. Later slices fill in the stubs.
+    // -----------------------------------------------------------------------
+
+    // -- Phase: pre-move status gates ----------------------------------------
+
+    /// Pre-move status gate. Returns (canAct, updatedUser, messages).
+    /// Currently always allows the move (stub). M13.3 will add sleep/freeze/
+    /// paralysis/confusion/flinch checks here.
+    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (_rng: Rng)
+        : bool * BattleMon * string list * Rng =
+        // Extension point: M13.3 inserts sleep wake check, freeze thaw,
+        // paralysis full-para, M13.4 inserts confusion self-hit, flinch.
+        (true, user, [], _rng)
+
+    // -- Phase: roll hit (crit + damage spread) ------------------------------
+
     let private rollHit (rng: Rng) : bool * int * Rng =
         let critByte, rng = Rng.next rng
         let spread, rng = Rng.next rng
@@ -55,33 +89,85 @@ module Battle =
         let roll = Damage.MinRoll + spread % (Damage.MaxRoll - Damage.MinRoll + 1)
         crit, roll, rng
 
-    // Execute one mon's move against the other, returning the updated attacker,
-    // defender, the lines to show, and the advanced RNG.
+    // -- Phase: execute move -------------------------------------------------
+
+    /// Execute one mon's move against the other using the MoveContext pattern.
+    /// Effect commands fold over the context, accumulating state changes and
+    /// messages. Returns updated (user, foe, messages, rng).
     let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng) =
         let crit, roll, rng = rollHit rng
         let intro = $"{user.Species.Name} used {move.Name}!"
 
-        let mutable u = user
-        let mutable f = foe
-        let mutable msgs = [ intro ]
+        let ctx : MoveContext =
+            { User = user
+              Foe = foe
+              Move = move
+              Crit = crit
+              Roll = roll
+              Rng = rng
+              Messages = [ intro ] }
 
-        for cmd in Effects.forMove move do
-            let u', f', notes = Effects.apply u f move crit roll cmd
-            u <- u'
-            f <- f'
-            msgs <- msgs @ notes
+        let ctx =
+            Effects.forMove move
+            |> List.fold (fun (c: MoveContext) cmd ->
+                let u', f', notes = Effects.apply c.User c.Foe c.Move c.Crit c.Roll cmd
+                { c with User = u'; Foe = f'; Messages = c.Messages @ notes }
+            ) ctx
 
-        u, f, msgs, rng
+        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng
 
-    // The enemy AI for the slice: use the first damaging move, else the first.
+    // -- Phase: end-of-turn residuals (between turns) ------------------------
+
+    /// End-of-turn residual effects, called after both sides have acted and
+    /// mid-turn faint checks have passed. Returns updated (player, enemy, msgs).
+    ///
+    /// EXTENSION POINT: Later slices insert effects here in the canonical
+    /// order from HandleBetweenTurnEffects (effect_commands.asm):
+    ///   1. Future Sight countdown
+    ///   2. Weather (sandstorm chip, sun/rain timer)
+    ///   3. Wrap/bind/clamp chip
+    ///   4. Perish Song countdown
+    ///   5. Leech Seed drain
+    ///   6. Poison/Toxic tick
+    ///   7. Burn tick
+    ///   8. Nightmare
+    ///   9. Curse chip
+    ///  10. Safeguard timer
+    ///  11. Reflect/Light Screen timer
+    ///  12. Encore timer
+    ///  13. Disable timer
+    /// Each is a pure function (player, enemy, rng) -> (player, enemy, msgs, rng).
+    /// The list below is executed in order; later slices append to it.
+    let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng)
+        : BattleMon * BattleMon * string list * Rng =
+        // Stub: no residuals yet. M13.3/M13.4/M13.8 will populate this.
+        (player, enemy, [], rng)
+
+    // -- Phase: faint check --------------------------------------------------
+
+    /// Check if either side has fainted and produce the appropriate outcome
+    /// and messages. Returns (outcome option, messages).
+    let private faintCheck (player: BattleMon) (enemy: BattleMon)
+        : Outcome option * string list =
+        if BattleMon.isFainted enemy then
+            (Some Win, [ $"Wild {enemy.Species.Name} fainted!"; "You won!" ])
+        elif BattleMon.isFainted player then
+            (Some Lose, [ $"{player.Species.Name} fainted!"; "You lost!" ])
+        else
+            (None, [])
+
+    // -- Enemy AI ------------------------------------------------------------
+
     let private enemyMove (enemy: BattleMon) : MoveData =
         match enemy.Moves |> List.tryFind (fun m -> m.Power > 0) with
         | Some m -> m
         | None -> List.head enemy.Moves
 
+    // -- Orchestrator --------------------------------------------------------
+
     /// The player selects a move (by index into their move list). This resolves a
     /// whole turn: both sides act in speed order, faints are checked between
-    /// actions, and the outcome is set if the battle ends.
+    /// actions, end-of-turn residuals run, and the outcome is set if the battle ends.
     let chooseMove (index: int) (s: BattleState) : BattleState =
         if isOver s then
             s
@@ -97,10 +183,10 @@ module Battle =
         let mutable player = s.Player
         let mutable enemy = s.Enemy
         let mutable rng = s.Rng
-        let mutable msgs = []
-        let mutable outcome = None
+        let mutable msgs: string list = []
+        let mutable outcome: Outcome option = None
 
-        // Run one side's action; returns false if the battle ended.
+        // Run one side's action (pre-move gate -> execute -> mid-turn faint check).
         let act (playerIsUser: bool) : bool =
             if outcome.IsSome then
                 false
@@ -108,9 +194,20 @@ module Battle =
                 let user, foe, move =
                     if playerIsUser then player, enemy, playerMv else enemy, player, enemyMv
 
-                let user, foe, lines, rng' = executeMove user foe move rng
+                // Phase: pre-move status gates
+                let canAct, user, gateMsgs, rng' = preMoveStatusCheck user foe rng
                 rng <- rng'
-                msgs <- msgs @ lines
+                msgs <- msgs @ gateMsgs
+
+                if not canAct then
+                    if playerIsUser then player <- user else enemy <- user
+                    true
+                else
+
+                // Phase: execute move
+                let user, foe, moveMsgs, rng' = executeMove user foe move rng
+                rng <- rng'
+                msgs <- msgs @ moveMsgs
 
                 if playerIsUser then
                     player <- user
@@ -119,19 +216,32 @@ module Battle =
                     enemy <- user
                     player <- foe
 
-                if BattleMon.isFainted enemy then
-                    msgs <- msgs @ [ $"Wild {enemy.Species.Name} fainted!"; "You won!" ]
-                    outcome <- Some Win
+                // Phase: mid-turn faint check
+                let faintOutcome, faintMsgs = faintCheck player enemy
+                msgs <- msgs @ faintMsgs
+                match faintOutcome with
+                | Some o ->
+                    outcome <- Some o
                     false
-                elif BattleMon.isFainted player then
-                    msgs <- msgs @ [ $"{player.Species.Name} fainted!"; "You lost!" ]
-                    outcome <- Some Lose
-                    false
-                else
-                    true
+                | None -> true
 
         let order = if playerFirst then [ true; false ] else [ false; true ]
         order |> List.iter (fun who -> act who |> ignore)
+
+        // Phase: end-of-turn residuals (only if nobody fainted mid-turn)
+        if outcome.IsNone then
+            let p, e, residualMsgs, rng' = betweenTurns player enemy rng
+            player <- p
+            enemy <- e
+            rng <- rng'
+            msgs <- msgs @ residualMsgs
+
+            // Phase: end-of-turn faint check
+            let faintOutcome, faintMsgs = faintCheck player enemy
+            msgs <- msgs @ faintMsgs
+            match faintOutcome with
+            | Some o -> outcome <- Some o
+            | None -> ()
 
         { s with
             Player = player
