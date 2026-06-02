@@ -140,6 +140,27 @@ module BattleMon =
 
     let isFainted (m: BattleMon) = m.Hp <= 0
 
+    /// True when the move at `index` has PP remaining and can be selected.
+    let canUseMove (index: int) (m: BattleMon) : bool =
+        index >= 0 && index < m.Pp.Length && m.Pp.[index] > 0
+
+    /// True when every move is at 0 PP (the mon must Struggle).
+    /// Returns false if the mon has no moves.
+    let mustStruggle (m: BattleMon) : bool =
+        not m.Pp.IsEmpty && m.Pp |> List.forall (fun pp -> pp = 0)
+
+    /// Max PP for the move at `index` (from the MoveData).
+    let maxPp (index: int) (m: BattleMon) : int =
+        m.Moves.[index].Pp
+
+    /// Return a new BattleMon with the PP at `index` decremented by 1 (min 0).
+    /// No-op if index is out of range.
+    let deductPp (index: int) (m: BattleMon) : BattleMon =
+        if index < 0 || index >= m.Pp.Length then m
+        else
+            let pp' = m.Pp |> List.mapi (fun i pp -> if i = index then max 0 (pp - 1) else pp)
+            { m with Pp = pp' }
+
     // The Gen-2 stat formula with DV = 0 and stat experience = 0 (see
     // engine/pokemon/move_mon.asm CalcMonStatC): the (2*Base*Level/100) core
     // plus Level + 10 for HP, or + 5 for every other stat.

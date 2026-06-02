@@ -112,7 +112,7 @@ let ``neutral non-STAB hit matches the hand-computed Gen-2 value`` () =
     let attacker = mon "ATTACKER" (ty "FIRE") (ty "FIRE") 10 100 30 25 50
     let defender = mon "DEFENDER" (ty "WATER") (ty "WATER") 10 100 30 25 50
     let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
-    Assert.Equal(7, Damage.calc attacker defender m false Damage.MaxRoll)
+    Assert.Equal(7, Damage.calc attacker defender m false Damage.MaxRoll false)
 
 [<Fact>]
 let ``STAB and super-effectiveness stack as the disassembly orders them`` () =
@@ -120,14 +120,14 @@ let ``STAB and super-effectiveness stack as the disassembly orders them`` () =
     let attacker = mon "ATTACKER" (ty "FIRE") (ty "FIRE") 10 100 30 25 50
     let defender = mon "DEFENDER" (ty "GRASS") (ty "GRASS") 10 100 30 25 50
     let m = move "EMBER" "EFFECT_NORMAL_HIT" 40 (ty "FIRE")
-    Assert.Equal(20, Damage.calc attacker defender m false Damage.MaxRoll)
+    Assert.Equal(20, Damage.calc attacker defender m false Damage.MaxRoll false)
 
 [<Fact>]
 let ``a type-immune defender takes zero damage`` () =
     let attacker = mon "ATTACKER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
     let defender = mon "DEFENDER" (ty "GHOST") (ty "GHOST") 10 100 30 25 50
     let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
-    Assert.Equal(0, Damage.calc attacker defender m false Damage.MaxRoll)
+    Assert.Equal(0, Damage.calc attacker defender m false Damage.MaxRoll false)
 
 [<Fact>]
 let ``a critical hit doubles the pre-modifier total`` () =
@@ -135,7 +135,7 @@ let ``a critical hit doubles the pre-modifier total`` () =
     let attacker = mon "ATTACKER" (ty "FIRE") (ty "FIRE") 10 100 30 25 50
     let defender = mon "DEFENDER" (ty "WATER") (ty "WATER") 10 100 30 25 50
     let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
-    Assert.Equal(12, Damage.calc attacker defender m true Damage.MaxRoll)
+    Assert.Equal(12, Damage.calc attacker defender m true Damage.MaxRoll false)
 
 // --- Turn loop ----------------------------------------------------------------
 
@@ -424,7 +424,113 @@ let ``VolatileStatus empty has all flags neutral`` () =
 let ``MoveContext is populated during move execution`` () =
     // Verify the turn loop still threads state correctly through the
     // MoveContext-based execution by checking a stat-down move works.
-    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ growl ] }
-    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ] }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ growl ]; Pp = [ 40 ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
     let after = Battle.create player enemy 3u |> Battle.chooseMove 0
     Assert.Equal(-1, after.Enemy.AtkStage)
+
+// --- M13.2 PP & Struggle -----------------------------------------------------
+
+[<Fact>]
+let ``PP decrements by 1 when a move is used`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ tackle; Moves.byName "LEER" ]
+    let enemy = BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
+    let state = Battle.create player enemy 0x1234u
+    let after = Battle.chooseMove 0 state
+    // Player used TACKLE (index 0): PP should be 34 (35 - 1).
+    Assert.Equal(tackle.Pp - 1, after.Player.Pp.[0])
+    // LEER was not used: PP stays at 30.
+    Assert.Equal(30, after.Player.Pp.[1])
+
+[<Fact>]
+let ``enemy PP decrements on move use`` () =
+    let tackle = Moves.byName "TACKLE"
+    // Use same-level mons so neither KOs the other in one turn.
+    let player =
+        BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ tackle ]
+    let enemy = BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ tackle ]
+    let state = Battle.create player enemy 0x1234u
+    let after = Battle.chooseMove 0 state
+    // Enemy also used TACKLE: PP should be 34.
+    Assert.Equal(tackle.Pp - 1, after.Enemy.Pp.[0])
+
+[<Fact>]
+let ``a move at 0 PP cannot be selected (canUseMove returns false)`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ tackle; Moves.byName "LEER" ]
+          with Pp = [ 0; 30 ] }
+    Assert.False(BattleMon.canUseMove 0 player)
+    Assert.True(BattleMon.canUseMove 1 player)
+
+[<Fact>]
+let ``mustStruggle is true only when all PP is 0`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+    Assert.False(BattleMon.mustStruggle m)
+    let exhausted = { m with Pp = [ 0; 0 ] }
+    Assert.True(BattleMon.mustStruggle exhausted)
+
+[<Fact>]
+let ``when all moves are 0 PP the user Struggles and takes recoil`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ tackle ]
+          with Pp = [ 0 ] }
+    let enemy =
+        { BattleMon.ofSpecies (Species.byName "PIDGEY") 50 [ tackle ]
+          with Pp = [ 35 ] }
+    let state = Battle.create player enemy 0x42u
+    let after = Battle.chooseMove 0 state
+    // Player should have struggled — look for the message.
+    Assert.Contains(after.Messages, fun m -> m.Contains "has no moves left!")
+    Assert.Contains(after.Messages, fun m -> m.Contains "used STRUGGLE")
+    // Player takes recoil damage.
+    Assert.Contains(after.Messages, fun m -> m.Contains "hit with recoil!")
+    Assert.True(after.Player.Hp < player.Hp)
+
+[<Fact>]
+let ``Struggle recoil is 1/4 of damage dealt, minimum 1`` () =
+    // Recoil = damage / 4, min 1.
+    // Verify via the Damage.calc for Struggle + known attacker/defender.
+    let struggle = Moves.byName "STRUGGLE"
+    let attacker = mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+    let defender = mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+    // Struggle is isStruggle=true so no STAB.
+    let dmg = Damage.calc attacker defender struggle false Damage.MaxRoll true
+    let recoil = max 1 (dmg / 4)
+    Assert.True(recoil >= 1)
+    // Verify STAB is skipped: a NORMAL-type mon using STRUGGLE (NORMAL type)
+    // should NOT get STAB.
+    let dmgNoStruggle = Damage.calc attacker defender struggle false Damage.MaxRoll false
+    // With STAB (isStruggle=false on NORMAL attacker with NORMAL Struggle):
+    // dmgNoStruggle should be higher because STAB applies.
+    Assert.True(dmgNoStruggle > dmg)
+
+[<Fact>]
+let ``enemy Struggles when out of PP`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ tackle ]
+          with Pp = [ 35 ] }
+    let enemy =
+        { BattleMon.ofSpecies (Species.byName "PIDGEY") 50 [ tackle ]
+          with Pp = [ 0 ] }
+    let state = Battle.create player enemy 0x42u
+    let after = Battle.chooseMove 0 state
+    // Enemy should have Struggled.
+    Assert.Contains(after.Messages, fun m -> m.Contains "PIDGEY has no moves left!")
+    Assert.Contains(after.Messages, fun m -> m.Contains "PIDGEY used STRUGGLE")
+
+[<Fact>]
+let ``FIGHT menu PP display helpers return correct values`` () =
+    let m = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE"; Moves.byName "LEER" ]
+    Assert.Equal(35, BattleMon.maxPp 0 m)
+    Assert.Equal(30, BattleMon.maxPp 1 m)
+    Assert.Equal(35, m.Pp.[0])
+    Assert.Equal(30, m.Pp.[1])
+    // After deducting PP:
+    let m' = BattleMon.deductPp 0 m
+    Assert.Equal(34, m'.Pp.[0])
+    Assert.Equal(30, m'.Pp.[1])

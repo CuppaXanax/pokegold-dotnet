@@ -8,30 +8,6 @@ type Outcome =
     | Lose
     | Ran
 
-/// A tiny deterministic RNG (a linear congruential generator) so battles are
-/// reproducible and seedable. Yields bytes in 0..255, matching the hardware's
-/// `BattleRandom`.
-type Rng = { State: uint32 }
-
-module Rng =
-    let create (seed: uint32) : Rng = { State = seed }
-
-    let next (r: Rng) : int * Rng =
-        let s = r.State * 1103515245u + 12345u
-        int ((s >>> 16) &&& 0xFFu), { State = s }
-
-/// Context threaded through effect-command execution for a single move.
-/// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose
-/// cleanly via fold. Later slices may add fields (e.g. hitCount, lastDamage).
-type MoveContext =
-    { User: BattleMon
-      Foe: BattleMon
-      Move: MoveData
-      Crit: bool
-      Roll: int
-      Rng: Rng
-      Messages: string list }
-
 /// The full state of a wild battle. Immutable: each turn produces a new state.
 /// `Messages` is the queue of lines the battle scene reveals one at a time;
 /// `Outcome` is set once the battle resolves.
@@ -144,15 +120,15 @@ module Battle =
     ///   1. Accuracy roll  — checkHit (skipped for EFFECT_ALWAYS_HIT / acc $FF)
     ///   2. Crit roll      — rollHit  (skipped on miss)
     ///   3. Spread roll    — rollHit  (skipped on miss)
-    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng) =
+    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
-        // Phase: accuracy check (before damage, matching GSC command order)
-        let hit, rng = checkHit user foe move rng
+        // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
+        let hit, rng =
+            if isStruggle then (true, rng)
+            else checkHit user foe move rng
 
         if not hit then
-            // Miss path: skip all effect commands. Message matches
-            // data/text/battle.asm AttackMissedText: "<USER>'s attack missed!"
             let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
             (user, foe, msgs, rng)
         else
@@ -167,13 +143,14 @@ module Battle =
               Crit = crit
               Roll = roll
               Rng = rng
-              Messages = [ intro ] }
+              Messages = [ intro ]
+              LastDamage = 0
+              IsStruggle = isStruggle }
 
         let ctx =
             Effects.forMove move
             |> List.fold (fun (c: MoveContext) cmd ->
-                let u', f', notes = Effects.apply c.User c.Foe c.Move c.Crit c.Roll cmd
-                { c with User = u'; Foe = f'; Messages = c.Messages @ notes }
+                Effects.applyCtx c cmd
             ) ctx
 
         ctx.User, ctx.Foe, ctx.Messages, ctx.Rng
@@ -220,10 +197,19 @@ module Battle =
 
     // -- Enemy AI ------------------------------------------------------------
 
-    let private enemyMove (enemy: BattleMon) : MoveData =
-        match enemy.Moves |> List.tryFind (fun m -> m.Power > 0) with
-        | Some m -> m
-        | None -> List.head enemy.Moves
+    /// Pick the enemy's move. When all PP is exhausted, returns None (Struggle).
+    let private enemyMoveChoice (enemy: BattleMon) : (MoveData * int) option =
+        if BattleMon.mustStruggle enemy then None
+        else
+            let indexed = enemy.Moves |> List.mapi (fun i m -> (m, i))
+            let hasPp i = i < enemy.Pp.Length && enemy.Pp.[i] > 0
+            let pick =
+                indexed |> List.tryFind (fun (m, i) -> m.Power > 0 && hasPp i)
+            match pick with
+            | Some p -> Some p
+            | None ->
+                indexed |> List.tryFind (fun (_, i) -> hasPp i)
+                |> Option.orElseWith (fun () -> indexed |> List.tryHead)
 
     // -- Orchestrator --------------------------------------------------------
 
@@ -235,8 +221,25 @@ module Battle =
             s
         else
 
-        let playerMv = s.Player.Moves.[index]
-        let enemyMv = enemyMove s.Enemy
+        // Determine player's move: Struggle if all PP exhausted, else the selected move.
+        let struggle = Moves.byName "STRUGGLE"
+        let playerStruggle = BattleMon.mustStruggle s.Player
+        let playerMv, playerMvIndex =
+            if playerStruggle then struggle, -1
+            else s.Player.Moves.[index], index
+
+        // Enemy move selection.
+        let enemyChoice = enemyMoveChoice s.Enemy
+        let enemyStruggle = enemyChoice.IsNone
+        let enemyMv, enemyMvIndex =
+            match enemyChoice with
+            | Some (m, i) -> m, i
+            | None -> struggle, -1
+
+        // Struggle messages (before moves execute).
+        let struggleMsgs =
+            [ if playerStruggle then $"{s.Player.Species.Name} has no moves left!"
+              if enemyStruggle then $"{s.Enemy.Species.Name} has no moves left!" ]
 
         // Faster mon acts first; ties favour the player.
         let playerFirst =
@@ -245,16 +248,17 @@ module Battle =
         let mutable player = s.Player
         let mutable enemy = s.Enemy
         let mutable rng = s.Rng
-        let mutable msgs: string list = []
+        let mutable msgs: string list = struggleMsgs
         let mutable outcome: Outcome option = None
 
-        // Run one side's action (pre-move gate -> execute -> mid-turn faint check).
+        // Run one side's action (pre-move gate -> execute -> PP deduct -> mid-turn faint check).
         let act (playerIsUser: bool) : bool =
             if outcome.IsSome then
                 false
             else
-                let user, foe, move =
-                    if playerIsUser then player, enemy, playerMv else enemy, player, enemyMv
+                let user, foe, move, mvIndex, isStruggle =
+                    if playerIsUser then player, enemy, playerMv, playerMvIndex, playerStruggle
+                    else enemy, player, enemyMv, enemyMvIndex, enemyStruggle
 
                 // Phase: pre-move status gates
                 let canAct, user, gateMsgs, rng' = preMoveStatusCheck user foe rng
@@ -267,9 +271,15 @@ module Battle =
                 else
 
                 // Phase: execute move
-                let user, foe, moveMsgs, rng' = executeMove user foe move rng
+                let user, foe, moveMsgs, rng' = executeMove user foe move isStruggle rng
                 rng <- rng'
                 msgs <- msgs @ moveMsgs
+
+                // Phase: deduct PP (Struggle does not consume PP —
+                // effect_commands.asm l.974: cp STRUGGLE; ret z)
+                let user =
+                    if isStruggle then user
+                    else BattleMon.deductPp mvIndex user
 
                 if playerIsUser then
                     player <- user

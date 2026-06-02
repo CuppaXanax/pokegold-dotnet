@@ -55,13 +55,19 @@ type BattleScene(font: Font, initial: BattleState) =
                         else
                             let moves = state.Player.Moves
 
-                            if edge buttons.Down prev.Down then
+                            if BattleMon.mustStruggle state.Player then
+                                // All PP exhausted — auto-Struggle (pass index 0, ignored).
+                                state <- Battle.chooseMove 0 state
+                                queue <- state.Messages
+                            elif edge buttons.Down prev.Down then
                                 cursor <- min (moves.Length - 1) (cursor + 1)
                             elif edge buttons.Up prev.Up then
                                 cursor <- max 0 (cursor - 1)
                             elif edge buttons.A prev.A then
-                                state <- Battle.chooseMove cursor state
-                                queue <- state.Messages
+                                if BattleMon.canUseMove cursor state.Player then
+                                    state <- Battle.chooseMove cursor state
+                                    queue <- state.Messages
+                                // else: 0 PP — do nothing (move blocked)
                             elif edge buttons.B prev.B then
                                 state <- Battle.run state
                                 queue <- state.Messages
@@ -76,7 +82,7 @@ type BattleScene(font: Font, initial: BattleState) =
 
             match box with
             | Some b -> TextRenderer.draw fb font b
-            | None -> if not (Battle.isOver state) then BattleRenderer.drawMenu fb font state.Player.Moves cursor
+            | None -> if not (Battle.isOver state) then BattleRenderer.drawMenu fb font state.Player.Moves state.Player.Pp cursor
 
     /// Word-wrap a battle message into the two-line box, inserting `<LINE>` for
     /// the second line and `<CONT>` (scroll) for any further lines, and a

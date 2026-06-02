@@ -85,8 +85,8 @@ module BattleRenderer =
             for col in 1 .. last - 1 do put col sr mid
             put last sr right
 
-    /// Draw the move-selection menu in the bottom box with a cursor.
-    let drawMenu (fb: Framebuffer) (font: Font) (moves: MoveData list) (cursor: int) =
+    /// Draw the move-selection menu in the bottom box with a cursor and PP display.
+    let drawMenu (fb: Framebuffer) (font: Font) (moves: MoveData list) (pp: int list) (cursor: int) =
         drawBox fb font
 
         moves
@@ -100,6 +100,13 @@ module BattleRenderer =
                             fb.SetPixel(2 * 8 + x, row * 8 + 1 + y, 0uy, 0uy, 0uy, 255uy)
 
             drawText fb font 3 row m.Name)
+
+        // PP display for the currently selected move (right side of box).
+        if cursor >= 0 && cursor < moves.Length && cursor < pp.Length then
+            let curPp = pp.[cursor]
+            let maxPp = moves.[cursor].Pp
+            let ppStr = $"PP {curPp}/{maxPp}"
+            drawText fb font (ScreenW - 1 - ppStr.Length) (13 + moves.Length) ppStr
 
     /// Draw a single message line in the bottom box.
     let drawMessage (fb: Framebuffer) (font: Font) (line: string) =

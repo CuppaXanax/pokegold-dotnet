@@ -29,8 +29,9 @@ module Damage =
 
     /// Damage dealt by `attacker`'s `move` against `defender`. `crit` doubles the
     /// pre-modifier total and (as in Gen 2) ignores stat-stage modifiers; `roll`
-    /// is the 217..255 spread divisor numerator.
-    let calc (attacker: BattleMon) (defender: BattleMon) (move: MoveData) (crit: bool) (roll: int) : int =
+    /// is the 217..255 spread divisor numerator. `isStruggle` skips STAB
+    /// (effect_commands.asm l.1221: cp STRUGGLE; ret z).
+    let calc (attacker: BattleMon) (defender: BattleMon) (move: MoveData) (crit: bool) (roll: int) (isStruggle: bool) : int =
         let physical = TypeChart.isPhysical move.Type
 
         // Critical hits use unmodified stats; otherwise stat stages apply.
@@ -59,8 +60,9 @@ module Damage =
         if crit then d <- d * 2
         d <- min d DamageCap + MinDamage
 
-        // STAB: ×1.5 as damage + damage/2.
-        if move.Type = attacker.Species.Type1 || move.Type = attacker.Species.Type2 then
+        // STAB: ×1.5 as damage + damage/2. Struggle skips STAB
+        // (effect_commands.asm l.1221: cp STRUGGLE; ret z).
+        if not isStruggle && (move.Type = attacker.Species.Type1 || move.Type = attacker.Species.Type2) then
             d <- d + d / 2
 
         // Type effectiveness: ×(multiplier/10) per distinct defender type.

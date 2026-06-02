@@ -1,5 +1,7 @@
 namespace PokeGold.Game.Battle
 
+open PokeGold.Game.Data
+
 // ---------------------------------------------------------------------------
 //  EffectCommand.fs -- shared battle-effect types
 //
@@ -16,6 +18,18 @@ namespace PokeGold.Game.Battle
 //  4.  Unknown/unhandled effects with Power > 0 fall back to [Damage];
 //      status-only moves with Power = 0 fall back to [].
 // ---------------------------------------------------------------------------
+
+/// A tiny deterministic RNG (a linear congruential generator) so battles are
+/// reproducible and seedable. Yields bytes in 0..255, matching the hardware's
+/// `BattleRandom`.
+type Rng = { State: uint32 }
+
+module Rng =
+    let create (seed: uint32) : Rng = { State = seed }
+
+    let next (r: Rng) : int * Rng =
+        let s = r.State * 1103515245u + 12345u
+        int ((s >>> 16) &&& 0xFFu), { State = s }
 
 /// One of the battle stats a stage modifier can target.
 /// Later slices may extend stat helpers but the DU cases are stable.
@@ -36,3 +50,23 @@ type EffectCommand =
     | Damage
     | LowerTargetStat of Stat
     | RaiseUserStat of Stat
+    /// Recoil: user takes 1/4 of the damage dealt (min 1 HP).
+    /// Used by EFFECT_RECOIL_HIT (Struggle, Take Down, Double-Edge, etc.).
+    | Recoil
+
+/// Context threaded through effect-command execution for a single move.
+/// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose
+/// cleanly via fold. Later slices may add fields (e.g. hitCount, lastDamage).
+type MoveContext =
+    { User: BattleMon
+      Foe: BattleMon
+      Move: MoveData
+      Crit: bool
+      Roll: int
+      Rng: Rng
+      Messages: string list
+      /// Damage dealt by the most recent Damage command this turn.
+      /// Used by Recoil to compute 1/4 recoil. Initialised to 0.
+      LastDamage: int
+      /// True when this move is Struggle (skips STAB, no PP deduction).
+      IsStruggle: bool }
