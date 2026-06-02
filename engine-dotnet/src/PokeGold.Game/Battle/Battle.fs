@@ -204,7 +204,13 @@ module Battle =
 
         if not hit then
             let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
-            (user, foe, msgs, rng)
+            // EFFECT_JUMP_KICK: crash damage on miss = 1/8 max HP, min 1.
+            if move.Effect = "EFFECT_JUMP_KICK" then
+                let crash = max 1 (user.MaxHp / 8)
+                let user = { user with Hp = max 0 (user.Hp - crash) }
+                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng)
+            else
+                (user, foe, msgs, rng)
         else
 
         let crit, roll, rng = rollHit (CriticalHit.critStage user.Volatile.FocusEnergy move) rng
@@ -219,7 +225,11 @@ module Battle =
               Rng = rng
               Messages = [ intro ]
               LastDamage = 0
-              IsStruggle = isStruggle }
+              IsStruggle = isStruggle
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0 }
 
         let ctx =
             Effects.forMove move

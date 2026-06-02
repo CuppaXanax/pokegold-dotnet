@@ -87,6 +87,82 @@ type EffectCommand =
     /// Prevent the target from fleeing (EFFECT_MEAN_LOOK).
     | SetMeanLook
 
+    // -----------------------------------------------------------------------
+    //  M13.5: damage-shaping & fixed damage family
+    // -----------------------------------------------------------------------
+
+    /// EFFECT_LEVEL_DAMAGE: damage = user's level (Seismic Toss, Night Shade).
+    | LevelDamage
+    /// EFFECT_PSYWAVE: damage = random 1 .. floor(level * 1.5), rejection-sampled.
+    | PsywaveDamage
+    /// EFFECT_SUPER_FANG: damage = target current HP / 2, min 1.
+    | SuperFangDamage
+    /// EFFECT_STATIC_DAMAGE: damage = move.Power (Sonicboom=20, Dragon Rage=40).
+    | StaticDamage
+    /// EFFECT_OHKO: one-hit KO (Horn Drill, Fissure, Guillotine).
+    /// Gen-2 accuracy = attacker level - target level + move accuracy (in %).
+    /// Fails outright if target level >= attacker level.
+    | OhkoDamage
+    /// EFFECT_FALSE_SWIPE: normal damage, but capped to leave target at >= 1 HP.
+    | FalseSwipeDamage
+    /// EFFECT_REVERSAL / EFFECT_FLAIL: power based on user HP-ratio table.
+    | ReversalDamage
+    /// EFFECT_RETURN: power = friendship / 2.5 (our model uses 0 friendship).
+    | ReturnDamage
+    /// EFFECT_FRUSTRATION: power = (255 - friendship) / 2.5.
+    | FrustrationDamage
+    /// EFFECT_PRESENT: random tiers (40/80/120 damage or heal 25% target HP).
+    /// RNG draw: 1 byte → thresholds 102/179/204/255.
+    | PresentDamage
+    /// EFFECT_MAGNITUDE: random magnitude 4-10, each with a power.
+    /// RNG draw: 1 byte → threshold table.
+    | MagnitudeDamage
+    /// EFFECT_HIDDEN_POWER: type+power from DVs. DVs=0 in our model →
+    /// power=31, type=FIGHTING (faithful computation).
+    | HiddenPowerDamage
+    /// EFFECT_FURY_CUTTER: power doubles each consecutive hit (max 16x).
+    /// `hitCount` in MoveContext tracks consecutive uses; reset on miss.
+    | FuryCutterDamage
+    /// EFFECT_ROLLOUT: 5-turn doubling lock-in. Defense Curl doubles further.
+    /// Power ramp implemented here; lock-in turn management is a M13.7 hand-off.
+    /// `hitCount` in MoveContext tracks the rollout turn (1-5).
+    | RolloutDamage
+    /// EFFECT_TRIPLE_KICK: 3 hits at escalating power (base, 2x, 3x).
+    | TripleKickDamage
+    /// EFFECT_BEAT_UP: one hit per healthy party member. Simplified to a single
+    /// hit (wild battles have 1 party member) with base power = level-based.
+    | BeatUpDamage
+
+    /// EFFECT_LEECH_HIT: deal damage, heal user by half dealt (min 1).
+    | DrainDamage
+    /// EFFECT_DREAM_EATER: drain, but only works vs sleeping target.
+    | DreamEaterDamage
+    /// EFFECT_SELFDESTRUCT: user faints. Damage calc halves target defense.
+    | SelfdestructDamage
+    /// EFFECT_JUMP_KICK: on miss, user takes crash damage = 1/8 max HP (min 1).
+    /// On hit, normal damage.
+    | JumpKickDamage
+    /// EFFECT_PAY_DAY: normal damage + "Coins scattered everywhere!" message.
+    | PayDayDamage
+    /// EFFECT_RAPID_SPIN: damage + clear leech seed/trap on user.
+    | RapidSpinDamage
+    /// EFFECT_THIEF: damage + steal item message (item model is stub).
+    | ThiefDamage
+    /// EFFECT_RAGE: damage + set rage flag (atk-up-on-hit is M13.7 turn-state).
+    | RageDamage
+
+    /// EFFECT_MULTI_HIT: 2-5 hits with 3/8, 3/8, 1/8, 1/8 distribution.
+    /// The hit count is determined by RNG and stored in MoveContext.MultiHitCount.
+    | MultiHitDamage
+    /// EFFECT_DOUBLE_HIT: always 2 hits.
+    | DoubleHitDamage
+    /// EFFECT_POISON_MULTI_HIT (Twineedle): 2 hits + 20% poison chance per hit.
+    | PoisonMultiHitDamage
+
+    /// EFFECT_GUST/TWISTER/STOMP/EARTHQUAKE: normal damaging hit.
+    /// Hook for 2x-vs-Fly/Dig/Minimize (M13.7); flinch secondary (M13.6).
+    | ConditionalDoubleDamage
+
 /// Context threaded through effect-command execution for a single move.
 /// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose
 /// cleanly via fold. Later slices may add fields (e.g. hitCount, lastDamage).
@@ -102,4 +178,14 @@ type MoveContext =
       /// Used by Recoil to compute 1/4 recoil. Initialised to 0.
       LastDamage: int
       /// True when this move is Struggle (skips STAB, no PP deduction).
-      IsStruggle: bool }
+      IsStruggle: bool
+      /// M13.5: Fury Cutter consecutive hit counter (0 = first use).
+      /// Persisted across turns by the caller for EFFECT_FURY_CUTTER.
+      FuryCutterCount: int
+      /// M13.5: Rollout turn counter (0 = first use, max 4).
+      /// Persisted across turns by the caller for EFFECT_ROLLOUT.
+      RolloutCount: int
+      /// M13.5: Defense Curl active flag for Rollout power doubling.
+      DefenseCurlUsed: bool
+      /// M13.5: Friendship value (0-255) for Return/Frustration.
+      Friendship: int }
