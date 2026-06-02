@@ -534,3 +534,228 @@ let ``FIGHT menu PP display helpers return correct values`` () =
     let m' = BattleMon.deductPp 0 m
     Assert.Equal(34, m'.Pp.[0])
     Assert.Equal(30, m'.Pp.[1])
+
+// --- M13.10 Critical-hit system (full) ----------------------------------------
+
+// -- Crit-stage computation ---------------------------------------------------
+
+[<Fact>]
+let ``crit stage is 0 with no Focus Energy and non-high-crit move`` () =
+    let m = move "TACKLE" "EFFECT_NORMAL_HIT" 35 (ty "NORMAL")
+    Assert.Equal(0, CriticalHit.critStage false m)
+
+[<Fact>]
+let ``Focus Energy adds +1 to crit stage`` () =
+    let m = move "TACKLE" "EFFECT_NORMAL_HIT" 35 (ty "NORMAL")
+    Assert.Equal(1, CriticalHit.critStage true m)
+
+[<Fact>]
+let ``high-crit move adds +2 to crit stage`` () =
+    let slash = { move "SLASH" "EFFECT_NORMAL_HIT" 70 (ty "NORMAL") with Accuracy = 100; Pp = 20 }
+    Assert.Equal(2, CriticalHit.critStage false slash)
+
+[<Fact>]
+let ``Focus Energy + high-crit move stack to stage 3`` () =
+    let slash = { move "SLASH" "EFFECT_NORMAL_HIT" 70 (ty "NORMAL") with Accuracy = 100; Pp = 20 }
+    Assert.Equal(3, CriticalHit.critStage true slash)
+
+[<Fact>]
+let ``all CriticalHitMoves are recognized as high-crit`` () =
+    // data/moves/critical_hit_moves.asm
+    for name in [ "KARATE_CHOP"; "RAZOR_WIND"; "RAZOR_LEAF"; "CRABHAMMER"; "SLASH"; "AEROBLAST"; "CROSS_CHOP" ] do
+        let m = Moves.byName name
+        Assert.True(CriticalHit.isHighCritMove m, $"{name} should be high-crit")
+
+[<Fact>]
+let ``non-high-crit moves are not flagged`` () =
+    for name in [ "TACKLE"; "EMBER"; "SURF"; "THUNDERBOLT" ] do
+        let m = Moves.byName name
+        Assert.False(CriticalHit.isHighCritMove m, $"{name} should not be high-crit")
+
+[<Fact>]
+let ``crit stage is capped at table max`` () =
+    // Max index = 6; stage 3 is already under cap but verify the clamp works.
+    Assert.Equal(6, CriticalHit.thresholds.Length - 1)
+    // Even if we artificially called with a value beyond table, it clamps.
+    let slash = { move "SLASH" "EFFECT_NORMAL_HIT" 70 (ty "NORMAL") with Accuracy = 100; Pp = 20 }
+    let stage = CriticalHit.critStage true slash // 3
+    Assert.True(stage <= CriticalHit.thresholds.Length - 1)
+
+// -- Crit threshold table -----------------------------------------------------
+
+[<Fact>]
+let ``crit thresholds match critical_hit_chances asm`` () =
+    // data/battle/critical_hit_chances.asm: out_of macro = $100 / n
+    Assert.Equal(17, CriticalHit.thresholds.[0])  // 256/15
+    Assert.Equal(32, CriticalHit.thresholds.[1])  // 256/8
+    Assert.Equal(64, CriticalHit.thresholds.[2])  // 256/4
+    Assert.Equal(85, CriticalHit.thresholds.[3])  // 256/3
+    Assert.Equal(128, CriticalHit.thresholds.[4]) // 256/2
+    Assert.Equal(128, CriticalHit.thresholds.[5]) // 256/2
+    Assert.Equal(128, CriticalHit.thresholds.[6]) // 256/2
+
+// -- Crit probability boundary tests ------------------------------------------
+
+[<Fact>]
+let ``seed that crits at stage 0 (byte < 17)`` () =
+    // Find a seed where the crit byte (first draw) < 17.
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 10000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw < 17 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Should find a seed with crit byte < 17")
+    // Verify via a battle that the crit fires. Use 100% accuracy (no acc draw).
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let state = Battle.create atk def seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "A critical hit!")
+
+[<Fact>]
+let ``seed that does not crit at stage 0 (byte >= 17)`` () =
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 10000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 17 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found)
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let state = Battle.create atk def seed
+    let after = Battle.chooseMove 0 state
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "A critical hit!")
+
+[<Fact>]
+let ``Focus Energy mon crits at stage 1 threshold (byte < 32)`` () =
+    // Find a seed where crit byte >= 17 (no crit at stage 0) but < 32 (crit at stage 1).
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 100000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 17 && draw < 32 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Need a seed with crit byte in [17,31]")
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35]
+                     Volatile = { VolatileStatus.empty with FocusEnergy = true } }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let state = Battle.create atk def seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "A critical hit!")
+
+[<Fact>]
+let ``high-crit move crits at stage 2 threshold (byte < 64)`` () =
+    // Find a seed where crit byte >= 32 (no crit at stage 1) but < 64 (crit at stage 2).
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 100000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 32 && draw < 64 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found)
+    let slash = { move "SLASH" "EFFECT_NORMAL_HIT" 70 (ty "NORMAL") with Accuracy = 100; Pp = 20 }
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                with Moves = [ slash ]; Pp = [20] }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let state = Battle.create atk def seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "A critical hit!")
+
+[<Fact>]
+let ``Focus Energy + high-crit stacks to stage 3 threshold (byte < 85)`` () =
+    // Find a seed where crit byte >= 64 but < 85.
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 100000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 64 && draw < 85 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found)
+    let slash = { move "SLASH" "EFFECT_NORMAL_HIT" 70 (ty "NORMAL") with Accuracy = 100; Pp = 20 }
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                with Moves = [ slash ]; Pp = [20]
+                     Volatile = { VolatileStatus.empty with FocusEnergy = true } }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ move "HIT" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") ]; Pp = [35] }
+    let state = Battle.create atk def seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "A critical hit!")
+
+// -- Crit damage: faithful stat rule ------------------------------------------
+
+[<Fact>]
+let ``crit with negative atk stage ignores stages (uses base stats)`` () =
+    // Attacker: AtkStage = -2, Defender: DefStage = 0.
+    // defStage (0) >= atkStage (-2) → use unmodified stats.
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with AtkStage = -2 }
+    let def = mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    // Crit with base stats: same as neutral crit (30 atk, 25 def).
+    let critDmg = Damage.calc atk def m true Damage.MaxRoll false
+    let neutralCritDmg = Damage.calc (mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50) def m true Damage.MaxRoll false
+    Assert.Equal(neutralCritDmg, critDmg)
+
+[<Fact>]
+let ``crit with positive def stage on defender ignores stages (uses base stats)`` () =
+    // Attacker: AtkStage = 0, Defender: DefStage = +2.
+    // defStage (2) >= atkStage (0) → use unmodified stats.
+    let atk = mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with DefStage = 2 }
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let critDmg = Damage.calc atk def m true Damage.MaxRoll false
+    // Without crit, +2 def would reduce damage.
+    let noCritDmg = Damage.calc atk def m false Damage.MaxRoll false
+    Assert.True(critDmg > noCritDmg, "Crit should ignore defender's positive def stage")
+
+[<Fact>]
+let ``crit with positive atk stage and neutral def uses boosted stats`` () =
+    // Attacker: AtkStage = +2, Defender: DefStage = 0.
+    // defStage (0) < atkStage (2) → use boosted stats (favor attacker).
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with AtkStage = 2 }
+    let def = mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let critDmg = Damage.calc atk def m true Damage.MaxRoll false
+    // With boosted atk (+2): effective atk = 30 * 2/1 = 60.
+    // With unmodified: atk = 30.
+    let neutralCritDmg = Damage.calc (mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50) def m true Damage.MaxRoll false
+    Assert.True(critDmg > neutralCritDmg, "Crit with high atk stage should use boosted atk")
+
+[<Fact>]
+let ``crit with negative def stage on defender uses boosted stats`` () =
+    // Attacker: AtkStage = 0, Defender: DefStage = -2.
+    // defStage (-2) < atkStage (0) → use boosted stats (still favors attacker).
+    let atk = mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with DefStage = -2 }
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let critDmg = Damage.calc atk def m true Damage.MaxRoll false
+    // With boosted (lowered) def: effective def = 25 * 50/100 = 12.
+    // With unmodified: def = 25.
+    let baseCritDmg = Damage.calc atk (mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50) m true Damage.MaxRoll false
+    Assert.True(critDmg > baseCritDmg, "Crit with negative def stage should use lowered defense")
+
+[<Fact>]
+let ``crit with equal atk and def stages ignores stages`` () =
+    // Both at +2: defStage (2) >= atkStage (2) → use unmodified.
+    let atk = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with AtkStage = 2 }
+    let def = { mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                with DefStage = 2 }
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let critDmg = Damage.calc atk def m true Damage.MaxRoll false
+    let neutralCritDmg = Damage.calc (mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50)
+                                      (mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50)
+                                      m true Damage.MaxRoll false
+    Assert.Equal(neutralCritDmg, critDmg)

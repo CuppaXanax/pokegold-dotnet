@@ -20,11 +20,6 @@ type BattleState =
 
 module Battle =
 
-    /// Stage-0 critical hit chance from `data/battle/critical_hit_chances.asm`
-    /// (`1 out_of 15` ~ 17/256).
-    [<Literal>]
-    let private CritThreshold = 17
-
     /// Start a wild battle between the player's mon and a wild one.
     let create (player: BattleMon) (enemy: BattleMon) (seed: uint32) : BattleState =
         { Player = player
@@ -52,61 +47,37 @@ module Battle =
     /// paralysis/confusion/flinch checks here.
     let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (_rng: Rng)
         : bool * BattleMon * string list * Rng =
-        // Extension point: M13.3 inserts sleep wake check, freeze thaw,
-        // paralysis full-para, M13.4 inserts confusion self-hit, flinch.
         (true, user, [], _rng)
 
     // -- Phase: accuracy / miss check (CheckHit) ------------------------------
 
     /// Accuracy/miss check, faithful to `BattleCommand_CheckHit` in
     /// `engine/battle/effect_commands.asm`. Returns `(hit, rng')`.
-    ///
-    /// Draw order: the accuracy roll is consumed BEFORE the crit and spread
-    /// draws, matching the GSC command sequence (checkhit → criticalhit →
-    /// damagecalc → stab → damagevariation). On a miss, the crit/spread
-    /// draws are NOT consumed (matching the hardware: `wAttackMissed` gates
-    /// subsequent commands).
-    ///
-    /// EXTENSION POINT (M13.7 — semi-invulnerable):
-    ///   Before the EFFECT_ALWAYS_HIT check, inspect `foe.Volatile` for a
-    ///   semi-invulnerable flag (Fly/Dig). If set, most moves auto-miss
-    ///   (return `(false, rng)`) except the moves that can hit through it
-    ///   (Gust/Thunder/Twister for Fly; Earthquake/Fissure/Magnitude for Dig).
-    ///
-    /// EXTENSION POINT (M13.9 — Lock-On / Mind Reader):
-    ///   If the user has a "locked on" volatile flag, consume & clear it and
-    ///   return `(true, rng)` — guaranteed hit, no draw consumed.
     let private checkHit (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng)
         : bool * Rng =
-        // EFFECT_ALWAYS_HIT bypasses all checks (Swift, Vital Throw, etc.)
         if move.Effect = "EFFECT_ALWAYS_HIT" then
             (true, rng)
         else
 
-        // Convert percentage accuracy to the byte scale the hardware uses:
-        // the `percent` macro in macros/data.asm is `* $ff / 100`.
         let accByte = move.Accuracy * 255 / 100
 
-        // Apply accuracy/evasion stage modifiers (two-pass, faithful to
-        // .StatModifiers in effect_commands.asm).
         let modifiedAcc =
             BattleMon.applyAccEvaStages accByte user.AccStage foe.EvaStage
 
-        // $FF (255) = guaranteed hit — no BattleRandom draw consumed.
         if modifiedAcc >= 255 then
             (true, rng)
         else
 
-        // Roll BattleRandom; hit if random < modifiedAcc.
         let roll, rng' = Rng.next rng
         (roll < modifiedAcc, rng')
 
     // -- Phase: roll hit (crit + damage spread) ------------------------------
 
-    let private rollHit (rng: Rng) : bool * int * Rng =
+    let private rollHit (critStage: int) (rng: Rng) : bool * int * Rng =
         let critByte, rng = Rng.next rng
         let spread, rng = Rng.next rng
-        let crit = critByte < CritThreshold
+        let threshold = CriticalHit.thresholds.[min critStage (CriticalHit.thresholds.Length - 1)]
+        let crit = critByte < threshold
         let roll = Damage.MinRoll + spread % (Damage.MaxRoll - Damage.MinRoll + 1)
         crit, roll, rng
 
@@ -133,7 +104,7 @@ module Battle =
             (user, foe, msgs, rng)
         else
 
-        let crit, roll, rng = rollHit rng
+        let crit, roll, rng = rollHit (CriticalHit.critStage user.Volatile.FocusEnergy move) rng
         let intro = $"{user.Species.Name} used {move.Name}!"
 
         let ctx : MoveContext =
