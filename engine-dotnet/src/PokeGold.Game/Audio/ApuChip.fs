@@ -344,7 +344,6 @@ type internal ApuChip(sampleRate: int, cgb: bool) =
         | s -> (match Double.TryParse s with | true, v -> v | _ -> 0.4)
     let chargeFactor = 1.0 - (2.0 * Math.PI * hpfHz / float (samplesPerFrame * 60))
     let mutable capL = 0.0
-    let mutable capR = 0.0
 
     // Debug-only shadow of the last value written to each control register, indexed so
     // that index == offset == (address - 0xFF10) for 0..22 (FF10..FF26) and wave RAM at
@@ -423,6 +422,17 @@ type internal ApuChip(sampleRate: int, cgb: bool) =
             let clamp v = if v > 127 then 127 elif v < 0 then 0 else v
             struct (clamp l, clamp r)
 
+    /// One mono output sample (0..127): the summed DAC of all four channels with
+    /// NR51 panning BYPASSED. GSC's stereo_panning writes are gated by the wOptions
+    /// STEREO bit, and the game's default sound option is MONO, so both hardware
+    /// output terminals receive the same full mix. This is the engine playback path;
+    /// the bit-exact isolation gate keeps using `MixSample` (which honours NR51).
+    member private _.MixMono() : int =
+        if poweron = 0 then 0
+        else
+            let s = sweepCh.Sample() + toneCh.Sample() + waveCh.Sample() + noiseCh.Sample()
+            if s > 127 then 127 elif s < 0 then 0 else s
+
     /// Advance the chip by `step` CPU cycles, running the 512 Hz DIV-APU sequencer
     /// (length 256 Hz / sweep 128 Hz / envelope 64 Hz) and every channel's period
     /// timer — the shared primitive behind both `Advance` (gate) and `RenderOne`
@@ -463,20 +473,19 @@ type internal ApuChip(sampleRate: int, cgb: bool) =
     member this.RenderOne(buffer: float32[], idx: int, gain: float) =
         let step = max 0 (int (ceil cyclesTargetSample) - cycles)
         this.TickCycles step
-        let struct (l, r) = this.MixSample()
+        let m = this.MixMono()
         cyclesTargetSample <- cyclesTargetSample + cyclesPerSample
-        let fl = float l
-        let fr = float r
-        let hl = fl - capL
-        capL <- fl - hl * chargeFactor
-        let hr = fr - capR
-        capR <- fr - hr * chargeFactor
-        // The summed sides span 0..127 (AC component ~±30 typical); scale for headroom.
+        // Mono default: both output terminals carry the same summed mix (NR51 bypassed).
+        let fm = float m
+        let h = fm - capL
+        capL <- fm - h * chargeFactor
+        // The summed mix spans 0..127 (AC component ~±30 typical); scale for headroom.
         // Scale-invariant gate; this only sets host playback level (matches old Apu.fs).
         let scale = gain / 40.0
         let clamp (x: float) = if x > 1.0 then 1.0 elif x < -1.0 then -1.0 else x
-        buffer.[idx] <- buffer.[idx] + float32 (clamp (hl * scale))
-        buffer.[idx + 1] <- buffer.[idx + 1] + float32 (clamp (hr * scale))
+        let v = float32 (clamp (h * scale))
+        buffer.[idx] <- buffer.[idx] + v
+        buffer.[idx + 1] <- buffer.[idx + 1] + v
 
 
 /// Public replay seam for the isolation gate: render a captured/synthesised per-frame

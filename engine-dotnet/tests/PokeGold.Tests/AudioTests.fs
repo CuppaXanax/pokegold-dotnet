@@ -58,6 +58,20 @@ let ``a one-shot SFX runs to completion and ends`` () =
     Assert.True(player.Finished)
 
 [<Fact>]
+let ``the engine renders in mono: left and right carry the same mix`` () =
+    // GSC's default sound option is MONO, so NR51 stereo panning is bypassed and
+    // both output terminals receive the same summed mix. Every interleaved L/R pair
+    // must therefore be identical.
+    let song = SongParser.loadMusicFile "audio/music/azaleatown.asm"
+    let player = SongPlayer(song, true, 44100)
+    let frames = 44100
+    let buf : float32[] = Array.zeroCreate (frames * 2)
+    player.Render(buf, 0, frames, 1.0)
+    Assert.Contains(buf, fun s -> s <> 0.0f)
+    for i in 0 .. frames - 1 do
+        Assert.Equal(buf.[2 * i], buf.[2 * i + 1])
+
+[<Fact>]
 let ``the audio engine mixes a started track into its buffer`` () =
     let engine = AudioEngine(44100)
     engine.PlayMusic "audio/music/azaleatown.asm"
