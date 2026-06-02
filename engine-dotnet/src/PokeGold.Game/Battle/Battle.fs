@@ -80,6 +80,51 @@ module Battle =
         // paralysis full-para, M13.4 inserts confusion self-hit, flinch.
         (true, user, [], _rng)
 
+    // -- Phase: accuracy / miss check (CheckHit) ------------------------------
+
+    /// Accuracy/miss check, faithful to `BattleCommand_CheckHit` in
+    /// `engine/battle/effect_commands.asm`. Returns `(hit, rng')`.
+    ///
+    /// Draw order: the accuracy roll is consumed BEFORE the crit and spread
+    /// draws, matching the GSC command sequence (checkhit → criticalhit →
+    /// damagecalc → stab → damagevariation). On a miss, the crit/spread
+    /// draws are NOT consumed (matching the hardware: `wAttackMissed` gates
+    /// subsequent commands).
+    ///
+    /// EXTENSION POINT (M13.7 — semi-invulnerable):
+    ///   Before the EFFECT_ALWAYS_HIT check, inspect `foe.Volatile` for a
+    ///   semi-invulnerable flag (Fly/Dig). If set, most moves auto-miss
+    ///   (return `(false, rng)`) except the moves that can hit through it
+    ///   (Gust/Thunder/Twister for Fly; Earthquake/Fissure/Magnitude for Dig).
+    ///
+    /// EXTENSION POINT (M13.9 — Lock-On / Mind Reader):
+    ///   If the user has a "locked on" volatile flag, consume & clear it and
+    ///   return `(true, rng)` — guaranteed hit, no draw consumed.
+    let private checkHit (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng)
+        : bool * Rng =
+        // EFFECT_ALWAYS_HIT bypasses all checks (Swift, Vital Throw, etc.)
+        if move.Effect = "EFFECT_ALWAYS_HIT" then
+            (true, rng)
+        else
+
+        // Convert percentage accuracy to the byte scale the hardware uses:
+        // the `percent` macro in macros/data.asm is `* $ff / 100`.
+        let accByte = move.Accuracy * 255 / 100
+
+        // Apply accuracy/evasion stage modifiers (two-pass, faithful to
+        // .StatModifiers in effect_commands.asm).
+        let modifiedAcc =
+            BattleMon.applyAccEvaStages accByte user.AccStage foe.EvaStage
+
+        // $FF (255) = guaranteed hit — no BattleRandom draw consumed.
+        if modifiedAcc >= 255 then
+            (true, rng)
+        else
+
+        // Roll BattleRandom; hit if random < modifiedAcc.
+        let roll, rng' = Rng.next rng
+        (roll < modifiedAcc, rng')
+
     // -- Phase: roll hit (crit + damage spread) ------------------------------
 
     let private rollHit (rng: Rng) : bool * int * Rng =
@@ -94,7 +139,24 @@ module Battle =
     /// Execute one mon's move against the other using the MoveContext pattern.
     /// Effect commands fold over the context, accumulating state changes and
     /// messages. Returns updated (user, foe, messages, rng).
+    ///
+    /// RNG draw order per move (faithful to GSC command sequence):
+    ///   1. Accuracy roll  — checkHit (skipped for EFFECT_ALWAYS_HIT / acc $FF)
+    ///   2. Crit roll      — rollHit  (skipped on miss)
+    ///   3. Spread roll    — rollHit  (skipped on miss)
     let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng) =
+        let intro = $"{user.Species.Name} used {move.Name}!"
+
+        // Phase: accuracy check (before damage, matching GSC command order)
+        let hit, rng = checkHit user foe move rng
+
+        if not hit then
+            // Miss path: skip all effect commands. Message matches
+            // data/text/battle.asm AttackMissedText: "<USER>'s attack missed!"
+            let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
+            (user, foe, msgs, rng)
+        else
+
         let crit, roll, rng = rollHit rng
         let intro = $"{user.Species.Name} used {move.Name}!"
 

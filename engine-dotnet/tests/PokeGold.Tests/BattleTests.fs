@@ -168,6 +168,177 @@ let ``a stat-down move lowers the target's stage`` () =
     // Player is faster and lowers the enemy's Attack stage to -1.
     Assert.Equal(-1, after.Enemy.AtkStage)
 
+// --- M13.1 Accuracy / miss hit check -----------------------------------------
+
+/// Helper: create a move with a specific accuracy percentage.
+let private moveWithAcc name effect power typ acc : MoveData =
+    { Name = name; Effect = effect; Power = power; Type = typ
+      Accuracy = acc; Pp = 35; EffectChance = 0 }
+
+[<Fact>]
+let ``accuracy 100 pct is a guaranteed hit with no RNG draw`` () =
+    // 100 * 255 / 100 = 255 = $FF -> guaranteed hit, no draw consumed.
+    let acc = BattleMon.applyAccEvaStages (100 * 255 / 100) 0 0
+    Assert.Equal(255, acc)
+
+[<Fact>]
+let ``accuracy stage ratios match accuracy_multipliers asm at neutral`` () =
+    // At neutral stages (0, 0), the ratios are (1,1) so the byte is unchanged.
+    let accByte = 95 * 255 / 100 // Tackle: 242
+    Assert.Equal(242, accByte)
+    Assert.Equal(242, BattleMon.applyAccEvaStages accByte 0 0)
+
+[<Fact>]
+let ``max foe evasion +6 drastically reduces accuracy`` () =
+    // accByte = 242 (Tackle), user acc stage 0, foe eva stage +6
+    // Pass 1: 242 * 1/1 = 242 (neutral acc)
+    // Pass 2: foe eva +6 -> inverted index 0 -> ratio 33/100
+    //   242 * 33 / 100 = 7986/100 = 79 (truncated)
+    let result = BattleMon.applyAccEvaStages 242 0 6
+    Assert.Equal(79, result)
+
+[<Fact>]
+let ``max user accuracy +6 greatly increases accuracy`` () =
+    // accByte = 127 (50%), user acc stage +6, foe eva stage 0
+    // Pass 1: index 12 -> ratio 3/1 -> 127 * 3 / 1 = 381
+    //   clamp to min 1 -> 381
+    // Pass 2: index 6 -> ratio 1/1 -> 381 * 1 / 1 = 381
+    //   clamp to min 1 -> 381
+    // Cap at 255
+    let result = BattleMon.applyAccEvaStages 127 6 0
+    Assert.Equal(255, result) // capped at 255 -> guaranteed hit
+
+[<Fact>]
+let ``applyAccEvaStages never returns below 1`` () =
+    // Even with the lowest possible accuracy and worst stages, minimum is 1.
+    let result = BattleMon.applyAccEvaStages 1 (-6) 6
+    // Pass 1: 1 * 33/100 = 0 -> clamped to 1
+    // Pass 2: 1 * 33/100 = 0 -> clamped to 1
+    Assert.Equal(1, result)
+
+[<Fact>]
+let ``EFFECT_ALWAYS_HIT bypasses accuracy check regardless of evasion`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ moveWithAcc "SWIFT" "EFFECT_ALWAYS_HIT" 60 (ty "NORMAL") 100 ]
+                      AccStage = -6 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]
+                     EvaStage = 6 }
+    // Even with worst accuracy stage and max evasion, ALWAYS_HIT always hits.
+    let state = Battle.create user foe 0u
+    let after = Battle.chooseMove 0 state
+    // The player's Swift should deal damage (not show "attack missed!")
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "attack missed!")
+    Assert.True(after.Enemy.Hp < foe.Hp)
+
+[<Fact>]
+let ``a miss skips effects and shows attack missed message`` () =
+    // Use a very low accuracy move and a seed that produces a high roll.
+    let lowAccMove = moveWithAcc "LOWMOVE" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") 10
+    // 10 * 255 / 100 = 25 (accByte). At neutral stages: modifiedAcc = 25.
+    // Need a seed where the first draw (accuracy roll) >= 25.
+    // Seed 0u: first draw = 0 (hit). Seed 1u: first draw = ?
+    // Let's use a seed that gives a high first draw.
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ lowAccMove ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ] }
+    // Try seeds until we find one that misses
+    let mutable seed = 1u
+    let mutable found = false
+    while not found && seed < 1000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 25 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Could not find a seed that causes a miss")
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "attack missed!")
+    // The foe should not have taken damage from the missed move
+    Assert.Equal(foe.Hp, after.Enemy.Hp)
+
+[<Fact>]
+let ``a hit at full accuracy and neutral stages deals damage`` () =
+    // Accuracy 95 -> accByte 242. At neutral stages, modifiedAcc = 242.
+    // Seed 0u: first draw is 0, which is < 242 -> hit.
+    let tackle95 = moveWithAcc "TACKLE" "EFFECT_NORMAL_HIT" 35 (ty "NORMAL") 95
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ tackle95 ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ] }
+    let state = Battle.create user foe 0u
+    let after = Battle.chooseMove 0 state
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "attack missed!")
+    Assert.True(after.Enemy.Hp < foe.Hp)
+
+[<Fact>]
+let ``miss with max evasion on foe using seeded RNG`` () =
+    // Tackle accByte = 242, foe evaStage +6: modifiedAcc = 79 (see earlier test).
+    // Need a seed where accuracy draw >= 79.
+    let tackle95 = moveWithAcc "TACKLE" "EFFECT_NORMAL_HIT" 35 (ty "NORMAL") 95
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ tackle95 ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]
+                     EvaStage = 6 }
+    let mutable seed = 1u
+    let mutable found = false
+    while not found && seed < 1000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw >= 79 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Could not find a seed that causes a miss")
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "attack missed!")
+    Assert.Equal(foe.Hp, after.Enemy.Hp)
+
+[<Fact>]
+let ``boundary RNG value equal to accuracy causes a miss`` () =
+    // Faithful to GSC: `cp b; jr nc, .Miss` means random >= accuracy -> miss.
+    // So random == accuracy is a miss.
+    // Set up modifiedAcc = 100 (arbitrary). Find seed where draw = 100.
+    let m = moveWithAcc "TEST" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") 40
+    // 40 * 255 / 100 = 102 (accByte). Neutral stages -> modifiedAcc = 102.
+    // Find seed where draw = 102.
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 100000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw = 102 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Could not find a seed that produces draw = 102")
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ m ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ] }
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    // draw == modifiedAcc -> miss (random >= accuracy)
+    Assert.Contains(after.Messages, fun x -> x.Contains "attack missed!")
+
+[<Fact>]
+let ``boundary RNG value one below accuracy causes a hit`` () =
+    // draw = modifiedAcc - 1 -> hit (random < accuracy)
+    let m = moveWithAcc "TEST" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") 40
+    // accByte = 102, neutral stages -> modifiedAcc = 102.
+    // Find seed where draw = 101.
+    let mutable seed = 0u
+    let mutable found = false
+    while not found && seed < 100000u do
+        let draw, _ = Rng.next (Rng.create seed)
+        if draw = 101 then found <- true
+        else seed <- seed + 1u
+    Assert.True(found, "Could not find a seed that produces draw = 101")
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ m ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ] }
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.DoesNotContain(after.Messages, fun x -> x.Contains "attack missed!")
+    Assert.True(after.Enemy.Hp < foe.Hp)
+
 [<Fact>]
 let ``the real demo encounter resolves with loaded data`` () =
     // Drives the actual scripted battle (real species, moves, types) to a result,

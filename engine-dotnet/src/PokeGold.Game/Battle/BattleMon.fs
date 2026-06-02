@@ -91,6 +91,37 @@ module BattleMon =
            (1, 1)
            (15, 10); (2, 1); (25, 10); (3, 1); (35, 10); (4, 1) |]
 
+    /// Accuracy/evasion stage ratios from `data/battle/accuracy_multipliers.asm`.
+    /// Stages −6..+6, indexed by `stage + 6`. These DIFFER from the 5-stat
+    /// `stageRatios` above (the accuracy table grows faster).
+    let private accEvaStageRatios =
+        [| (33, 100); (36, 100); (43, 100); (50, 100); (60, 100); (75, 100)
+           (1, 1)
+           (133, 100); (166, 100); (2, 1); (233, 100); (133, 50); (3, 1) |]
+
+    /// Apply accuracy/evasion stage modifiers to a raw accuracy byte, faithfully
+    /// reproducing the `.StatModifiers` two-pass loop in `effect_commands.asm`.
+    /// First multiplies by the user's accuracy stage ratio, then by the inverted
+    /// foe's evasion stage ratio. Intermediate results are clamped to minimum 1;
+    /// the final result is capped at 255.
+    let applyAccEvaStages (accByte: int) (userAccStage: int) (foeEvaStage: int) : int =
+        // Pass 1: user's accuracy stage (table index = accStage + 6)
+        let accIdx = max 0 (min 12 (userAccStage + 6))
+        let accNum, accDen = accEvaStageRatios.[accIdx]
+        let mutable acc = accByte * accNum / accDen
+        acc <- max 1 acc
+
+        // Pass 2: inverted foe's evasion stage (table index = 6 - evaStage)
+        // In the hardware, evasion level is subtracted from MAX_STAT_LEVEL+1 (14),
+        // which effectively mirrors the table: +6 evasion → lowest ratio (33/100),
+        // −6 evasion → highest ratio (3/1).
+        let evaIdx = max 0 (min 12 (6 - foeEvaStage))
+        let evaNum, evaDen = accEvaStageRatios.[evaIdx]
+        acc <- acc * evaNum / evaDen
+        acc <- max 1 acc
+
+        min 255 acc
+
     [<Literal>]
     let MaxStatValue = 999
 
