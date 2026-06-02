@@ -11,6 +11,10 @@ type ISoundBoard =
     abstract PlayMusic: string -> unit
     /// Play a named SFX from audio/sfx.asm once, layered over the music.
     abstract PlaySfx: string -> unit
+    /// Play a *music* file once (non-looping), layered over the current track —
+    /// used for short fanfares like the Pokémon Center heal jingle, which must
+    /// play through and stop rather than loop as background music.
+    abstract PlayJingle: string -> unit
     /// Stop the current music.
     abstract StopMusic: unit -> unit
 
@@ -40,6 +44,11 @@ type AudioEngine(sampleRate: int) =
     member _.PlaySfx(name: string) =
         lock sync (fun () -> sfx.Add(SongPlayer(SongParser.loadSfx name, false, sampleRate)))
 
+    /// Play a music file once (non-looping) layered over the current track, then
+    /// let it retire itself — for fanfares like the heal jingle.
+    member _.PlayJingle(path: string) =
+        lock sync (fun () -> sfx.Add(SongPlayer(SongParser.loadMusicFile path, false, sampleRate)))
+
     member _.StopMusic() =
         lock sync (fun () ->
             music <- None
@@ -60,4 +69,5 @@ type AudioEngine(sampleRate: int) =
     interface ISoundBoard with
         member this.PlayMusic path = this.PlayMusic path
         member this.PlaySfx name = this.PlaySfx name
+        member this.PlayJingle path = this.PlayJingle path
         member this.StopMusic() = this.StopMusic()

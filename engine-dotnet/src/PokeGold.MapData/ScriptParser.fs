@@ -175,10 +175,19 @@ module ScriptParser =
         | LSkip
 
     let private classify (g: string) (body: string) : Line =
-        // A label: a single token ending in ':'. Map files write labels with no
-        // leading whitespace and no following mnemonic on the same line.
-        if body.EndsWith ":" && not (body.Contains " ") && not (body.Contains "\t") then
+        // A label is a single token (no internal whitespace, no following mnemonic).
+        let singleToken = not (body.Contains " ") && not (body.Contains "\t")
+        // Map files write labels with a trailing ':'. RGBDS also allows a *local*
+        // label (`.foo`) to omit the colon, which `engine/events/std_scripts.asm`
+        // does throughout (e.g. `.ok` under `PokecenterNurseScript`). Recognize both
+        // forms so branch/jump targets — qualified the same way — resolve; otherwise
+        // a colon-less local label is mis-parsed as an `Unsupported` command and the
+        // `sjump .ok` / `iftrue .morn` that target it fall through, running every
+        // branch in sequence (the nurse reciting all her time-of-day lines).
+        if singleToken && body.EndsWith ":" then
             LLabel(body.Substring(0, body.Length - 1))
+        elif singleToken && body.StartsWith "." then
+            LLabel body
         else
             let mn, args = splitLine body
 

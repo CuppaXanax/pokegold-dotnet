@@ -20,6 +20,7 @@ type private RecordingSound() =
     interface ISoundBoard with
         member _.PlayMusic _ = ()
         member _.PlaySfx name = sfx.Add name
+        member _.PlayJingle _ = ()
         member _.StopMusic() = ()
 
 let private delta (dir: Direction) : int * int =

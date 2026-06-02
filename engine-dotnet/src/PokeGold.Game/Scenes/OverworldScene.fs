@@ -117,10 +117,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
             | HealParty ->
                 player <- { player with Party = Heal.healParty player.Party }
-                // Play the heal jingle. MUSIC_HEAL (audio/music/healpokemon.asm) is
-                // the real GSC heal track — confirmed present in the baked music table.
+                // Play the heal jingle *once*, layered over the map music. MUSIC_HEAL
+                // (audio/music/healpokemon.asm) is the real GSC heal track; playing it
+                // as a looping background track left it cycling forever (we don't model
+                // the `playmusic MUSIC_NONE` / HealMachineAnim sequence that silences it
+                // in GSC), so it is played as a self-retiring fanfare instead.
                 match Map.tryFind "MUSIC_HEAL" MusicData.byId with
-                | Some path -> sound.PlayMusic path
+                | Some path -> sound.PlayJingle path
                 | None -> ()
                 this.Drive(Script.resume None world vm)
             | OpenMart(_martType, items) ->

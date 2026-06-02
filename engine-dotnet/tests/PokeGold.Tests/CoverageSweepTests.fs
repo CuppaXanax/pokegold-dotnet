@@ -15,10 +15,12 @@ open PokeGold.Game.Overworld.Script
 [<Fact>]
 let ``the baked map scripts hold a stable command total`` () =
     // Matches the M9.6 runtime sweep: drift here means generation went stale.
+    // (Dropped from 18770 when the parser stopped mis-classifying colon-less local
+    // labels — `.ok`, `.morn`, … in std-style scripts — as `Unsupported` commands.)
     let total =
         MapsData.all |> Seq.sumBy (fun kv -> kv.Value.Script.Commands.Length)
 
-    Assert.Equal(18770, total)
+    Assert.Equal(18697, total)
 
 [<Fact>]
 let ``every map's baked script round-trips through the VM as no-ops where unsupported`` () =

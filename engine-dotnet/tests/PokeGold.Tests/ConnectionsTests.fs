@@ -25,6 +25,7 @@ type private SilentSound() =
     interface ISoundBoard with
         member _.PlayMusic _ = ()
         member _.PlaySfx _ = ()
+        member _.PlayJingle _ = ()
         member _.StopMusic() = ()
 
 // Azalea is 20x9 blocks → 40x18 cells. Route33 is 10x9 (20x18 cells); Route34 is

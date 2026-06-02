@@ -123,6 +123,38 @@ let ``callstd returns to the caller after the std script ends`` () =
 
 // ---- Real-map acceptance: Pokémon Center nurse heals -----------------------
 
+/// Collect every text label a script surfaces (answering yes/no "yes"), so a test
+/// can assert which branches actually ran.
+let private collectTexts (step0: ScriptStep) : string list =
+    let rec loop n acc (step: ScriptStep) =
+        if n <= 0 then List.rev acc
+        else
+            match step.Outcome with
+            | Completed -> List.rev acc
+            | Suspended(vm, eff) ->
+                let acc =
+                    match eff with
+                    | ShowText(label, _) -> label :: acc
+                    | _ -> acc
+                let v = match eff with AskYesNo -> Some 1 | _ -> None
+                loop (n - 1) acc (Script.resume v step.World vm)
+    loop 100 [] step0
+
+[<Fact>]
+let ``nurse jumps straight to the heal prompt, not through every time-of-day line`` () =
+    // `checktime` is unmodelled, so wScriptVar stays 0 and all three `iftrue`
+    // branches fall through to `sjump .ok`. That jump must resolve (it targets a
+    // colon-less local label) so the morning/day/night greetings are skipped — a
+    // regression guard for the parser fix that lets `.ok` be found. With the bug,
+    // execution fell through into every branch and recited all four texts.
+    let texts =
+        collectTexts (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram)
+
+    Assert.DoesNotContain("NurseMornText", texts)
+    Assert.DoesNotContain("NurseDayText", texts)
+    Assert.DoesNotContain("NurseNiteText", texts)
+    Assert.Contains("NurseAskHealText", texts)
+
 [<Fact>]
 let ``Azalea nurse script reaches HealParty via jumpstd`` () =
     let reached =
