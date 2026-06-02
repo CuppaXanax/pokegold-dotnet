@@ -53,6 +53,16 @@ type EffectCommand =
     /// Recoil: user takes 1/4 of the damage dealt (min 1 HP).
     /// Used by EFFECT_RECOIL_HIT (Struggle, Take Down, Double-Edge, etc.).
     | Recoil
+    /// Put the target to sleep (EFFECT_SLEEP). Counter 2-7 turns via Rng.
+    | InflictSleep
+    /// Poison the target (EFFECT_POISON). Blocked if target is Poison-type or
+    /// already has a status condition.
+    | InflictPoison
+    /// Badly poison the target (EFFECT_TOXIC). Uses a ramping counter.
+    | InflictToxic
+    /// Paralyze the target (EFFECT_PARALYZE). Blocked if target already statused.
+    /// Gen 2 has NO electric-type paralysis immunity.
+    | InflictParalyze
 
 /// Context threaded through effect-command execution for a single move.
 /// Carries the user/foe/move/crit/roll/rng/messages so effect commands compose

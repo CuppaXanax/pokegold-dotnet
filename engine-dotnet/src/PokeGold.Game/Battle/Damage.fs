@@ -104,11 +104,14 @@ module Damage =
                 defStage < atkStage
 
         let atk =
-            match useBoosted, physical with
-            | true, true -> BattleMon.effectiveAttack attacker
-            | true, false -> BattleMon.effectiveSpAttack attacker
-            | false, true -> attacker.Attack
-            | false, false -> attacker.SpAttack
+            let raw =
+                match useBoosted, physical with
+                | true, true -> BattleMon.effectiveAttack attacker
+                | true, false -> BattleMon.effectiveSpAttack attacker
+                | false, true -> attacker.Attack
+                | false, false -> attacker.SpAttack
+            // Burn halves physical Attack (ApplyBrnEffectOnAttack in core.asm).
+            if physical && attacker.Status = Burn then max 1 (raw / 2) else raw
 
         let def =
             match useBoosted, physical with

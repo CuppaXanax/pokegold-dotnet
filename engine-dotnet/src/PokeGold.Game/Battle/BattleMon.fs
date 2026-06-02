@@ -136,7 +136,13 @@ module BattleMon =
     let effectiveDefense (m: BattleMon) = applyStage m.DefStage m.Defense
     let effectiveSpAttack (m: BattleMon) = applyStage m.SpAtkStage m.SpAttack
     let effectiveSpDefense (m: BattleMon) = applyStage m.SpDefStage m.SpDefense
-    let effectiveSpeed (m: BattleMon) = applyStage m.SpdStage m.Speed
+    /// Effective Speed, faithful to the GSC engine: stage-modified then quartered
+    /// if paralysed (PAR). `ApplyPrzEffectOnSpeed` in core.asm halves twice.
+    let effectiveSpeed (m: BattleMon) =
+        let spd = applyStage m.SpdStage m.Speed
+        match m.Status with
+        | Paralysis -> max 1 (spd / 4)
+        | _ -> spd
 
     let isFainted (m: BattleMon) = m.Hp <= 0
 

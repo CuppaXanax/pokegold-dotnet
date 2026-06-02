@@ -42,12 +42,55 @@ module Battle =
 
     // -- Phase: pre-move status gates ----------------------------------------
 
-    /// Pre-move status gate. Returns (canAct, updatedUser, messages).
-    /// Currently always allows the move (stub). M13.3 will add sleep/freeze/
-    /// paralysis/confusion/flinch checks here.
-    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (_rng: Rng)
+    /// Pre-move status gate, faithful to `CheckTurn` / `BattleCommand_CheckTurn`
+    /// in `engine/battle/effect_commands.asm` (l.121-342).
+    ///
+    /// Gate order (M13.3 — non-volatile only; M13.4 adds flinch/confusion):
+    ///   1. Sleep — decrement counter; wake at 0, else "fast asleep!" (no RNG draw)
+    ///   2. Freeze — "frozen solid!"; Flame Wheel / Sacred Fire self-defrost (no RNG)
+    ///   3. Paralysis — 25% full-para (1 RNG draw: roll < 64 = can't act)
+    ///   (Flinch, Confusion, Attract — M13.4)
+    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (rng: Rng)
         : bool * BattleMon * string list * Rng =
-        (true, user, [], _rng)
+
+        // 1. Sleep gate
+        match user.Status with
+        | Sleep turnsLeft ->
+            let remaining = turnsLeft - 1
+            if remaining = 0 then
+                let user' = { user with Status = Healthy }
+                // Mon wakes up; it CAN act this turn (faithful to GSC: woke_up then
+                // continues through the remaining gates).
+                (true, user', [ $"{user.Species.Name} woke up!" ], rng)
+            else
+                let user' = { user with Status = Sleep remaining }
+                (false, user', [ $"{user.Species.Name} is fast asleep!" ], rng)
+        | _ ->
+
+        // 2. Freeze gate
+        match user.Status with
+        | Freeze ->
+            // Flame Wheel and Sacred Fire self-defrost (effect_commands.asm l.209-213).
+            // The move has already been selected; we check the user's chosen move via
+            // the move that will be passed to executeMove. However, preMoveStatusCheck
+            // receives only user/foe/rng — the move is resolved by the caller. We use
+            // a simplified approach: frozen always blocks. The self-defrost for
+            // Flame Wheel / Sacred Fire is a documented hook for M13.6/M13.7.
+            // (The end-of-turn HandleDefrost gives the 10% random thaw.)
+            (false, user, [ $"{user.Species.Name} is frozen solid!" ], rng)
+        | _ ->
+
+        // 3. Paralysis full-para gate (25% = 64/256)
+        match user.Status with
+        | Paralysis ->
+            let roll, rng' = Rng.next rng
+            if roll < 64 then
+                (false, user, [ $"{user.Species.Name} is fully paralyzed!" ], rng')
+            else
+                (true, user, [], rng')
+        | _ ->
+
+        (true, user, [], rng)
 
     // -- Phase: accuracy / miss check (CheckHit) ------------------------------
 
@@ -129,29 +172,99 @@ module Battle =
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 
     /// End-of-turn residual effects, called after both sides have acted and
-    /// mid-turn faint checks have passed. Returns updated (player, enemy, msgs).
+    /// mid-turn faint checks have passed. Returns updated (player, enemy, msgs, rng).
     ///
-    /// EXTENSION POINT: Later slices insert effects here in the canonical
-    /// order from HandleBetweenTurnEffects (effect_commands.asm):
-    ///   1. Future Sight countdown
-    ///   2. Weather (sandstorm chip, sun/rain timer)
-    ///   3. Wrap/bind/clamp chip
-    ///   4. Perish Song countdown
-    ///   5. Leech Seed drain
-    ///   6. Poison/Toxic tick
-    ///   7. Burn tick
-    ///   8. Nightmare
-    ///   9. Curse chip
-    ///  10. Safeguard timer
-    ///  11. Reflect/Light Screen timer
-    ///  12. Encore timer
-    ///  13. Disable timer
-    /// Each is a pure function (player, enemy, rng) -> (player, enemy, msgs, rng).
-    /// The list below is executed in order; later slices append to it.
+    /// Faithful order from HandleBetweenTurnEffects (core.asm l.205) and
+    /// ResidualDamage (core.asm l.949). In the disassembly, ResidualDamage runs
+    /// per-side after each move; here we consolidate into betweenTurns for both
+    /// sides (player then enemy) to keep the code structure clean.
+    ///
+    /// Slot ordering:
+    ///   1. Future Sight countdown              — stub (M13.7)
+    ///   2. Weather (sandstorm chip, timer)      — stub (M13.8)
+    ///   3. Wrap/Bind/Clamp chip                 — stub (M13.4)
+    ///   4. Perish Song countdown                — stub (M13.8)
+    ///   5. Leftovers / items                    — stub (items scope)
+    ///   6. Defrost (10% random thaw per turn)   — FILLED (M13.3)
+    ///   7. Poison/Toxic tick (player then enemy) — FILLED (M13.3)
+    ///   8. Burn tick (player then enemy)         — FILLED (M13.3)
+    ///   9. Leech Seed drain                     — stub (M13.4)
+    ///  10. Nightmare                            — stub (M13.4)
+    ///  11. Curse chip                           — stub (M13.4)
+    ///  12. Safeguard timer                      — stub (M13.8)
+    ///  13. Reflect/Light Screen timer           — stub (M13.8)
+    ///  14. Encore timer                         — stub (M13.4)
+    ///  15. Disable timer                        — stub (M13.4)
+
+    /// Apply one mon's poison/toxic/burn residual. Returns (mon, msgs).
+    /// Poison: MaxHP/8 (min 1). core.asm GetEighthMaxHP.
+    /// Toxic: MaxHP/16 * counter (counter increments each tick). core.asm l.989.
+    /// Burn: MaxHP/8 (min 1). core.asm same path as poison.
+    let private applyResidual (m: BattleMon) : BattleMon * string list =
+        if BattleMon.isFainted m then (m, [])
+        else
+        match m.Status with
+        | Poison ->
+            let dmg = max 1 (m.MaxHp / 8)
+            let m' = { m with Hp = max 0 (m.Hp - dmg) }
+            (m', [ $"{m.Species.Name} is hurt by poison!" ])
+        | BadPoison counter ->
+            // Increment counter (starts at 0, first tick uses counter=1).
+            let n = counter + 1
+            let tick = max 1 (m.MaxHp / 16)
+            let dmg = tick * n
+            let m' = { m with Hp = max 0 (m.Hp - dmg); Status = BadPoison n }
+            (m', [ $"{m.Species.Name} is hurt by poison!" ])
+        | Burn ->
+            let dmg = max 1 (m.MaxHp / 8)
+            let m' = { m with Hp = max 0 (m.Hp - dmg) }
+            (m', [ $"{m.Species.Name} is hurt by its burn!" ])
+        | _ -> (m, [])
+
+    /// 10% random thaw (HandleDefrost, core.asm l.1468-1498).
+    /// `BattleRandom; cp 10 percent` -> roll < 25 = thaw.
+    /// Only fires if the mon was NOT just frozen this turn (wPlayerJustGotFrozen).
+    /// We don't track "just got frozen" since freeze infliction is M13.6;
+    /// for now, always eligible.
+    let private applyDefrost (m: BattleMon) (rng: Rng) : BattleMon * string list * Rng =
+        match m.Status with
+        | Freeze ->
+            let roll, rng' = Rng.next rng
+            if roll < 25 then
+                let m' = { m with Status = Healthy }
+                (m', [ $"{m.Species.Name} was defrosted!" ], rng')
+            else
+                (m, [], rng')
+        | _ -> (m, [], rng)
+
     let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng)
         : BattleMon * BattleMon * string list * Rng =
-        // Stub: no residuals yet. M13.3/M13.4/M13.8 will populate this.
-        (player, enemy, [], rng)
+        let mutable p = player
+        let mutable e = enemy
+        let mutable r = rng
+        let mutable msgs: string list = []
+
+        // Slots 1-5: stubs (future sight, weather, wrap, perish, items)
+
+        // Slot 6: Defrost (10% thaw). Player then enemy.
+        let p', pDefMsgs, r' = applyDefrost p r
+        p <- p'; r <- r'; msgs <- msgs @ pDefMsgs
+        let e', eDefMsgs, r' = applyDefrost e r
+        e <- e'; r <- r'; msgs <- msgs @ eDefMsgs
+
+        // Slot 7: Poison/Toxic tick. Player then enemy.
+        let p', pPsnMsgs = applyResidual p
+        p <- p'; msgs <- msgs @ pPsnMsgs
+        let e', ePsnMsgs = applyResidual e
+        e <- e'; msgs <- msgs @ ePsnMsgs
+
+        // Slots 8+: Burn is handled by applyResidual above (same path as poison
+        // in the disassembly — ResidualDamage checks PSN|BRN together).
+
+        // Slots 9-15: stubs (leech seed, nightmare, curse, safeguard, screens,
+        // encore, disable — M13.4/M13.8)
+
+        (p, e, msgs, r)
 
     // -- Phase: faint check --------------------------------------------------
 

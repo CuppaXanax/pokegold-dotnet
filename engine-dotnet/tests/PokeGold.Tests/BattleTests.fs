@@ -759,3 +759,361 @@ let ``crit with equal atk and def stages ignores stages`` () =
                                       (mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50)
                                       m true Damage.MaxRoll false
     Assert.Equal(neutralCritDmg, critDmg)
+
+// --- M13.3 Non-volatile status + end-of-turn residuals ----------------------
+
+// Helper: create a mon with a specific status
+let private monWithStatus name t1 t2 level hp atk def spd status : BattleMon =
+    { mon name t1 t2 level hp atk def spd with
+        Status = status
+        Moves = [ strongHit ]
+        Pp = [ 35 ] }
+
+// Helper: find a seed where the first Rng draw satisfies a predicate
+let private findSeed pred =
+    let mutable seed = 0u
+    while seed < 1000000u && not (pred (fst (Rng.next (Rng.create seed)))) do
+        seed <- seed + 1u
+    seed
+
+// -- Pre-move gates ----------------------------------------------------------
+
+[<Fact>]
+let ``asleep mon cannot act and shows fast asleep message`` () =
+    let sleeper = monWithStatus "SLEEPER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 (Sleep 3)
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create sleeper foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is fast asleep!")
+    Assert.Equal(200, after.Enemy.Hp) // Foe not damaged
+
+[<Fact>]
+let ``sleeping mon wakes up when counter reaches zero and can act`` () =
+    let sleeper = monWithStatus "SLEEPER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 (Sleep 1)
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create sleeper foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "woke up!")
+    Assert.Equal(Healthy, after.Player.Status)
+    Assert.True(after.Enemy.Hp < 200) // Woke and attacked
+
+[<Fact>]
+let ``sleep counter decrements each turn`` () =
+    let sleeper = monWithStatus "SLEEPER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 (Sleep 5)
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create sleeper foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Equal(Sleep 4, after.Player.Status)
+
+[<Fact>]
+let ``frozen mon cannot act and shows frozen solid message`` () =
+    let frozen = monWithStatus "FROSTY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 Freeze
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    // Need a seed where the end-of-turn defrost check does NOT thaw (roll >= 25).
+    // Player is frozen so can't act; enemy acts. Then betweenTurns defrost draw.
+    // The first RNG draw in betweenTurns is for the frozen player.
+    // We need to track what the RNG state is at that point.
+    // Enemy uses strongHit: accuracy 95% -> accByte = 242, draw needed. Then crit + spread = 2 more draws.
+    // So betweenTurns gets rng after 3 enemy draws. Let's use a seed and verify.
+    let seed = 42u
+    let state = Battle.create frozen foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is frozen solid!")
+
+[<Fact>]
+let ``paralyzed mon has 25 pct chance of full paralysis`` () =
+    // Find a seed where first draw < 64 (full para for the player, who is faster)
+    let seed = findSeed (fun d -> d < 64)
+    let para = monWithStatus "PARA" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 Paralysis
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create para foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is fully paralyzed!")
+
+[<Fact>]
+let ``paralyzed mon can act when not fully paralyzed`` () =
+    // Find a seed where first draw >= 64 (not full para)
+    let seed = findSeed (fun d -> d >= 64)
+    let para = monWithStatus "PARA" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 Paralysis
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create para foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "is fully paralyzed!")
+    Assert.True(after.Enemy.Hp < 200) // Mon attacked
+
+// -- Stat modifiers ----------------------------------------------------------
+
+[<Fact>]
+let ``paralysis quarters effective speed`` () =
+    let m = { mon "FAST" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+              with Status = Paralysis }
+    Assert.Equal(25, BattleMon.effectiveSpeed m) // 100/4 = 25
+
+[<Fact>]
+let ``paralysis speed reduction with stages`` () =
+    let m = { mon "FAST" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+              with Status = Paralysis; SpdStage = 2 }
+    // Stage +2: 100 * 2/1 = 200; then /4 = 50
+    Assert.Equal(50, BattleMon.effectiveSpeed m)
+
+[<Fact>]
+let ``burn halves physical attack in damage calc`` () =
+    let attacker = { mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+                     with Status = Burn }
+    let defender = mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let burnDmg = Damage.calc attacker defender m false Damage.MaxRoll false
+    let normalDmg = Damage.calc (mon "ATK" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50) defender m false Damage.MaxRoll false
+    Assert.True(burnDmg < normalDmg, "Burn should reduce physical damage")
+
+[<Fact>]
+let ``burn does not affect special attack damage`` () =
+    let attacker = { mon "ATK" (ty "FIRE") (ty "FIRE") 10 100 30 25 50
+                     with Status = Burn }
+    let defender = mon "DEF" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50
+    let m = move "EMBER" "EFFECT_NORMAL_HIT" 40 (ty "FIRE")
+    let burnDmg = Damage.calc attacker defender m false Damage.MaxRoll false
+    let normalDmg = Damage.calc (mon "ATK" (ty "FIRE") (ty "FIRE") 10 100 30 25 50) defender m false Damage.MaxRoll false
+    Assert.Equal(normalDmg, burnDmg)
+
+// -- Status-inflicting effects -----------------------------------------------
+
+let private sleepMove = Moves.byName "HYPNOSIS"
+let private poisonMove = Moves.byName "POISONPOWDER"
+let private toxicMove = Moves.byName "TOXIC"
+let private paraMove = Moves.byName "THUNDER_WAVE"
+
+[<Fact>]
+let ``EFFECT_SLEEP puts target to sleep with counter 2-7`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ sleepMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "fell asleep!")
+    match after.Enemy.Status with
+    | Sleep n -> Assert.True(n >= 2 && n <= 7, $"Sleep turns {n} not in [2,7]")
+    | s -> Assert.Fail($"Expected Sleep, got {s}")
+
+[<Fact>]
+let ``EFFECT_SLEEP fails on already sleeping target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ sleepMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Sleep 3 }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is already asleep!")
+    // The enemy's own pre-move gate decrements the sleep counter from 3 to 2.
+    Assert.Equal(Sleep 2, after.Enemy.Status)
+
+[<Fact>]
+let ``EFFECT_SLEEP fails on already statused target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ sleepMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Paralysis }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "But it failed!")
+
+[<Fact>]
+let ``EFFECT_POISON poisons target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ poisonMove ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was poisoned!")
+    Assert.Equal(Poison, after.Enemy.Status)
+
+[<Fact>]
+let ``EFFECT_POISON fails on Poison-type target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ poisonMove ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "POISON") (ty "POISON") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "doesn't affect")
+    Assert.Equal(Healthy, after.Enemy.Status)
+
+[<Fact>]
+let ``EFFECT_POISON fails on already poisoned target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ poisonMove ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Poison }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is already poisoned!")
+
+[<Fact>]
+let ``EFFECT_POISON fails on target with other status`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ poisonMove ]; Pp = [35] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Burn }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "But it failed!")
+
+[<Fact>]
+let ``EFFECT_TOXIC badly poisons target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ toxicMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was badly poisoned!")
+    // End-of-turn residual increments the toxic counter from 0 to 1.
+    Assert.Equal(BadPoison 1, after.Enemy.Status)
+
+[<Fact>]
+let ``EFFECT_TOXIC fails on Poison-type target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ toxicMove ]; Pp = [10] }
+    let foe = { mon "FOE" (ty "POISON") (ty "POISON") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "doesn't affect")
+
+[<Fact>]
+let ``EFFECT_PARALYZE paralyzes target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ paraMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is paralyzed!")
+    Assert.Equal(Paralysis, after.Enemy.Status)
+
+[<Fact>]
+let ``EFFECT_PARALYZE fails on already paralyzed target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ paraMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Paralysis }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is already paralyzed!")
+
+[<Fact>]
+let ``EFFECT_PARALYZE fails on already statused target`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ paraMove ]; Pp = [20] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ strongHit ]; Pp = [35]; Status = Poison }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "But it failed!")
+
+// -- End-of-turn residuals ---------------------------------------------------
+
+[<Fact>]
+let ``poison residual deals MaxHp div 8 per turn`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 160 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Poison }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // Poison tick: 160/8 = 20 HP. No combat damage since both use Growl.
+    Assert.Contains(after.Messages, fun m -> m.Contains "is hurt by poison!")
+    let dmg = user.Hp - after.Player.Hp
+    Assert.Equal(20, dmg)
+
+[<Fact>]
+let ``toxic residual ramps each turn`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 160 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = BadPoison 0 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    // Turn 1: counter 0 -> 1, tick = max(1, 160/16) * 1 = 10 * 1 = 10
+    let after1 = Battle.chooseMove 0 state
+    Assert.Contains(after1.Messages, fun m -> m.Contains "is hurt by poison!")
+    Assert.Equal(BadPoison 1, after1.Player.Status)
+    let dmg1 = user.Hp - after1.Player.Hp
+    Assert.Equal(10, dmg1) // 160/16 * 1
+
+    // Turn 2: counter 1 -> 2, tick = 10 * 2 = 20
+    let after2 = Battle.chooseMove 0 after1
+    let dmg2 = after1.Player.Hp - after2.Player.Hp
+    Assert.Equal(20, dmg2) // 160/16 * 2
+    Assert.Equal(BadPoison 2, after2.Player.Status)
+
+[<Fact>]
+let ``burn residual deals MaxHp div 8 per turn`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 160 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Burn }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is hurt by its burn!")
+    let dmg = user.Hp - after.Player.Hp
+    Assert.Equal(20, dmg) // 160/8 = 20
+
+[<Fact>]
+let ``poison residual min 1 HP for low MaxHp`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 5 7 10 10 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Poison }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 5 7 10 10 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    // 7/8 = 0 -> clamped to 1
+    let dmg = user.Hp - after.Player.Hp
+    Assert.Equal(1, dmg)
+
+[<Fact>]
+let ``end-of-turn faint from poison residual ends battle`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 160 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Poison; Hp = 1 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Equal(0, after.Player.Hp)
+    Assert.Equal(Some Lose, after.Outcome)
+
+[<Fact>]
+let ``frozen mon thaws at end of turn with low roll`` () =
+    // Both use Growl (no combat RNG draws). Defrost draw is the first in betweenTurns.
+    // Need seed where first draw < 25.
+    let seed = findSeed (fun d -> d < 25)
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Freeze }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "was defrosted!")
+    Assert.Equal(Healthy, after.Player.Status)
+
+[<Fact>]
+let ``frozen mon stays frozen with high roll`` () =
+    // Need seed where first draw >= 25.
+    let seed = findSeed (fun d -> d >= 25)
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+                 with Moves = [ growl ]; Pp = [40]; Status = Freeze }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+                with Moves = [ growl ]; Pp = [40] }
+    let state = Battle.create user foe seed
+    let after = Battle.chooseMove 0 state
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "was defrosted!")
+    Assert.Equal(Freeze, after.Player.Status)
+
+[<Fact>]
+let ``paralysis affects turn order via speed`` () =
+    // Para quarters speed: 100/4 = 25 < foe's 50.
+    let user = { mon "PARA" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+                 with Status = Paralysis }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
+    Assert.True(BattleMon.effectiveSpeed user < BattleMon.effectiveSpeed foe)
