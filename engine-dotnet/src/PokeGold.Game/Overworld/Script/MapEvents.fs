@@ -21,12 +21,12 @@ module MapEvents =
         if events.Scenes.Length > 0 then events.Scenes.[0] else ""
 
     /// Is this object currently present, given the world's event flags? An object
-    /// with no `EventFlag` is always present; otherwise it appears only while its
-    /// flag is set.
+    /// with no `EventFlag` is always present; otherwise it is hidden while its
+    /// flag is set (GSC semantics: `EVENT_*` means "hidden when set").
     let objectVisible (world: World) (o: ObjectEvent) : bool =
         match o.EventFlag with
         | None -> true
-        | Some flag -> World.hasEvent flag world
+        | Some flag -> not (World.hasEvent flag world)
 
     /// The objects currently present in the world (visibility-filtered).
     let visibleObjects (world: World) (events: MapEvents) : ObjectEvent[] =

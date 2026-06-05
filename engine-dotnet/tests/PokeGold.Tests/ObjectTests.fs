@@ -196,35 +196,29 @@ let ``actionScript reaches across a counter to the NPC behind it`` () =
     Assert.Equal(None, Triggers.actionScript objectScriptAt (fun _ _ -> false) MapEvents.empty 3 3 Up)
 
 [<Fact>]
-let ``hidden event-gated objects neither block the player nor wander`` () =
-    // Azalea Town's Slowpokes/Rockets/Rival are gated behind event flags that are
-    // unset in a fresh world, so they are absent — they must not render (scene-side),
-    // not occupy a tile (no invisible walls), and not wander.
+let ``event-gated objects are visible until their flag is set`` () =
+    // Azalea Town's event-gated NPCs are visible in a fresh world because the
+    // EVENT_* flag is clear; they only disappear once that flag is set.
     let content = PokeGold.Game.Data.Content()
     let st0 = OverworldState.loadById content "AzaleaTown"
     let vis (n: NpcObject) = MapEvents.objectVisible World.empty n.Event
 
-    Assert.True(st0.Npcs |> Array.exists (vis >> not), "expected event-gated objects in Azalea")
+    Assert.True(st0.Npcs |> Array.exists vis, "expected event-gated objects in Azalea to be visible")
 
-    // Hidden objects' tiles are not in the occupancy set the player is blocked by.
+    // Visible objects are part of the occupancy set the player is blocked by.
     let visibleCells = ObjectStep.occupiedCells (st0.Npcs |> Array.filter vis)
 
     for n in st0.Npcs do
-        if not (vis n) then
-            Assert.False(Set.contains (struct (n.CellX, n.CellY)) visibleCells)
+        if vis n then
+            Assert.True(Set.contains (struct (n.CellX, n.CellY)) visibleCells)
 
-    // Stepping the world leaves every hidden object exactly where it spawned.
+    // Stepping the world keeps the visible set intact.
     let mutable st = st0
 
     for _ in 1..300 do
         st <- OverworldState.tick vis Buttons.none st
 
-    for i in 0 .. st.Npcs.Length - 1 do
-        let a = st0.Npcs.[i]
-        let b = st.Npcs.[i]
-
-        if not (vis a) then
-            Assert.Equal<int * int>((a.CellX, a.CellY), (b.CellX, b.CellY))
+    Assert.True(st.Npcs |> Array.exists vis, "expected visible objects to remain present after stepping")
 
 [<Fact>]
 let ``visible NPCs still wander when the world is stepped`` () =

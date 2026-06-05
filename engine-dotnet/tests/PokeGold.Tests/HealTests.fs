@@ -124,7 +124,7 @@ let ``interpreter suspends with HealParty effect`` () =
              \tspecial HealParty\n\
              \tend\n"
 
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Suspended(_, HealParty) -> ()
     | other -> Assert.Fail(sprintf "Expected Suspended HealParty, got %A" other)
 
@@ -137,7 +137,7 @@ let ``interpreter no-ops cosmetic specials and completes`` () =
              \tspecial RestartMapMusic\n\
              \tend\n"
 
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Completed -> ()
     | other -> Assert.Fail(sprintf "Expected Completed, got %A" other)
 
@@ -150,7 +150,7 @@ let ``script continues past HealParty on resume`` () =
              \tsetval 42\n\
              \tend\n"
 
-    let step1 = Script.start "S" World.empty prog
+    let step1 = Script.start "S" World.empty prog ""
 
     match step1.Outcome with
     | Suspended(vm, HealParty) ->

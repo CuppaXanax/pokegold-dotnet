@@ -283,7 +283,7 @@ let ``Special PokemonCenterPC suspends with OpenPc effect`` () =
             "S:\n\
              \tspecial PokemonCenterPC\n\
              \tend\n"
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Suspended(_, OpenPc) -> ()
     | other -> Assert.Fail(sprintf "Expected Suspended(_, OpenPc), got %A" other)
 
@@ -295,7 +295,7 @@ let ``OpenPc resumes with None after the PC closes`` () =
              \tspecial PokemonCenterPC\n\
              \tsetval 42\n\
              \tend\n"
-    let step1 = Script.start "S" World.empty prog
+    let step1 = Script.start "S" World.empty prog ""
     match step1.Outcome with
     | Suspended(vm, OpenPc) ->
         let step2 = Script.resume None step1.World vm

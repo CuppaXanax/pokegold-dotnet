@@ -192,7 +192,7 @@ let ``interpreter suspends with OpenMart effect for pokemart`` () =
              \tpokemart MARTTYPE_STANDARD, MART_AZALEA\n\
              \tend\n"
 
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Suspended(_, OpenMart("MARTTYPE_STANDARD", items)) ->
         Assert.Equal(9, List.length items)
         Assert.Contains("FLOWER_MAIL", items)
@@ -207,7 +207,7 @@ let ``interpreter resumes past OpenMart with None`` () =
              \tsetval 77\n\
              \tend\n"
 
-    let step1 = Script.start "S" World.empty prog
+    let step1 = Script.start "S" World.empty prog ""
     match step1.Outcome with
     | Suspended(vm, OpenMart _) ->
         let step2 = Script.resume None step1.World vm
@@ -222,7 +222,7 @@ let ``OpenMart for unknown MART_* constant yields empty item list`` () =
              \tpokemart MARTTYPE_STANDARD, MART_NONEXISTENT\n\
              \tend\n"
 
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Suspended(_, OpenMart(_, items)) -> Assert.Empty(items)
     | other -> Assert.Fail(sprintf "Expected Suspended OpenMart, got %A" other)
 

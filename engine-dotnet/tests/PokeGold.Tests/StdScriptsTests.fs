@@ -77,7 +77,7 @@ let ``jumpstd into std program runs the std script`` () =
             (function
                 | ShowText("NurseAskHealText", _) -> true
                 | _ -> false)
-            (Script.start "S" World.empty prog)
+            (Script.start "S" World.empty prog "")
 
     Assert.True(reached.IsSome)
 
@@ -91,7 +91,7 @@ let ``jumpstd to an unknown target falls through`` () =
              \tend\n"
 
     // Unresolved std target is a no-op: execution falls through to `setval`/`end`.
-    match (Script.start "S" World.empty prog).Outcome with
+    match (Script.start "S" World.empty prog "").Outcome with
     | Completed -> ()
     | other -> Assert.Fail(sprintf "Expected Completed, got %A" other)
 
@@ -106,7 +106,7 @@ let ``callstd returns to the caller after the std script ends`` () =
 
     // PokecenterSignScript shows a sign then ends; callstd must return so the
     // caller's `setval 99` runs and the script completes (not left dangling).
-    let step1 = Script.start "S" World.empty prog
+    let step1 = Script.start "S" World.empty prog ""
 
     let reachedSetval =
         let rec loop n (step: ScriptStep) =
@@ -148,7 +148,7 @@ let ``nurse jumps straight to the heal prompt, not through every time-of-day lin
     // regression guard for the parser fix that lets `.ok` be found. With the bug,
     // execution fell through into every branch and recited all four texts.
     let texts =
-        collectTexts (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram)
+        collectTexts (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram "")
 
     Assert.DoesNotContain("NurseMornText", texts)
     Assert.DoesNotContain("NurseDayText", texts)
@@ -162,7 +162,7 @@ let ``Azalea nurse script reaches HealParty via jumpstd`` () =
             (function
                 | HealParty -> true
                 | _ -> false)
-            (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram)
+            (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram "")
 
     Assert.Equal(Some HealParty, reached)
 
@@ -175,7 +175,7 @@ let ``Azalea nurse heal restores a fainted party`` () =
             (function
                 | HealParty -> true
                 | _ -> false)
-            (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram)
+            (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram "")
 
     Assert.Equal(Some HealParty, reached)
 
@@ -208,7 +208,7 @@ let ``Azalea mart clerk script reaches OpenMart`` () =
             (function
                 | OpenMart("MARTTYPE_STANDARD", _) -> true
                 | _ -> false)
-            (Script.start "AzaleaMartClerkScript" World.empty martProgram)
+            (Script.start "AzaleaMartClerkScript" World.empty martProgram "")
 
     match reached with
     | Some(OpenMart("MARTTYPE_STANDARD", items)) -> Assert.NotEmpty items

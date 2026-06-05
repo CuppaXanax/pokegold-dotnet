@@ -323,3 +323,14 @@ module OverworldState =
     let objectIndexOf (mapId: string) (objConst: string) : int option =
         dataFor mapId
         |> Option.bind (fun m -> Array.tryFindIndex ((=) objConst) m.ObjectConsts)
+
+    /// The map object event a symbolic actor operand refers to, if it resolves.
+    let objectEventOf (mapId: string) (objConst: string) : ObjectEvent option =
+        dataFor mapId
+        |> Option.bind (fun m ->
+            objectIndexOf mapId objConst
+            |> Option.bind (fun i ->
+                if i >= 0 && i < m.Events.Objects.Length then
+                    Some m.Events.Objects.[i]
+                else
+                    None))

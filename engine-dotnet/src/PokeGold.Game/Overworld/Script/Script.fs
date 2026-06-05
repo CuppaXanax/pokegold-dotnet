@@ -25,6 +25,10 @@ type ScriptEffect =
     | TakeItem of item: string * qty: int
     /// `checkitem` — is the item in the bag? → resume value: 1 / 0.
     | CheckItem of item: string
+    /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
+    | GivePoke of species: string * level: int * item: string option
+    /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
+    | CheckPoke of species: string
     /// `setlasttalked` — make this object the active one (for `faceplayer` etc.).
     | SetLastTalked of obj: string
     /// `applymovement` — run a movement script on an object; resume when it ends.
@@ -81,7 +85,9 @@ type ScriptVm =
       /// std-script program returns to the right place.
       Stack: (ScriptProgram * int) list
       /// `wScriptVar` — the scratch register every check/compare routes through.
-      ScriptVar: int }
+      ScriptVar: int
+      /// The current map id, used for `checkscene` / `setscene` lookups.
+      MapId: string }
 
 /// The result of running (or resuming) a script until it next needs the outside
 /// world or finishes.
@@ -204,8 +210,8 @@ module Script =
             | Clearflag flag -> run (World.clearFlag flag world) next
 
             // ---- Map scene state -------------------------------------------
-            | Checkscene -> run world { next with ScriptVar = World.getScene "" world }
-            | Setscene scene -> run (World.setScene "" scene world) next
+            | Checkscene -> run world { next with ScriptVar = World.getScene vm.MapId world }
+            | Setscene scene -> run (World.setScene vm.MapId scene world) next
             | Checkmapscene map -> run world { next with ScriptVar = World.getScene map world }
             | Setmapscene(map, scene) -> run (World.setScene map scene world) next
 
@@ -228,6 +234,8 @@ module Script =
             | Verbosegiveitem(item, qty) -> suspend next world (GiveItem(item, qty, true))
             | Takeitem(item, qty) -> suspend next world (TakeItem(item, qty))
             | Checkitem item -> suspend next world (CheckItem item)
+            | Givepoke(species, level, item) -> suspend next world (GivePoke(species, level, item))
+            | Checkpoke species -> suspend next world (CheckPoke species)
             | Setlasttalked obj -> suspend next world (SetLastTalked obj)
             | Applymovement(obj, mv) -> suspend next world (ApplyMovement(obj, mv))
             | Faceplayer -> suspend next world FacePlayer
@@ -269,10 +277,10 @@ module Script =
 
     /// Start a script at `label` over `world`, running until it suspends or ends.
     /// An unknown label completes immediately (nothing to run).
-    let start (label: string) (world: World) (prog: ScriptProgram) : ScriptStep =
+    let start (label: string) (world: World) (prog: ScriptProgram) (mapId: string) : ScriptStep =
         match prog.Labels.TryFind label with
         | None -> { World = world; Outcome = Completed }
-        | Some pc -> run world { Program = prog; Pc = pc; Stack = []; ScriptVar = 0 }
+        | Some pc -> run world { Program = prog; Pc = pc; Stack = []; ScriptVar = 0; MapId = mapId }
 
     /// Continue a suspended script after its effect was enacted. For result-bearing
     /// effects, pass `Some value` to feed `wScriptVar` (e.g. the yes/no choice or

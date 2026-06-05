@@ -60,6 +60,8 @@ module EmitMaps =
         | Promptbutton -> "Promptbutton"
         | Yesorno -> "Yesorno"
         | Loadwildmon (s, l) -> sprintf "Loadwildmon(%s, %d)" (str s) l
+        | Givepoke (s, l, item) -> sprintf "Givepoke(%s, %d, %s)" (str s) l (strOpt item)
+        | Checkpoke s -> sprintf "Checkpoke %s" (str s)
         | Loadtrainer (g, i) -> sprintf "Loadtrainer(%s, %s)" (str g) (str i)
         | Startbattle -> "Startbattle"
         | Reloadmapafterbattle -> "Reloadmapafterbattle"

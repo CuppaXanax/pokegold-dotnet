@@ -65,6 +65,32 @@ let ``giveitem and verbosegiveitem default quantity to one`` () =
     )
 
 [<Fact>]
+let ``parses givepoke without a held item`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tgivepoke CYNDAQUIL, 5\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Givepoke("CYNDAQUIL", 5, None); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``parses givepoke with a held item`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tgivepoke CYNDAQUIL, 5, BERRY\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Givepoke("CYNDAQUIL", 5, Some "BERRY"); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
 let ``local labels are qualified with their enclosing global label`` () =
     let prog =
         parse
@@ -202,7 +228,7 @@ let private drive (respond: ScriptEffect -> int option) (world: World) (label: s
             let next = Script.resume (respond effect) world vm
             loop next.World next.Outcome (effect :: effects)
 
-    let first = Script.start label world prog
+    let first = Script.start label world prog ""
     loop first.World first.Outcome []
 
 // A driver that needs no answers (no result-bearing effects on the path).
@@ -241,6 +267,29 @@ let ``checkevent then iftrue branches only when the flag is set`` () =
     // Flag set -> the iftrue is taken and we see the "open" text.
     let _, opened = driveSilent (World.setEvent "EVENT_GATE" World.empty) "S" prog
     Assert.Equal<ScriptEffect list>([ ShowText("OpenText", false) ], opened)
+
+[<Fact>]
+let ``event-gated objects are visible only when their flag is clear`` () =
+    let ev =
+        { X = 0
+          Y = 0
+          Sprite = "SPRITE_BALL"
+          Movement = "SPRITEMOVEDATA_STILL"
+          RadiusX = 0
+          RadiusY = 0
+          Hour1 = 0
+          Hour2 = 0
+          Palette = "PAL_OW_RED"
+          Type = "OBJECTTYPE_ITEMBALL"
+          Sight = 0
+          Script = ""
+          EventFlag = Some "EVENT_X" }
+
+    let visibleWhenClear = MapEvents.objectVisible World.empty ev
+    let hiddenWhenSet = MapEvents.objectVisible (World.setEvent "EVENT_X" World.empty) ev
+
+    Assert.True(visibleWhenClear)
+    Assert.False(hiddenWhenSet)
 
 [<Fact>]
 let ``setevent persists into the returned world`` () =
@@ -373,6 +422,14 @@ let ``jumptextfaceplayer shows text facing the player then ends`` () =
     Assert.Equal<ScriptEffect list>([ ShowText("Greeting", true) ], effects)
 
 [<Fact>]
+let ``givepoke suspends with a GivePoke effect`` () =
+    let prog = ScriptParser.parseText "S:\n\tgivepoke CYNDAQUIL, 5\n\tend\n"
+
+    match Script.start "S" World.empty prog "" with
+    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None)) } -> ()
+    | other -> Assert.Fail(sprintf "Expected Suspended GivePoke, got %A" other)
+
+[<Fact>]
 let ``unsupported opcodes are skipped so the script keeps running`` () =
     let prog =
         ScriptParser.parseText
@@ -455,15 +512,14 @@ let ``parses an object record with all thirteen fields`` () =
 let ``object visibility is gated on the world's event flags`` () =
     let ev = AsmLoad.events "maps/AzaleaTown.asm"
 
-    // With no flags set, only the always-present objects (EventFlag = None) show.
+    // With no flags set, event-gated objects are visible (their flag is clear).
     let baseVisible = MapEvents.visibleObjects World.empty ev
-    Assert.All(baseVisible, fun o -> Assert.Equal(None, o.EventFlag))
     Assert.Contains(baseVisible, fun o -> o.Script = "AzaleaTownGrampsScript")
-    Assert.DoesNotContain(baseVisible, fun o -> o.Script = "AzaleaTownRocket1Script")
+    Assert.Contains(baseVisible, fun o -> o.Script = "AzaleaTownRocket1Script")
 
-    // Setting the Rocket's flag makes it appear.
+    // Setting the Rocket's flag hides it again.
     let withRocket = World.setEvent "EVENT_AZALEA_TOWN_SLOWPOKETAIL_ROCKET" World.empty
-    Assert.Contains(MapEvents.visibleObjects withRocket ev, fun o -> o.Script = "AzaleaTownRocket1Script")
+    Assert.DoesNotContain(MapEvents.visibleObjects withRocket ev, fun o -> o.Script = "AzaleaTownRocket1Script")
 
 [<Fact>]
 let ``per-cell lookups find the event on a tile`` () =
@@ -568,7 +624,7 @@ let ``jumptext ends the script so consecutive sign scripts don't run together`` 
              SecondSign:\n\
              \tjumptext SecondSignText\n"
 
-    let step = Script.start "FirstSign" World.empty prog
+    let step = Script.start "FirstSign" World.empty prog ""
 
     match step.Outcome with
     | Suspended(vm, ShowText(label, _)) ->
@@ -590,7 +646,7 @@ let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
              \twritetext MixedText\n\
              \tend\n"
 
-    let step = Script.start "Mixed" World.empty prog
+    let step = Script.start "Mixed" World.empty prog ""
 
     match step.Outcome with
     | Suspended(_, ShowText(label, _)) -> Assert.Equal("MixedText", label)
@@ -614,7 +670,7 @@ let ``trainer macro expands to TalkToTrainerScript: first encounter shows seen t
              \tend\n"
 
     // First encounter (flag not set): should show seen text, then battle.
-    let step = Script.start "TrainerBugCatcherBenny" World.empty prog
+    let step = Script.start "TrainerBugCatcherBenny" World.empty prog ""
     match step.Outcome with
     | Suspended(vm, FacePlayer) ->
         // resume from faceplayer → checkevent (flag not set) → iftrue not taken → opentext → writetext SeenText
@@ -642,7 +698,7 @@ let ``trainer macro expands to TalkToTrainerScript: already beaten shows after t
 
     // Already beaten (flag set): should jump to .Script and show after text.
     let world = World.setEvent "EVENT_BEAT_BENNY" World.empty
-    let step = Script.start "TrainerBugCatcherBenny" world prog
+    let step = Script.start "TrainerBugCatcherBenny" world prog ""
     match step.Outcome with
     | Suspended(vm, FacePlayer) ->
         let step2 = Script.resume None world vm

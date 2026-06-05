@@ -115,6 +115,10 @@ module ScriptParser =
         | "yesorno" -> Some Yesorno
         // battle
         | "loadwildmon" -> Some(Loadwildmon(arg 0, i 1))
+        | "givepoke" ->
+            let item = if args.Length > 2 then Some(arg 2) else None
+            Some(Givepoke(arg 0, i 1, item))
+        | "checkpoke" -> Some(Checkpoke(arg 0))
         | "loadtrainer" -> Some(Loadtrainer(arg 0, arg 1))
         | "startbattle" -> Some Startbattle
         | "reloadmapafterbattle" -> Some Reloadmapafterbattle
@@ -137,11 +141,13 @@ module ScriptParser =
         // mart
         | "pokemart" -> Some(Pokemart(arg 0, arg 1))
         // map & warp
+        | "callback" -> Some(Unsupported(mn, args))
         | "warp" -> Some(Warp(arg 0, i 1, i 2))
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))
         | "reloadmap" -> Some Reloadmap
         | "refreshmap" -> Some Refreshmap
         // terminators
+        | "endcallback" -> Some End
         | "end" -> Some End
         | "endall" -> Some EndAll
         | _ -> None
@@ -157,7 +163,7 @@ module ScriptParser =
               "object_const_def"; "const"; "const_def"; "const_skip"; "const_value"
               "map_def"; "map_attributes"; "map_header"; "connection"
               "def_scene_scripts"; "scene_script"
-              "def_callbacks"; "callback"
+              "def_callbacks"
               "def_warp_events"; "warp_event"
               "def_coord_events"; "coord_event"
               "def_bg_events"; "bg_event"

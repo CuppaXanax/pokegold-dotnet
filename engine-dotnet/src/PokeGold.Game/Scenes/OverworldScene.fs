@@ -115,6 +115,35 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume (Some 1) world vm)
             | CheckItem item ->
                 this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
+            | GivePoke(species, level, item) ->
+                match Map.tryFind species PokeGold.Game.Data.Species.all with
+                | Some stats ->
+                    let mon = PokeGold.Game.Player.PartyMon.create stats.Dex level
+                    let mon = match item with Some i -> { mon with HeldItem = Some i } | None -> mon
+                    if player.Party.Length < 6 then
+                        player <- { player with Party = player.Party @ [ mon ] }
+                        this.Drive(Script.resume (Some 1) world vm)
+                    else
+                        this.Drive(Script.resume (Some 0) world vm)
+                | None ->
+                    this.Drive(Script.resume (Some 0) world vm)
+            | CheckPoke species ->
+                match Map.tryFind species PokeGold.Game.Data.Species.all with
+                | Some stats ->
+                    let has = player.Party |> List.exists (fun m -> m.SpeciesId = stats.Dex)
+                    this.Drive(Script.resume (Some(if has then 1 else 0)) world vm)
+                | None ->
+                    this.Drive(Script.resume (Some 0) world vm)
+            | SetVisible(obj, visible) ->
+                match OverworldState.objectEventOf state.MapId obj with
+                | Some o ->
+                    match o.EventFlag with
+                    | Some flag ->
+                        world <- (if visible then World.clearEvent flag world else World.setEvent flag world)
+                    | None -> ()
+                | None -> ()
+
+                this.Drive(Script.resume None world vm)
             | HealParty ->
                 player <- { player with Party = Heal.healParty player.Party }
                 // Play the heal jingle *once*, layered over the map music. MUSIC_HEAL
@@ -136,7 +165,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | SetLastTalked _
             | FacePlayer
             | FaceObject _
-            | SetVisible _
             | TurnObject _
             | LoadWild _
             | LoadTrainer _
@@ -336,7 +364,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                     | Some label when state.Script.Labels.ContainsKey label ->
                         sound.PlaySfx "Sfx_Menu"
-                        this.Drive(Script.start label world state.Script)
+                        this.Drive(Script.start label world state.Script state.MapId)
                     | _ -> Stay
                 else
                     let before = state.Player.CellX, state.Player.CellY
@@ -381,7 +409,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
                             | Some c when state.Script.Labels.ContainsKey c.Script ->
                                 firedCoords <- Set.add after firedCoords
-                                this.Drive(Script.start c.Script world state.Script)
+                                this.Drive(Script.start c.Script world state.Script state.MapId)
                             | Some _ ->
                                 firedCoords <- Set.add after firedCoords
                                 Stay
