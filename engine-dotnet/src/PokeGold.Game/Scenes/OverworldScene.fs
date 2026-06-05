@@ -4,6 +4,7 @@ open System.Collections.Generic
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Audio
+open PokeGold.Game.Battle
 open PokeGold.Game.Overworld
 open PokeGold.Game.Overworld.Script
 open PokeGold.Game.Player
@@ -27,6 +28,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable firedCoords: Set<int * int> = Set.empty
     /// The player's full persistent state (party, bag, dex, money, etc.).
     let mutable player: PlayerState = PlayerState.initial
+    /// Staged battle data for the next `startbattle` call.
+    let mutable stagedWild: (string * int) option = None
+    let mutable stagedTrainer: (string * string) option = None
+    let mutable stagedWinText: string = ""
+    let mutable stagedLossText: string = ""
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
     /// A script suspended on an `applymovement`: the VM to resume, the moved object's
@@ -81,6 +87,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private _.RemoveItem (item: string) (qty: int) =
         player <- { player with Bag = Bag.remove item qty player.Bag }
 
+    member private this.BuildBattle() : BattleScene =
+        let playerMon =
+            match player.Party with
+            | lead :: _ -> PartyMon.toBattleMon lead
+            | [] ->
+                BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ]
+
+        let enemyMon =
+            match stagedWild with
+            | Some(species, level) ->
+                match Map.tryFind species Species.all with
+                | Some stats -> BattleMon.ofSpecies stats level [ Moves.byName "TACKLE" ]
+                | None -> BattleMon.ofSpecies (Species.byName "PIDGEY") level [ Moves.byName "TACKLE" ]
+            | None ->
+                match stagedTrainer with
+                | Some(_group, _id) ->
+                    let lvl = match player.Party with lead :: _ -> lead.Level | [] -> 5
+                    BattleMon.ofSpecies (Species.byName "PIDGEY") lvl [ Moves.byName "TACKLE" ]
+                | None ->
+                    BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
+
+        BattleScene(content.Font, Battle.create playerMon enemyMon 0x1234u)
+
     /// Drive the VM from a run step: enact pure/immediate effects inline (resuming
     /// at once), and for effects that need a child scene, push it and suspend.
     member private this.Drive(step: ScriptStep) : Transition =
@@ -101,7 +130,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | StartBattle ->
                 pending <- Some(vm, effect)
                 sound.PlaySfx "Sfx_Menu"
-                Push(BattleScene.StartDemo content :> Scene)
+                Push(this.BuildBattle() :> Scene)
             | GiveItem(item, qty, true) ->
                 this.AddItem item qty
                 pending <- Some(vm, effect)
@@ -115,6 +144,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 this.Drive(Script.resume (Some 1) world vm)
             | CheckItem item ->
                 this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
+            | LoadWild(species, level) ->
+                stagedWild <- Some(species, level)
+                stagedTrainer <- None
+                this.Drive(Script.resume None world vm)
+            | LoadTrainer(group, id) ->
+                stagedTrainer <- Some(group, id)
+                stagedWild <- None
+                this.Drive(Script.resume None world vm)
+            | WinLossText(win, loss) ->
+                stagedWinText <- win
+                stagedLossText <- loss
+                this.Drive(Script.resume None world vm)
             | GivePoke(species, level, item) ->
                 match Map.tryFind species PokeGold.Game.Data.Species.all with
                 | Some stats ->
@@ -166,10 +207,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | FacePlayer
             | FaceObject _
             | TurnObject _
-            | LoadWild _
-            | LoadTrainer _
-            | WinLossText _
             | ReloadMap
+            | ChangeBlock(_, _, _) ->
+                // TODO: Apply block overlay to map collision/visual data.
+                // For now, just acknowledge and continue so scripts don't break.
+                this.Drive(Script.resume None world vm)
             | PlayMusic _
             | PlaySound _
             | ScriptEffect.Cry _
@@ -324,7 +366,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 let value =
                     match effect with
                     | AskYesNo -> Some yesNoResult
-                    | StartBattle -> Some 1
+                    | StartBattle ->
+                        // TODO: wire the popped battle scene's real outcome into the script result.
+                        stagedWild <- None
+                        stagedTrainer <- None
+                        stagedWinText <- ""
+                        stagedLossText <- ""
+                        Some 1
                     | _ -> None
 
                 this.Drive(Script.resume value world vm)

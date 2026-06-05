@@ -146,6 +146,7 @@ module ScriptParser =
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))
         | "reloadmap" -> Some Reloadmap
         | "refreshmap" -> Some Refreshmap
+        | "changeblock" -> Some(Changeblock(i 0, i 1, i 2))
         // terminators
         | "endcallback" -> Some End
         | "end" -> Some End

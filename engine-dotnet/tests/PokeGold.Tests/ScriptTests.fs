@@ -65,6 +65,19 @@ let ``giveitem and verbosegiveitem default quantity to one`` () =
     )
 
 [<Fact>]
+let ``parses changeblock with three integer arguments`` () =
+    let prog =
+        parse
+            "CB:\n\
+             \tchangeblock 4, 6, 11\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Changeblock(4, 6, 11); End ],
+        ScriptProgram.blockAt "CB" prog
+    )
+
+[<Fact>]
 let ``parses givepoke without a held item`` () =
     let prog =
         parse

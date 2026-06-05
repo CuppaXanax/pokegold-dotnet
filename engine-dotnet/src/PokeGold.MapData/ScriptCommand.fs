@@ -159,6 +159,8 @@ type ScriptCommand =
     | Reloadmap
     /// `refreshmap $7b`.
     | Refreshmap
+    /// `changeblock x, y, block` — replace a map block at `(x, y)`.
+    | Changeblock of x: int * y: int * blockId: int
 
     // ---- Terminators -----------------------------------------------------
     /// `end $90` — return from `scall`, or stop the script.

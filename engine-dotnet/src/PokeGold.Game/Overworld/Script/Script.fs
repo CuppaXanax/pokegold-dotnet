@@ -51,6 +51,8 @@ type ScriptEffect =
     | StartBattle
     /// `reloadmapafterbattle` / `reloadmap` / `refreshmap` — redraw the map.
     | ReloadMap
+    /// `changeblock` — replace a map tile. Enacted by the integration layer.
+    | ChangeBlock of x: int * y: int * blockId: int
     /// `playmusic` — change the background music.
     | PlayMusic of song: string
     /// `playsound` — play a sound effect.
@@ -250,6 +252,7 @@ module Script =
             | Reloadmapafterbattle
             | Reloadmap
             | Refreshmap -> suspend next world ReloadMap
+            | Changeblock(x, y, blockId) -> suspend next world (ChangeBlock(x, y, blockId))
             | Playmusic song -> suspend next world (PlayMusic song)
             | Playsound sound -> suspend next world (PlaySound sound)
             | ScriptCommand.Cry species -> suspend next world (ScriptEffect.Cry species)

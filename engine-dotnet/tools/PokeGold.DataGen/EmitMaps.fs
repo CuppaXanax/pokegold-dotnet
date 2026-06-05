@@ -81,6 +81,7 @@ module EmitMaps =
         | Warpfacing (f, m, x, y) -> sprintf "Warpfacing(%s, %s, %d, %d)" (str f) (str m) x y
         | Reloadmap -> "Reloadmap"
         | Refreshmap -> "Refreshmap"
+        | Changeblock (x, y, blockId) -> sprintf "Changeblock(%d, %d, %d)" x y blockId
         | End -> "End"
         | EndAll -> "EndAll"
         | Special n -> sprintf "Special %s" (str n)
