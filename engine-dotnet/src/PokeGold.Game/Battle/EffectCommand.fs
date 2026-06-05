@@ -159,6 +159,14 @@ type EffectCommand =
     | ThiefDamage
     /// EFFECT_RAGE: damage + set rage flag (atk-up-on-hit is M13.7 turn-state).
     | RageDamage
+    /// Begin a two-turn charging move on the user's turn.
+    | BeginCharging
+    /// Set recharge on a Hyper Beam-style move.
+    | BeginRecharge
+    /// Lock the user into a rampage move for the next turns.
+    | BeginRampage
+    /// Seed Future Sight on the user for an end-of-turn payoff.
+    | BeginFutureSight
 
     /// EFFECT_MULTI_HIT: 2-5 hits with 3/8, 3/8, 1/8, 1/8 distribution.
     /// The hit count is determined by RNG and stored in MoveContext.MultiHitCount.

@@ -245,6 +245,58 @@ let ``secondary poison-on-hit does not apply when the effect chance fails`` () =
     Assert.Equal(Healthy, applied.Foe.Status)
 
 [<Fact>]
+let ``charging and recharge family maps to explicit effect commands`` () =
+    Assert.Contains(Damage, Effects.forMove (Moves.byName "FLY"))
+    Assert.Contains(BeginCharging, Effects.forMove (Moves.byName "FLY"))
+    Assert.Contains(BeginRecharge, Effects.forMove (Moves.byName "HYPER_BEAM"))
+    Assert.Contains(BeginRampage, Effects.forMove (Moves.byName "THRASH"))
+    Assert.Contains(BeginFutureSight, Effects.forMove (Moves.byName "FUTURE_SIGHT"))
+
+[<Fact>]
+let ``RageDamage marks the user as raging`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ Moves.byName "RAGE" ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = Moves.byName "RAGE"
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let applied = Effects.forMove (Moves.byName "RAGE") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.True(applied.User.Volatile.Rage)
+
+[<Fact>]
+let ``conditional double damage doubles against a semi-invulnerable foe`` () =
+    let attacker = { mon "ATTACKER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ move "GUST" "EFFECT_GUST" 40 (ty "NORMAL") ] }
+    let defender = { mon "DEFENDER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let baseCtx =
+        { User = attacker
+          Foe = defender
+          Move = Moves.byName "GUST"
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let baseApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) baseCtx
+    let chargedCtx = { baseCtx with Foe = { defender with Volatile = { VolatileStatus.empty with Charging = Some 1 } } }
+    let chargedApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) chargedCtx
+    Assert.Equal(baseApplied.LastDamage * 2, chargedApplied.LastDamage)
+
+[<Fact>]
 let ``ATTRACT maps to an explicit effect command`` () =
     Assert.Contains(InflictAttract, Effects.forMove (Moves.byName "ATTRACT"))
 

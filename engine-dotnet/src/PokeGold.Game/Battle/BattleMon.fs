@@ -48,12 +48,19 @@ type VolatileStatus =
       /// Focus Energy is active (crit stage +1). Read by CriticalHit.critStage.
       FocusEnergy: bool
       /// Charging a two-turn move (e.g. Fly, Dig); None = not charging.
-      /// Later slices will refine this to carry the move being charged.
+      /// Stores the countdown for the second-turn execution window.
       Charging: int option
+      /// The move that is currently charging; cleared once it resolves.
+      ChargingMove: MoveData option
       /// Must recharge this turn (e.g. after Hyper Beam).
       Recharge: bool
       /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
       Rampage: int option
+      /// Rage mode: this mon's Attack rises each time it is hit.
+      Rage: bool
+      /// Future Sight countdown and move for the end-of-turn payoff.
+      FutureSightCounter: int option
+      FutureSightMove: MoveData option
       /// Mist is active: blocks opponent's stat-lowering moves.
       /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
       /// Accuracy, and Evasion.
@@ -75,8 +82,12 @@ module VolatileStatus =
           Trapped = None
           FocusEnergy = false
           Charging = None
+          ChargingMove = None
           Recharge = false
           Rampage = None
+          Rage = false
+          FutureSightCounter = None
+          FutureSightMove = None
           Mist = false
           CantEscape = false
           Attracted = false }

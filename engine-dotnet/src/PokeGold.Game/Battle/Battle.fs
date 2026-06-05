@@ -90,54 +90,59 @@ module Battle =
         if flinchBlock then
             (false, false, user, [ $"{user.Species.Name} flinched!" ], rng)
         else
-            // 4. Paralysis full-para gate (25% = 64/256)
-            let mutable canAct = true
-            let mutable selfHit = false
-            let mutable messages: string list = []
-            let mutable rng' = rng
-
-            match user.Status with
-            | Paralysis ->
-                let roll, nextRng = Rng.next rng'
-                rng' <- nextRng
-                if roll < 64 then
-                    canAct <- false
-                    messages <- [ $"{user.Species.Name} is fully paralyzed!" ]
-            | _ -> ()
-
-            if not canAct then
-                (false, selfHit, user, messages, rng')
+            // 4. Recharge gate: Hyper Beam-style moves force a skipped turn.
+            if user.Volatile.Recharge then
+                let user' = { user with Volatile = { user.Volatile with Recharge = false } }
+                (false, false, user', [ $"{user.Species.Name} must recharge!" ], rng)
             else
-                // 5. Confusion gate (effect_commands.asm l.253-288).
-                let canAct, selfHit, user, messages, rng' =
-                    match user.Volatile.Confusion with
-                    | Some turns ->
-                        let remaining = turns - 1
-                        if remaining = 0 then
-                            let vol = { user.Volatile with Confusion = None }
-                            let user' = { user with Volatile = vol }
-                            (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng')
-                        else
-                            let vol = { user.Volatile with Confusion = Some remaining }
-                            let user' = { user with Volatile = vol }
-                            let msgs = [ $"{user.Species.Name} is confused!" ]
-                            let roll, nextRng = Rng.next rng'
-                            if roll < 128 then
-                                (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], nextRng)
-                            else
-                                (true, false, user', msgs, nextRng)
-                    | None ->
-                        (true, false, user, [], rng')
+                // 5. Paralysis full-para gate (25% = 64/256)
+                let mutable canAct = true
+                let mutable selfHit = false
+                let mutable messages: string list = []
+                let mutable rng' = rng
 
-                // 6. Attract gate.
-                if canAct && user.Volatile.Attracted then
-                    let roll, rng' = Rng.next rng'
-                    if roll < 128 then
-                        (false, selfHit, user, messages @ [ $"{user.Species.Name} is immobilized by attraction!" ], rng')
-                    else
-                        (true, selfHit, user, messages, rng')
+                match user.Status with
+                | Paralysis ->
+                    let roll, nextRng = Rng.next rng'
+                    rng' <- nextRng
+                    if roll < 64 then
+                        canAct <- false
+                        messages <- [ $"{user.Species.Name} is fully paralyzed!" ]
+                | _ -> ()
+
+                if not canAct then
+                    (false, selfHit, user, messages, rng')
                 else
-                    (canAct, selfHit, user, messages, rng')
+                    // 6. Confusion gate (effect_commands.asm l.253-288).
+                    let canAct, selfHit, user, messages, rng' =
+                        match user.Volatile.Confusion with
+                        | Some turns ->
+                            let remaining = turns - 1
+                            if remaining = 0 then
+                                let vol = { user.Volatile with Confusion = None }
+                                let user' = { user with Volatile = vol }
+                                (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng')
+                            else
+                                let vol = { user.Volatile with Confusion = Some remaining }
+                                let user' = { user with Volatile = vol }
+                                let msgs = [ $"{user.Species.Name} is confused!" ]
+                                let roll, nextRng = Rng.next rng'
+                                if roll < 128 then
+                                    (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], nextRng)
+                                else
+                                    (true, false, user', msgs, nextRng)
+                        | None ->
+                            (true, false, user, [], rng')
+
+                    // 7. Attract gate.
+                    if canAct && user.Volatile.Attracted then
+                        let roll, rng' = Rng.next rng'
+                        if roll < 128 then
+                            (false, selfHit, user, messages @ [ $"{user.Species.Name} is immobilized by attraction!" ], rng')
+                        else
+                            (true, selfHit, user, messages, rng')
+                    else
+                        (canAct, selfHit, user, messages, rng')
 
     // -- Phase: confusion self-hit -------------------------------------------
 
@@ -250,7 +255,13 @@ module Battle =
                 Effects.applyCtx c cmd
             ) ctx
 
-        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng
+        let foe =
+            if ctx.Foe.Volatile.Rage && ctx.LastDamage > 0 then
+                { ctx.Foe with AtkStage = min 6 (ctx.Foe.AtkStage + 1) }
+            else
+                ctx.Foe
+
+        { ctx with Foe = foe } |> fun ctx -> ctx.User, ctx.Foe, ctx.Messages, ctx.Rng
 
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 
@@ -322,6 +333,19 @@ module Battle =
                 (m, [], rng')
         | _ -> (m, [], rng)
 
+    /// Future Sight payoff: countdown at end-of-turn and damage the foe on expiry.
+    let private applyFutureSight (m: BattleMon) (other: BattleMon) : BattleMon * BattleMon * string list =
+        match m.Volatile.FutureSightCounter, m.Volatile.FutureSightMove with
+        | Some turns, Some move when turns > 1 ->
+            let vol = { m.Volatile with FutureSightCounter = Some (turns - 1) }
+            ({ m with Volatile = vol }, other, [ $"{m.Species.Name}'s Future Sight is still charging!" ])
+        | Some 1, Some move ->
+            let dmg = Damage.calc m other move false Damage.MaxRoll false
+            let other' = { other with Hp = max 0 (other.Hp - dmg) }
+            let m' = { m with Volatile = { m.Volatile with FutureSightCounter = None; FutureSightMove = None } }
+            (m', other', [ $"{other'.Species.Name} was hit by Future Sight!" ])
+        | _ -> (m, other, [])
+
     /// Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
     /// Decrement trap counter; at 0 release, else chip MaxHP/16 (min 1).
     /// If the mon has a substitute, wrap is suppressed (faithful to l.1183).
@@ -360,6 +384,16 @@ module Battle =
             let other' = { other with Hp = healed }
             (seeded', other', [ $"{seeded.Species.Name}'s health is sapped by Leech Seed!" ])
 
+    let private applyRampage (m: BattleMon) : BattleMon * string list =
+        match m.Volatile.Rampage with
+        | Some turns when turns > 1 ->
+            let vol = { m.Volatile with Rampage = Some (turns - 1) }
+            ({ m with Volatile = vol }, [ $"{m.Species.Name} is still rampaging!" ])
+        | Some _ ->
+            let vol = { m.Volatile with Rampage = None; Confusion = Some 2 }
+            ({ m with Volatile = vol }, [ $"{m.Species.Name} became confused after rampaging!" ])
+        | None -> (m, [])
+
     let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng)
         : BattleMon * BattleMon * string list * Rng =
         let mutable p = player
@@ -367,7 +401,10 @@ module Battle =
         let mutable r = rng
         let mutable msgs: string list = []
 
-        // Slot 1: Future Sight countdown — stub (M13.7)
+        // Slot 1: Future Sight countdown.
+        let p', e', futureMsgs = applyFutureSight p e
+        p <- p'; e <- e'; msgs <- msgs @ futureMsgs
+
         // Slot 2: Weather (sandstorm chip, timer) — stub (M13.8)
 
         // Slot 3: Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
@@ -400,8 +437,14 @@ module Battle =
         let e', p', eSeedMsgs = applyLeechSeed e p
         p <- p'; e <- e'; msgs <- msgs @ eSeedMsgs
 
-        // Slot 9: Nightmare — stub (M13.8: requires Sleep check, chip MaxHP/4)
-        // Slot 10: Curse chip — stub (M13.8: ghost-type curse, chip MaxHP/4)
+        // Slot 9: Rampage auto-confuse.
+        let p', pRampMsgs = applyRampage p
+        p <- p'; msgs <- msgs @ pRampMsgs
+        let e', eRampMsgs = applyRampage e
+        e <- e'; msgs <- msgs @ eRampMsgs
+
+        // Slot 10: Nightmare — stub (M13.8: requires Sleep check, chip MaxHP/4)
+        // Slot 11: Curse chip — stub (M13.8: ghost-type curse, chip MaxHP/4)
         // Slot 11: Safeguard timer — stub (M13.8)
         // Slot 12: Reflect/Light Screen timer — stub (M13.8)
         // Slot 13: Encore timer — stub (M13.9)
@@ -439,6 +482,14 @@ module Battle =
                 |> Option.orElseWith (fun () -> indexed |> List.tryHead)
 
     // -- Orchestrator --------------------------------------------------------
+
+    let private chargingMoveOf (m: BattleMon) : MoveData option =
+        if m.Volatile.Charging.IsSome then m.Volatile.ChargingMove else None
+
+    let private isChargingEffect (move: MoveData) : bool =
+        [ "EFFECT_FLY"; "EFFECT_DIG"; "EFFECT_CHARGE"; "EFFECT_SOLAR_BEAM";
+          "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"; "EFFECT_RAZOR_WIND" ]
+        |> List.contains move.Effect
 
     /// The player selects a move (by index into their move list). This resolves a
     /// whole turn: both sides act in speed order, faints are checked between
@@ -487,6 +538,12 @@ module Battle =
                     if playerIsUser then player, enemy, playerMv, playerMvIndex, playerStruggle
                     else enemy, player, enemyMv, enemyMvIndex, enemyStruggle
 
+                let storedCharge = chargingMoveOf user
+                let chargeTurn = storedCharge.IsSome
+                let moveToUse = if chargeTurn then storedCharge.Value else move
+                let mvIndexToUse =
+                    if chargeTurn then user.Moves |> List.findIndex (fun m -> m.Name = storedCharge.Value.Name) else mvIndex
+
                 // Did this user move first this turn?
                 let userMovedFirst =
                     if playerIsUser then playerFirst else not playerFirst
@@ -511,33 +568,45 @@ module Battle =
                     if playerIsUser then player <- user else enemy <- user
                     true
                 else
+                    // First turn of a charging move: set the charge flag and skip the action.
+                    if not chargeTurn && isChargingEffect move && user.Volatile.Charging.IsNone then
+                        let user' = { user with Volatile = { user.Volatile with Charging = Some 1; ChargingMove = Some move } }
+                        if playerIsUser then player <- user' else enemy <- user'
+                        msgs <- msgs @ [ $"{user'.Species.Name} is charging up!" ]
+                        true
+                    else
+                        // Phase: execute move
+                        let user, foe, moveMsgs, rng' = executeMove user foe moveToUse isStruggle rng
+                        rng <- rng'
+                        msgs <- msgs @ moveMsgs
 
-                // Phase: execute move
-                let user, foe, moveMsgs, rng' = executeMove user foe move isStruggle rng
-                rng <- rng'
-                msgs <- msgs @ moveMsgs
+                        // Clear the charge window after the second-turn execution.
+                        let user =
+                            if chargeTurn then
+                                { user with Volatile = { user.Volatile with Charging = None; ChargingMove = None } }
+                            else user
 
-                // Phase: deduct PP (Struggle does not consume PP --
-                // effect_commands.asm l.974: cp STRUGGLE; ret z)
-                let user =
-                    if isStruggle then user
-                    else BattleMon.deductPp mvIndex user
+                        // Phase: deduct PP (Struggle does not consume PP --
+                        // effect_commands.asm l.974: cp STRUGGLE; ret z)
+                        let user =
+                            if isStruggle then user
+                            else BattleMon.deductPp mvIndexToUse user
 
-                if playerIsUser then
-                    player <- user
-                    enemy <- foe
-                else
-                    enemy <- user
-                    player <- foe
+                        if playerIsUser then
+                            player <- user
+                            enemy <- foe
+                        else
+                            enemy <- user
+                            player <- foe
 
-                // Phase: mid-turn faint check
-                let faintOutcome, faintMsgs = faintCheck player enemy
-                msgs <- msgs @ faintMsgs
-                match faintOutcome with
-                | Some o ->
-                    outcome <- Some o
-                    false
-                | None -> true
+                        // Phase: mid-turn faint check
+                        let faintOutcome, faintMsgs = faintCheck player enemy
+                        msgs <- msgs @ faintMsgs
+                        match faintOutcome with
+                        | Some o ->
+                            outcome <- Some o
+                            false
+                        | None -> true
 
         let order = if playerFirst then [ true; false ] else [ false; true ]
         order |> List.iter (fun who -> act who |> ignore)

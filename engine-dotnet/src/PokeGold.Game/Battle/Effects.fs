@@ -144,6 +144,16 @@ module Effects =
         | "EFFECT_RAPID_SPIN"    -> [ RapidSpinDamage ]
         | "EFFECT_THIEF"         -> [ ThiefDamage ]
         | "EFFECT_RAGE"          -> [ RageDamage ]
+        | "EFFECT_FLY"           -> [ Damage; BeginCharging ]
+        | "EFFECT_DIG"           -> [ Damage; BeginCharging ]
+        | "EFFECT_CHARGE"        -> [ Damage; BeginCharging ]
+        | "EFFECT_SOLAR_BEAM"    -> [ Damage; BeginCharging ]
+        | "EFFECT_SKULL_BASH"    -> [ Damage; BeginCharging ]
+        | "EFFECT_SKY_ATTACK"    -> [ Damage; BeginCharging ]
+        | "EFFECT_RAZOR_WIND"    -> [ Damage; BeginCharging ]
+        | "EFFECT_HYPER_BEAM"    -> [ Damage; BeginRecharge ]
+        | "EFFECT_RAMPAGE"       -> [ Damage; BeginRampage ]
+        | "EFFECT_FUTURE_SIGHT"  -> [ BeginFutureSight ]
         | "EFFECT_MULTI_HIT"     -> [ MultiHitDamage ]
         | "EFFECT_DOUBLE_HIT"    -> [ DoubleHitDamage ]
         | "EFFECT_POISON_MULTI_HIT" -> [ PoisonMultiHitDamage ]
@@ -460,6 +470,22 @@ module Effects =
                 let vol = { ctx.Foe.Volatile with CantEscape = true }
                 let foe = { ctx.Foe with Volatile = vol }
                 { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} can't escape now!" ] }
+
+        | BeginCharging ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with Charging = Some 1; ChargingMove = Some ctx.Move } }
+            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} is charging up!" ] }
+
+        | BeginRecharge ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with Recharge = true } }
+            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} must recharge!" ] }
+
+        | BeginRampage ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with Rampage = Some 2 } }
+            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} is locked into a rampage!" ] }
+
+        | BeginFutureSight ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with FutureSightCounter = Some 2; FutureSightMove = Some ctx.Move } }
+            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} laid a Future Sight!" ] }
 
         // --- M13.5: damage-shaping & fixed damage family ---
 
@@ -920,6 +946,7 @@ module Effects =
             // Normal damage + set rage flag. The atk-up-on-hit mechanic is M13.7 turn-state.
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
             let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with Rage = true } }
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
@@ -927,10 +954,8 @@ module Effects =
                       | 0 -> $"It doesn't affect {foe.Species.Name}..."
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."
-                      | _ -> ()
-                  // M13.7 hook: set SUBSTATUS_RAGE for atk-up-on-hit mechanic.
-                  ]
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+                      | _ -> () ]
+            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
 
         | MultiHitDamage ->
             // BattleCommand_EndLoop EFFECT_MULTI_HIT path (effect_commands.asm l.5228-5241).
@@ -1033,7 +1058,9 @@ module Effects =
             // EFFECT_GUST / EFFECT_TWISTER / EFFECT_STOMP / EFFECT_EARTHQUAKE.
             // Normal damaging hit. Hook for 2x vs Fly/Dig/Minimize (M13.7).
             // Flinch secondary for Twister/Stomp is M13.6.
+            let semiInvulnerable = ctx.Foe.Volatile.Charging.IsSome || ctx.Foe.EvaStage > 0
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
+            let dmg = if semiInvulnerable then dmg * 2 else dmg
             let foe, subBroke =
                 match ctx.Foe.Volatile.Substitute with
                 | Some subHp ->
