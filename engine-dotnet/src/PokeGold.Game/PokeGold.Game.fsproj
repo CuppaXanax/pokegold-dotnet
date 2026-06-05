@@ -90,6 +90,7 @@
     <Compile Include="Battle\Battle.fs" />
     <!-- Player: persistent party, bag, dex state. -->
     <Compile Include="Player\PartyMon.fs" />
+    <Compile Include="Overworld\FieldMoves.fs" />
     <Compile Include="Player\Heal.fs" />
     <Compile Include="Player\Bag.fs" />
     <Compile Include="Player\Money.fs" />

@@ -32,6 +32,7 @@
     <Compile Include="PackTests.fs" />
     <Compile Include="PackUseGiveTests.fs" />
     <Compile Include="PartyTests.fs" />
+    <Compile Include="FieldMovesTests.fs" />
     <Compile Include="SummaryTests.fs" />
     <Compile Include="PokedexTests.fs" />
     <Compile Include="OptionsTests.fs" />
