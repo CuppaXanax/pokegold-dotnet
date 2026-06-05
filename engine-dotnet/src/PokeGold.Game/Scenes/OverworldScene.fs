@@ -421,7 +421,21 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     MaxHp = newMaxHp
                                     Hp = lead.Hp + hpGain }
 
-                            player <- { player with Party = updatedLead :: rest }
+                            let evolvedLead =
+                                if newLevel > lead.Level then
+                                    match Evolution.checkLevelEvolution updatedLead with
+                                    | Some target ->
+                                        Evolution.applyEvolution target updatedLead
+                                    | None -> updatedLead
+                                else updatedLead
+
+                            let learnedLead =
+                                if newLevel > lead.Level then
+                                    MoveLearn.learnMovesForLevel evolvedLead
+                                else
+                                    evolvedLead
+
+                            player <- { player with Party = learnedLead :: rest }
 
                             if isTrainer then
                                 let reward =

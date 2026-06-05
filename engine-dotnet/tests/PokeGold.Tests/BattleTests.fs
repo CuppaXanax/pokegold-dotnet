@@ -185,6 +185,27 @@ let ``a critical hit doubles the pre-modifier total`` () =
     let m = move "POUND" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
     Assert.Equal(12, Damage.calc attacker defender m true Damage.MaxRoll false)
 
+[<Fact>]
+let ``AI prefers super-effective moves`` () =
+    let fire = Species.byName "CYNDAQUIL"
+    let grass = Species.byName "CHIKORITA"
+    let ember = Moves.byName "EMBER"
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies fire 10 [ ember; tackle ]
+    let target = BattleMon.ofSpecies grass 10 [ tackle ]
+    let scoreEmber = BattleAI.scoreMove user target ember
+    let scoreTackle = BattleAI.scoreMove user target tackle
+    Assert.True(scoreEmber > scoreTackle)
+
+[<Fact>]
+let ``AI avoids immune moves`` () =
+    let normal = { Species.byName "SENTRET" with Type1 = TypeChart.value "NORMAL" }
+    let ghost = { Species.byName "GASTLY" with Type1 = TypeChart.value "GHOST" }
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies normal 10 [ tackle ]
+    let target = BattleMon.ofSpecies ghost 10 [ tackle ]
+    Assert.True(BattleAI.scoreMove user target tackle < 0)
+
 // --- Turn loop ----------------------------------------------------------------
 
 let private strongHit = move "TACKLE" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")

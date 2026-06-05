@@ -568,18 +568,8 @@ module Battle =
     // -- Enemy AI ------------------------------------------------------------
 
     /// Pick the enemy's move. When all PP is exhausted, returns None (Struggle).
-    let private enemyMoveChoice (enemy: BattleMon) : (MoveData * int) option =
-        if BattleMon.mustStruggle enemy then None
-        else
-            let indexed = enemy.Moves |> List.mapi (fun i m -> (m, i))
-            let hasPp i = i < enemy.Pp.Length && enemy.Pp.[i] > 0
-            let pick =
-                indexed |> List.tryFind (fun (m, i) -> m.Power > 0 && hasPp i)
-            match pick with
-            | Some p -> Some p
-            | None ->
-                indexed |> List.tryFind (fun (_, i) -> hasPp i)
-                |> Option.orElseWith (fun () -> indexed |> List.tryHead)
+    let private enemyMoveChoice (enemy: BattleMon) (player: BattleMon) : (MoveData * int) option =
+        BattleAI.chooseMove enemy player
 
     // -- Orchestrator --------------------------------------------------------
 
@@ -607,7 +597,7 @@ module Battle =
             else s.Player.Moves.[index], index
 
         // Enemy move selection.
-        let enemyChoice = enemyMoveChoice s.Enemy
+        let enemyChoice = enemyMoveChoice s.Enemy s.Player
         let enemyStruggle = enemyChoice.IsNone
         let enemyMv, enemyMvIndex =
             match enemyChoice with
