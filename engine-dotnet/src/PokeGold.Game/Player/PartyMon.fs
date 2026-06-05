@@ -68,7 +68,8 @@ module PartyMon =
             |> Option.defaultWith (fun () ->
                 { Dex = mon.SpeciesId; Name = string mon.SpeciesId
                   Hp = 45; Attack = 45; Defense = 45; Speed = 45; SpAttack = 45; SpDefense = 45
-                  Type1 = 0; Type2 = 0 })
+                  Type1 = 0; Type2 = 0
+                  CatchRate = 45; BaseExp = 64; GrowthRate = 0 })
         let moveDatas =
             mon.Moves
             |> List.choose (fun (moveId, _pp) ->

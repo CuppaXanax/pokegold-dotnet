@@ -18,7 +18,10 @@ type BaseStats =
       SpAttack: int
       SpDefense: int
       Type1: int
-      Type2: int }
+      Type2: int
+      CatchRate: int
+      BaseExp: int
+      GrowthRate: int }
 
 /// A move's 7-byte data record from `data/moves/moves.asm`. The effect is kept
 /// as its constant name (e.g. "EFFECT_NORMAL_HIT") and mapped to an effect

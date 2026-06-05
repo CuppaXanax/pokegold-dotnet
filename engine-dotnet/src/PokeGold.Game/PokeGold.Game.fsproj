@@ -88,6 +88,7 @@
     <Compile Include="Battle\EffectCommand.fs" />
     <Compile Include="Battle\Effects.fs" />
     <Compile Include="Battle\Battle.fs" />
+    <Compile Include="Battle\Experience.fs" />
     <!-- Player: persistent party, bag, dex state. -->
     <Compile Include="Player\PartyMon.fs" />
     <Compile Include="Overworld\FieldMoves.fs" />

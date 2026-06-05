@@ -54,6 +54,36 @@ let ``generated tables bake the full national dex and move list`` () =
     Assert.Equal(1, (Species.byName "BULBASAUR").Dex)
     Assert.Equal(251, (Species.byName "CELEBI").Dex)
 
+[<Fact>]
+let ``Medium Fast: level 5 needs 125 total EXP`` () =
+    Assert.Equal(125, Experience.expForLevel 0 5)
+
+[<Fact>]
+let ``Medium Fast: level 100 needs 1000000 total EXP`` () =
+    Assert.Equal(1000000, Experience.expForLevel 0 100)
+
+[<Fact>]
+let ``Fast: level 100 needs 800000 total EXP`` () =
+    Assert.Equal(800000, Experience.expForLevel 4 100)
+
+[<Fact>]
+let ``Slow: level 100 needs 1250000 total EXP`` () =
+    Assert.Equal(1250000, Experience.expForLevel 5 100)
+
+[<Fact>]
+let ``Medium Slow: level 100 needs 1059860 total EXP`` () =
+    Assert.Equal(1059860, Experience.expForLevel 3 100)
+
+[<Fact>]
+let ``expToNextLevel returns difference between levels`` () =
+    let toNext = Experience.expToNextLevel 0 5
+    Assert.Equal(Experience.expForLevel 0 6 - Experience.expForLevel 0 5, toNext)
+
+[<Fact>]
+let ``levelAfterExp caps at 100`` () =
+    let lvl, _ = Experience.levelAfterExp 0 99 (Experience.expForLevel 0 99) 999999
+    Assert.Equal(100, lvl)
+
 // --- Damage formula: worked examples (no crit, fixed roll) --------------------
 
 let private ty = TypeChart.value
@@ -70,7 +100,10 @@ let private species name t1 t2 : BaseStats =
       SpAttack = 1
       SpDefense = 1
       Type1 = t1
-      Type2 = t2 }
+      Type2 = t2
+      CatchRate = 45
+      BaseExp = 64
+      GrowthRate = 0 }
 
 /// A battler with explicit stats (physical == special so the class never changes
 /// the numbers) and neutral stages, for deterministic damage tests.

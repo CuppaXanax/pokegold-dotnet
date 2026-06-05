@@ -44,12 +44,26 @@ module Parsers =
           SpAttack: int
           SpDefense: int
           Type1: int
-          Type2: int }
+          Type2: int
+          CatchRate: int
+          BaseExp: int
+          GrowthRate: int }
 
     let private dex = AsmConstants.load "constants/pokemon_constants.asm"
     let private idRx = Regex(@"^\s*db\s+([A-Za-z_]\w*)\b")
     let private statsRx = Regex(@"db\s+(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)")
     let private pairRx = Regex(@"db\s+([A-Za-z_]\w*),\s*([A-Za-z_]\w*)")
+    let private singleIntDbRx = Regex(@"^\s*db\s+(\d+)\s*$")
+    let private growthRx = Regex(@"^\s*db\s+(GROWTH_\w+)")
+    let private growthRates =
+        Map.ofList [
+            "GROWTH_MEDIUM_FAST", 0
+            "GROWTH_SLIGHTLY_FAST", 1
+            "GROWTH_SLIGHTLY_SLOW", 2
+            "GROWTH_MEDIUM_SLOW", 3
+            "GROWTH_FAST", 4
+            "GROWTH_SLOW", 5
+        ]
 
     let private parseSpecies (file: string) : Species =
         let lines =
@@ -73,18 +87,35 @@ module Parsers =
             |> Option.defaultWith (fun () -> failwithf "No base-stat line in %s" file)
 
         // The type line is the first `db IDENT, IDENT` whose idents are both types.
-        let t1, t2 =
+        let typeLineIndex, t1, t2 =
             lines
-            |> List.tryPick (fun l ->
+            |> List.mapi (fun i l -> i, l)
+            |> List.tryPick (fun (i, l) ->
                 let m = pairRx.Match l
 
                 if m.Success then
                     match typeIds.TryFind m.Groups.[1].Value, typeIds.TryFind m.Groups.[2].Value with
-                    | Some av, Some bv -> Some(av, bv)
+                    | Some av, Some bv -> Some(i, av, bv)
                     | _ -> None
                 else
                     None)
             |> Option.defaultWith (fun () -> failwithf "No type line in %s" file)
+
+        let singleDbAfterType =
+            lines
+            |> List.mapi (fun i l -> i, l)
+            |> List.filter (fun (i, l) -> i > typeLineIndex && singleIntDbRx.IsMatch l)
+            |> List.map (fun (_, l) -> int (singleIntDbRx.Match(l).Groups.[1].Value))
+
+        let catchRate = if singleDbAfterType.Length > 0 then singleDbAfterType.[0] else 0
+        let baseExp = if singleDbAfterType.Length > 1 then singleDbAfterType.[1] else 0
+
+        let growthRate =
+            lines
+            |> List.tryPick (fun l ->
+                let m = growthRx.Match l
+                if m.Success then growthRates.TryFind m.Groups.[1].Value else None)
+            |> Option.defaultValue 0
 
         { Constant = constant
           Dex = dex.[constant]
@@ -95,7 +126,10 @@ module Parsers =
           SpAttack = stats.[4]
           SpDefense = stats.[5]
           Type1 = t1
-          Type2 = t2 }
+          Type2 = t2
+          CatchRate = catchRate
+          BaseExp = baseExp
+          GrowthRate = growthRate }
 
     /// Every species' base stats, ordered by national dex number.
     let species : Species list =
