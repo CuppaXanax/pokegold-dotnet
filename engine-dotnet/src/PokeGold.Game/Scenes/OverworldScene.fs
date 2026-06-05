@@ -42,6 +42,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable yesNoResult = 0
     let mutable prevA = false
     let mutable prevStart = false
+    /// Wild encounter RNG for the overworld trigger hook.
+    let encounterRng = System.Random()
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
 
@@ -389,7 +391,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         match entry with
                         | Pokedex -> Push(PokedexScene(content, player) :> Scene)
                         | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
-                        | Pack    -> Push(PackScene(content, player, fun p -> player <- p) :> Scene)
+                        | Pack    ->
+                            // TODO: once PackScene reports which rod was used, wire that
+                            // result back into the overworld so fishing checks the
+                            // facing water tile and stages fishEncounter here.
+                            Push(PackScene(content, player, fun p -> player <- p) :> Scene)
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop), buttons) :> Scene)
@@ -444,27 +450,40 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         if player.RepelSteps > 0 then
                             player <- { player with RepelSteps = player.RepelSteps - 1 }
 
-                        // Stepping onto a warp tile sends the player to its paired
-                        // warp on the destination map (a no-op until that map is
-                        // wired up). Otherwise a coord trigger may fire.
-                        match MapEvents.warpAt (fst after) (snd after) state.Events with
-                        | Some w ->
-                            match OverworldState.tryWarp content w.DestMap w.DestWarp with
-                            | Some dest ->
-                                state <- dest
-                                this.PlayMapMusic dest.MapId
-                                firedCoords <- Set.empty
-                                Stay
-                            | None -> Stay
-                        | None ->
-                            match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
-                            | Some c when state.Script.Labels.ContainsKey c.Script ->
-                                firedCoords <- Set.add after firedCoords
-                                this.Drive(Script.start c.Script world state.Script state.MapId)
-                            | Some _ ->
-                                firedCoords <- Set.add after firedCoords
-                                Stay
-                            | None -> Stay
+                        let mutable encounterTransition = Stay
+                        let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors (fst after) (snd after)
+
+                        match WildEncounter.tryEncounter collId encounterRng player with
+                        | Some(species, level) ->
+                            stagedWild <- Some(species, level)
+                            stagedTrainer <- None
+                            encounterTransition <- Push(this.BuildBattle() :> Scene)
+                        | None -> ()
+
+                        match encounterTransition with
+                        | Push _ -> encounterTransition
+                        | _ ->
+                            // Stepping onto a warp tile sends the player to its paired
+                            // warp on the destination map (a no-op until that map is
+                            // wired up). Otherwise a coord trigger may fire.
+                            match MapEvents.warpAt (fst after) (snd after) state.Events with
+                            | Some w ->
+                                match OverworldState.tryWarp content w.DestMap w.DestWarp with
+                                | Some dest ->
+                                    state <- dest
+                                    this.PlayMapMusic dest.MapId
+                                    firedCoords <- Set.empty
+                                    Stay
+                                | None -> Stay
+                            | None ->
+                                match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
+                                | Some c when state.Script.Labels.ContainsKey c.Script ->
+                                    firedCoords <- Set.add after firedCoords
+                                    this.Drive(Script.start c.Script world state.Script state.MapId)
+                                | Some _ ->
+                                    firedCoords <- Set.add after firedCoords
+                                    Stay
+                                | None -> Stay
 
         member this.Render(fb: Framebuffer) =
             OverworldRenderer.draw fb state

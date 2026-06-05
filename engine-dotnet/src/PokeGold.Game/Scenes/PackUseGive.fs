@@ -25,11 +25,16 @@ let private hpRestoreIds =
 let private repelItems =
     Map.ofList [ "REPEL", 100; "SUPER_REPEL", 200; "MAX_REPEL", 250 ]
 
+let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
+
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
 
 /// True when this item is a repel item.
 let isRepel (itemName: string) : bool = repelItems.ContainsKey itemName
+
+/// True when this item is a fishing rod.
+let isFishingRod (itemName: string) : bool = Set.contains itemName fishingRods
 
 // ── Pure mutation helpers (unit-testable without the scene stack) ──────────────
 

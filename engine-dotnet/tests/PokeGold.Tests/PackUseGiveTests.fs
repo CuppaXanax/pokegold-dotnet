@@ -132,6 +132,13 @@ let ``isHpHeal false for deferred items`` () =
     for id in [ "ANTIDOTE"; "REVIVE"; "MOON_STONE"; "RARE_CANDY"; "TM01"; "HP_UP"; "ETHER" ] do
         Assert.False(PackUseGive.isHpHeal id, sprintf "%s should NOT be an HP heal item" id)
 
+[<Fact>]
+let ``isFishingRod identifies fishing key items`` () =
+    Assert.True(PackUseGive.isFishingRod "OLD_ROD")
+    Assert.True(PackUseGive.isFishingRod "GOOD_ROD")
+    Assert.True(PackUseGive.isFishingRod "SUPER_ROD")
+    Assert.False(PackUseGive.isFishingRod "POTION")
+
 // ── Scene integration: GIVE ────────────────────────────────────────────────────
 
 let private makePackScene () =
