@@ -4,6 +4,16 @@ namespace PokeGold.Game.Battle
 /// Source: data/growth_rates.asm, engine/pokemon/experience.asm
 module Experience =
 
+    /// Calculate EXP gained from defeating an enemy.
+    /// Source: engine/battle/core.asm::GiveExperiencePoints
+    let expGained (enemyBaseExp: int) (enemyLevel: int) (isTrainer: bool) : int =
+        let raw = enemyBaseExp * enemyLevel / 7
+        if isTrainer then raw * 3 / 2 else raw
+
+    /// Calculate money earned from a trainer battle.
+    let moneyEarned (baseReward: int) (lastMonLevel: int) : int =
+        baseReward * lastMonLevel
+
     let private clampExp value = if value < 0 then 0 else value
 
     /// Total EXP needed to reach the given level for a growth rate (0-5).

@@ -16,6 +16,7 @@
     <Compile Include="MovementTests.fs" />
     <Compile Include="TextTests.fs" />
     <Compile Include="BattleTests.fs" />
+    <Compile Include="TrainerDataTests.fs" />
     <Compile Include="SaveTests.fs" />
     <Compile Include="PlayerStateTests.fs" />
     <Compile Include="AudioTests.fs" />
@@ -41,6 +42,7 @@
     <Compile Include="MoneyTests.fs" />
     <Compile Include="MartDataTests.fs" />
     <Compile Include="MartTests.fs" />
+    <Compile Include="EvosAttacksTests.fs" />
     <Compile Include="StorageSaveTests.fs" />
     <Compile Include="StorageOpsTests.fs" />
     <Compile Include="PCBoxTests.fs" />

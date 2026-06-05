@@ -26,7 +26,7 @@ module Program =
         let changed = results |> List.filter snd |> List.length
 
         printfn
-            "PokeGold.DataGen: %d species, %d moves, %d items, %d dex entries, %d type ids, %d matchups, %d marts -> %s (%d file(s) updated)"
+            "PokeGold.DataGen: %d species, %d moves, %d items, %d dex entries, %d type ids, %d matchups, %d marts, %d trainers -> %s (%d file(s) updated)"
             (List.length Parsers.species)
             (List.length Parsers.moves)
             (List.length Parsers.items)
@@ -34,6 +34,7 @@ module Program =
             (Map.count Parsers.typeIds)
             (List.length Parsers.typeMatchups)
             (List.length Parsers.marts)
+            (List.length Parsers.trainers)
             outDir
             changed
 

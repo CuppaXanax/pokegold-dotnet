@@ -138,6 +138,119 @@ module Parsers =
         |> Array.sortBy (fun s -> s.Dex)
         |> Array.toList
 
+    // --- Evolutions and learnsets ------------------------------------------
+
+    type EvolutionEntry =
+        { Method: string
+          Param: string
+          Param2: string
+          Target: string }
+
+    type LearnsetEntry =
+        { Level: int
+          Move: string }
+
+    type EvosAttacks =
+        { Species: string
+          Evolutions: EvolutionEntry list
+          Learnset: LearnsetEntry list }
+
+    let private evosLabelRx = Regex(@"^\s*([A-Za-z0-9_]+)EvosAttacks:\s*$")
+    let private speciesLabelMap =
+        dex
+        |> Map.keys
+        |> Seq.map (fun constant -> constant.ToUpperInvariant().Replace("_", ""), constant)
+        |> Map.ofSeq
+
+    let private speciesConstant (label: string) : string =
+        let key = label.ToUpperInvariant().Replace("_", "")
+
+        match speciesLabelMap.TryFind key with
+        | Some constant -> constant
+        | None -> label.ToUpperInvariant()
+    let private evoDbRx = Regex(@"^\s*db\s+(EVOLVE_[A-Z0-9_]+)\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*$")
+    let private evoStatDbRx = Regex(@"^\s*db\s+(EVOLVE_STAT)\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*$")
+    let private learnsetDbRx = Regex(@"^\s*db\s+(\d+)\s*,\s*([A-Za-z0-9_]+)\s*$")
+
+    /// Every species' evolution and level-up learnset data, in source order.
+    let evosAttacks : EvosAttacks list =
+        let lines = Repo.readText("data/pokemon/evos_attacks.asm").Split('\n')
+
+        let blocks =
+            [ let mutable currentLabel = ""
+              let mutable currentLines = ResizeArray<string>()
+
+              for raw in lines do
+                  let line =
+                      let i = raw.IndexOf(';')
+                      if i >= 0 then raw.Substring(0, i) else raw
+
+                  let labelMatch = evosLabelRx.Match line
+
+                  if labelMatch.Success then
+                      if currentLabel <> "" then
+                          yield currentLabel, List.ofSeq currentLines
+                      currentLabel <- labelMatch.Groups.[1].Value
+                      currentLines <- ResizeArray<string>()
+                  else
+                      currentLines.Add line
+
+              if currentLabel <> "" then
+                  yield currentLabel, List.ofSeq currentLines ]
+
+        [ for species, block in blocks do
+              let mutable inEvolutions = true
+              let evolutions = ResizeArray<EvolutionEntry>()
+              let learnset = ResizeArray<LearnsetEntry>()
+
+              for raw in block do
+                  if inEvolutions then
+                      if raw.TrimStart().StartsWith("db 0") then
+                          inEvolutions <- false
+                      else
+                          let evoMatch = evoDbRx.Match raw
+                          let evoStatMatch = evoStatDbRx.Match raw
+
+                          match evoMatch.Success, evoStatMatch.Success with
+                          | true, false ->
+                              let method = evoMatch.Groups.[1].Value
+                              let param = evoMatch.Groups.[2].Value.Trim()
+                              let target = evoMatch.Groups.[3].Value.Trim()
+
+                              evolutions.Add {
+                                  Method = method
+                                  Param = param
+                                  Param2 = ""
+                                  Target = target }
+                          | false, true ->
+                              let method = evoStatMatch.Groups.[1].Value
+                              let param = evoStatMatch.Groups.[2].Value.Trim()
+                              let param2 = evoStatMatch.Groups.[3].Value.Trim()
+                              let target = evoStatMatch.Groups.[4].Value.Trim()
+
+                              evolutions.Add {
+                                  Method = method
+                                  Param = param
+                                  Param2 = param2
+                                  Target = target }
+                          | _ -> ()
+                  else
+                      let learnMatch = learnsetDbRx.Match raw
+
+                      if learnMatch.Success then
+                          let level = int learnMatch.Groups.[1].Value
+                          let move = learnMatch.Groups.[2].Value.Trim()
+
+                          if move <> "0" then
+                              learnset.Add { Level = level; Move = move }
+                      elif raw.TrimStart().StartsWith("db 0") then
+                          ()
+
+              yield {
+                  Species = speciesConstant species
+                  Evolutions = List.ofSeq evolutions
+                  Learnset = List.ofSeq learnset } ]
+
     // --- Moves -------------------------------------------------------------
 
     type Move =
@@ -212,6 +325,127 @@ module Parsers =
                             dbIndex <- dbIndex + 1
 
         List.ofSeq result
+
+    // --- Trainers -----------------------------------------------------------
+
+    type TrainerMon =
+        { Species: string
+          Level: int }
+
+    type TrainerEntry =
+        { Group: string
+          Id: int
+          Name: string
+          Party: TrainerMon list
+          BaseReward: int }
+
+    let private trainerGroupRx = Regex(@"^\s*([A-Za-z0-9_]+)Group:\s*$")
+    let private trainerCommentRx = Regex(@"^\s*;\s*([A-Za-z0-9_]+(?: [A-Za-z0-9_]+)*)\s*(?:\(\d+\))?\s*$")
+    let private trainerDbRx = Regex(@"^\s*db\s+""([^""]+)@""\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*$")
+    let private trainerPartyRx = Regex(@"^\s*db\s+(.+?)\s*$")
+    let private trainerEndRx = Regex(@"^\s*db\s+-1\b")
+
+    let private parseTrainerPartyLine (raw: string) (trainerType: string) : TrainerMon option =
+        let m = trainerPartyRx.Match raw
+
+        if not m.Success then
+            None
+        else
+            let tokens =
+                m.Groups.[1].Value.Split(',')
+                |> Array.map (fun t -> t.Trim())
+                |> Array.filter (fun t -> t <> "")
+
+            if tokens.Length < 2 then
+                None
+            else
+                Some
+                    { Species = tokens.[1]
+                      Level = int tokens.[0] }
+
+    let trainers : TrainerEntry list =
+        let lines = Repo.readText("data/trainers/parties.asm").Split('\n')
+        let result = ResizeArray<TrainerEntry>()
+        let mutable currentGroupClass = ""
+        let mutable currentId = 0
+        let mutable currentTrainerName = ""
+        let mutable currentTrainerType = ""
+        let mutable party = ResizeArray<TrainerMon>()
+
+        let flush () =
+            if currentGroupClass <> "" && currentTrainerName <> "" && party.Count > 0 then
+                result.Add
+                    { Group = currentGroupClass
+                      Id = currentId
+                      Name = currentTrainerName
+                      Party = List.ofSeq party
+                      BaseReward = 0 }
+
+        for raw in lines do
+            let cleanLine =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            if trainerGroupRx.IsMatch cleanLine then
+                flush ()
+                currentId <- 0
+                currentTrainerName <- ""
+                currentTrainerType <- ""
+                party <- ResizeArray<TrainerMon>()
+                currentGroupClass <- ""
+            elif trainerCommentRx.IsMatch (raw.Trim()) then
+                let commentMatch = trainerCommentRx.Match (raw.Trim())
+                currentGroupClass <- commentMatch.Groups.[1].Value
+            elif trainerDbRx.IsMatch cleanLine then
+                let trainerMatch = trainerDbRx.Match cleanLine
+                flush ()
+                currentTrainerName <- trainerMatch.Groups.[1].Value.Replace("@", "")
+                currentTrainerType <- trainerMatch.Groups.[2].Value
+                currentId <- currentId + 1
+                party <- ResizeArray<TrainerMon>()
+            elif trainerEndRx.IsMatch cleanLine then
+                flush ()
+                currentTrainerName <- ""
+                currentTrainerType <- ""
+                party <- ResizeArray<TrainerMon>()
+            elif currentTrainerName <> "" then
+                match parseTrainerPartyLine cleanLine currentTrainerType with
+                | Some mon -> party.Add mon
+                | None -> ()
+
+        flush ()
+        List.ofSeq result
+
+    let private normalizeTrainerClass (name: string) : string =
+        name.ToUpperInvariant().Replace(" ", "_")
+
+    let trainerRewards : Map<string, int> =
+        let lines = Repo.readText("data/trainers/attributes.asm").Split('\n')
+        let result = ResizeArray<string * int>()
+        let mutable currentClass = ""
+        let mutable reward = 0
+
+        let flush () =
+            if currentClass <> "" then
+                result.Add(currentClass, reward)
+
+        for raw in lines do
+            let cleanLine =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            let classMatch = trainerCommentRx.Match (raw.Trim())
+            if classMatch.Success then
+                flush ()
+                currentClass <- normalizeTrainerClass (classMatch.Groups.[1].Value)
+                reward <- 0
+            elif currentClass <> "" then
+                let rewardMatch = Regex(@"^\s*db\s+(-?\d+)\b").Match cleanLine
+                if rewardMatch.Success then
+                    reward <- int rewardMatch.Groups.[1].Value
+
+        flush ()
+        Map.ofList (List.ofSeq result)
 
     // --- Items -----------------------------------------------------------------
 

@@ -104,9 +104,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | None -> BattleMon.ofSpecies (Species.byName "PIDGEY") level [ Moves.byName "TACKLE" ]
             | None ->
                 match stagedTrainer with
-                | Some(_group, _id) ->
-                    let lvl = match player.Party with lead :: _ -> lead.Level | [] -> 5
-                    BattleMon.ofSpecies (Species.byName "PIDGEY") lvl [ Moves.byName "TACKLE" ]
+                | Some(group, id) ->
+                    match Trainers.lookup group (int id) with
+                    | Some trainer ->
+                        let lead = trainer.Party |> List.head
+                        let species = Species.byName lead.Species
+                        let moves = [ Moves.byName "TACKLE" ]
+                        BattleMon.ofSpecies species lead.Level moves
+                    | None ->
+                        let lvl = match player.Party with lead :: _ -> lead.Level | [] -> 5
+                        BattleMon.ofSpecies (Species.byName "PIDGEY") lvl [ Moves.byName "TACKLE" ]
                 | None ->
                     BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ]
 
@@ -369,6 +376,71 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match effect with
                     | AskYesNo -> Some yesNoResult
                     | StartBattle ->
+                        let isTrainer = stagedTrainer.IsSome
+
+                        match player.Party with
+                        | lead :: rest when lead.Hp > 0 ->
+                            let enemyBaseExp, enemyLevel =
+                                match stagedWild with
+                                | Some(species, level) ->
+                                    let baseExp =
+                                        Species.all
+                                        |> Map.tryFind species
+                                        |> Option.map (fun stats -> stats.BaseExp)
+                                        |> Option.defaultValue 64
+                                    (baseExp, level)
+                                | None ->
+                                    match stagedTrainer with
+                                    | Some(group, id) ->
+                                        match Trainers.lookup group (int id) with
+                                        | Some trainer ->
+                                            let leadMon = trainer.Party |> List.tryHead
+                                            let baseExp =
+                                                leadMon
+                                                |> Option.bind (fun mon -> Map.tryFind mon.Species Species.all)
+                                                |> Option.map (fun stats -> stats.BaseExp)
+                                                |> Option.defaultValue 64
+                                            (baseExp, leadMon |> Option.map (fun mon -> mon.Level) |> Option.defaultValue 5)
+                                        | None ->
+                                            (64, match player.Party with h :: _ -> h.Level | [] -> 5)
+                                    | None ->
+                                        (64, match player.Party with h :: _ -> h.Level | [] -> 5)
+
+                            let exp = Experience.expGained enemyBaseExp enemyLevel isTrainer
+                            let growthRate =
+                                Species.all
+                                |> Map.tryPick (fun _ stats -> if stats.Dex = lead.SpeciesId then Some stats.GrowthRate else None)
+                                |> Option.defaultValue 0
+                            let newLevel, newExp = Experience.levelAfterExp growthRate lead.Level lead.Exp exp
+                            let newMaxHp = PartyMon.deriveMaxHp lead.SpeciesId newLevel
+                            let hpGain = newMaxHp - lead.MaxHp
+                            let updatedLead =
+                                { lead with
+                                    Level = newLevel
+                                    Exp = newExp
+                                    MaxHp = newMaxHp
+                                    Hp = lead.Hp + hpGain }
+
+                            player <- { player with Party = updatedLead :: rest }
+
+                            if isTrainer then
+                                let reward =
+                                    match stagedTrainer with
+                                    | Some(group, id) ->
+                                        match Trainers.lookup group (int id) with
+                                        | Some trainer ->
+                                            let lastMonLevel =
+                                                trainer.Party
+                                                |> List.tryLast
+                                                |> Option.map (fun mon -> mon.Level)
+                                                |> Option.defaultValue enemyLevel
+                                            Experience.moneyEarned trainer.BaseReward lastMonLevel
+                                        | None -> Experience.moneyEarned 25 enemyLevel
+                                    | None -> 0
+
+                                player <- { player with Money = player.Money + reward }
+                        | _ -> ()
+
                         // TODO: wire the popped battle scene's real outcome into the script result.
                         stagedWild <- None
                         stagedTrainer <- None

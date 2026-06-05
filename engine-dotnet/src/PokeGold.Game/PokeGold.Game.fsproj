@@ -37,6 +37,7 @@
     <Compile Include="Data\Generated\TypeChart.Generated.fs" />
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
+    <Compile Include="Data\Generated\EvosAttacks.Generated.fs" />
     <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
     <Compile Include="Data\Generated\StdScripts.Generated.fs" />
@@ -44,12 +45,15 @@
     <Compile Include="Data\Generated\Songs.Generated.fs" />
     <Compile Include="Data\Generated\Items.Generated.fs" />
     <Compile Include="Data\Generated\Marts.Generated.fs" />
+    <Compile Include="Data\Generated\Trainers.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
+    <Compile Include="Data\EvosAttacks.fs" />
     <Compile Include="Data\Content.fs" />
     <Compile Include="Data\Items.fs" />
+    <Compile Include="Data\Trainers.fs" />
     <Compile Include="Data\Dex.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
@@ -172,6 +176,7 @@
     <GameDataInput Include="$(RepoRoot)data\types\type_matchups.asm" />
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
+    <GameDataInput Include="$(RepoRoot)data\pokemon\evos_attacks.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\names.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\dex_entries\gold\*.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\attributes.asm" />
@@ -179,6 +184,8 @@
     <GameDataInput Include="$(RepoRoot)data\items\descriptions.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\marts.asm" />
     <GameDataInput Include="$(RepoRoot)constants\mart_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)data\trainers\parties.asm" />
+    <GameDataInput Include="$(RepoRoot)data\trainers\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
@@ -193,6 +200,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\EvosAttacks.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\StdScripts.Generated.fs" />
@@ -200,6 +208,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Songs.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Trainers.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>
 

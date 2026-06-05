@@ -233,6 +233,58 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private trainersFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated trainer party data, keyed by group/id.") |> ignore
+        sb.AppendLine("module TrainersData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : Map<string * int, TrainerData> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for trainer in Parsers.trainers do
+            let reward = Parsers.trainerRewards |> Map.tryFind trainer.Group |> Option.defaultValue 0
+            let party =
+                trainer.Party
+                |> List.map (fun mon -> sprintf "            { Species = \"%s\"; Level = %d }" mon.Species mon.Level)
+                |> String.concat ";\n"
+
+            sb.AppendLine(sprintf "            ((\"%s\", %d), { Group = \"%s\"; Id = %d; Name = \"%s\"; Party = [" trainer.Group trainer.Id trainer.Group trainer.Id trainer.Name) |> ignore
+            sb.AppendLine(party) |> ignore
+            sb.AppendLine(sprintf "            ]; BaseReward = %d })" reward) |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
+    let private evosAttacksFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated evolution and level-up learnset data, keyed by species constant name.") |> ignore
+        sb.AppendLine("module EvosAttacksData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : Map<string, EvosAttacks> =") |> ignore
+        sb.AppendLine("        Map.ofArray [|") |> ignore
+
+        for entry in Parsers.evosAttacks do
+            let evolutions =
+                entry.Evolutions
+                |> List.map (fun e -> sprintf "{ Method = \"%s\"; Param = \"%s\"; Param2 = \"%s\"; Target = \"%s\" }" e.Method e.Param e.Param2 e.Target)
+                |> String.concat "; "
+
+            let learnset =
+                entry.Learnset
+                |> List.map (fun l -> sprintf "{ Level = %d; Move = \"%s\" }" l.Level l.Move)
+                |> String.concat "; "
+
+            sb.AppendLine(sprintf "            (\"%s\", { Species = \"%s\"; Evolutions = [ %s ]; Learnset = [ %s ] })" entry.Species entry.Species evolutions learnset) |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.ToString()
+
     let private dexFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -266,6 +318,7 @@ module Emit =
         [ "TypeChart.Generated.fs", typeChart ()
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
+          "EvosAttacks.Generated.fs", evosAttacksFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps
           "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
@@ -273,6 +326,7 @@ module Emit =
           "Songs.Generated.fs", EmitSongs.render ()
           "Items.Generated.fs", itemsFile ()
           "Marts.Generated.fs", martsFile ()
+          "Trainers.Generated.fs", trainersFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)

@@ -23,6 +23,24 @@ type BaseStats =
       BaseExp: int
       GrowthRate: int }
 
+/// A single evolution entry for a species.
+type EvolutionEntry =
+    { Method: string
+      Param: string
+      Param2: string
+      Target: string }
+
+/// A level-up learnset entry: at what level a move is learned.
+type LearnsetEntry =
+    { Level: int
+      Move: string }
+
+/// Combined evolution + learnset data for one species.
+type EvosAttacks =
+    { Species: string
+      Evolutions: EvolutionEntry list
+      Learnset: LearnsetEntry list }
+
 /// A move's 7-byte data record from `data/moves/moves.asm`. The effect is kept
 /// as its constant name (e.g. "EFFECT_NORMAL_HIT") and mapped to an effect
 /// command sequence by the battle layer; the type is resolved to its numeric id.
@@ -60,3 +78,16 @@ type DexEntry =
       HeightDm: int
       WeightHg: int
       Description: string }
+
+/// A single Pokémon in a trainer's party.
+type TrainerMon =
+    { Species: string
+      Level: int }
+
+/// A trainer's full data.
+type TrainerData =
+    { Group: string
+      Id: int
+      Name: string
+      Party: TrainerMon list
+      BaseReward: int }

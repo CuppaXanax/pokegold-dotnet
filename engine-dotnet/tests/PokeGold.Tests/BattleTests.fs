@@ -84,6 +84,20 @@ let ``levelAfterExp caps at 100`` () =
     let lvl, _ = Experience.levelAfterExp 0 99 (Experience.expForLevel 0 99) 999999
     Assert.Equal(100, lvl)
 
+[<Fact>]
+let ``EXP gained from wild battle`` () =
+    Assert.Equal(64 * 5 / 7, Experience.expGained 64 5 false)
+
+[<Fact>]
+let ``EXP gained from trainer battle has 1.5x multiplier`` () =
+    let wild = Experience.expGained 64 10 false
+    let trainer = Experience.expGained 64 10 true
+    Assert.Equal(wild * 3 / 2, trainer)
+
+[<Fact>]
+let ``money earned from trainer`` () =
+    Assert.Equal(25 * 20, Experience.moneyEarned 25 20)
+
 // --- Damage formula: worked examples (no crit, fixed roll) --------------------
 
 let private ty = TypeChart.value
