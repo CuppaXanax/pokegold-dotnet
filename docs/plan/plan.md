@@ -541,6 +541,49 @@ already exist in the code.
 - **Depends on:** M6. **Risks:** effect long-tail & ordering bugs. *Mitigation:* one unit test per
   move effect id, sourced from the disassembly.
 
+##### M13.R — Devil's advocate: M0–M13 gap closure  · M
+
+Items that were not explicitly owned by any M0–M13 milestone but are required for correct
+gameplay before the content milestones (M16+) can be considered complete. Agents picking up
+M14+ work should check these off first or in parallel.
+
+- **Wild encounter wiring.** The grass/water/cave encounter *trigger* loop is not owned by any
+  milestone. M6 proved a scripted wild battle; M13 completed battle mechanics including capture;
+  M16 bakes encounter tables — but the actual "step in grass → RNG roll against encounter rate →
+  spawn a wild mon from the map's table → enter battle" overworld hook is an integration seam
+  that falls between M9 (scripts), M13 (battle), and M16 (data). **Action:** wire the encounter
+  trigger in the overworld step loop, reading `TALL_GRASS`/`LONG_GRASS`/`WATER_TILE` collision
+  ids (already catalogued in the M4 addendum), consulting the map's baked encounter table (M16),
+  rolling against the per-tile encounter rate, and dispatching to the battle scene (M13). The
+  repel check (below) gates the roll. Source of truth:
+  `engine/overworld/wildmons.asm::TryWildEncounter`.
+- **Repel system.** `REPEL`/`SUPER_REPEL`/`MAX_REPEL` decrement a step counter (`wRepelEffect`)
+  and suppress encounters when the lead party mon's level exceeds the wild mon's. Trivial logic
+  but blocks any serious playtesting — without it, grass is either always-encounter or
+  never-encounter. Source: `engine/overworld/wildmons.asm::CanEncounter` + item-use effect.
+  Needs an item-use handler in the Bag/Pack scene (M11) and a step-counter field in save (M7).
+- **Fishing.** Old Rod / Good Rod / Super Rod are field-move items that trigger a
+  "fishing minigame" (dot timing prompt) and then a water-encounter from a separate table.
+  Not mentioned in M17's HM/field-move list. **Action:** add rod use as a field-move-adjacent
+  item action in M17; encounter tables come from M16 (`data/wild/*.asm` `fish_group` entries).
+  Source: `engine/overworld/events.asm::FishingRod`, `engine/overworld/wildmons.asm::WildFish`.
+- **Shiny Pokémon.** Gen-2 shininess is DV-based (attack DV = 2/3/6/7/10/11/14/15, all other
+  DVs = 10+). Detection is a pure function of the 4 DV nybbles and should be threaded through
+  `PartyMon`/`BattleMon` creation. Visual indicator: a star sparkle on send-out + a star icon
+  in the summary screen. Without this, shinies exist in the data but the player can never tell.
+  Source: `engine/pokemon/search.asm::CheckShininess`. **Action:** add `IsShiny` derived
+  property to `PartyMon`; render star in `SummaryScene`; sparkle SFX in `BattleScene` send-out.
+- **Unown letter forms.** The 26 Unown forms are determined by DVs (each DV nybble contributes
+  bits to a letter index). M21 mentions the Ruins of Alph puzzles but not the per-form sprite
+  loading, the Unown dex (a separate tracked list of caught letters), or the word-display wall
+  in the Ruins. Source: `engine/pokemon/unown_form.asm`, `data/pokemon/unown_words.asm`.
+  **Action:** add `UnownLetter` derivation; track caught-letters set in save; load per-letter
+  sprites from `gfx/pokemon/unown/`.
+- **Intro / title screen / new-game flow.** No milestone owns the boot sequence: Game Freak
+  logo → title screen (Ho-Oh animation, press Start) → New Game / Continue / Options → Prof. Oak
+  intro → player/rival name entry → wake up in bedroom. Currently the game hard-boots into the
+  overworld. **Action:** see new milestone M24 below.
+
 ##### M14 — Trainers & battle AI  · L
 - **Deliverables:** **trainer battles** (all trainer-class/party data), switching, multi-Pokémon
   flow, item-in-battle, the **enemy AI** (move scoring + switch logic per the disassembly), battle
@@ -574,10 +617,12 @@ already exist in the code.
 ##### M17 — Johto story, gyms & field moves  · XL
 - **Deliverables:** the complete **Johto main-story scripts/cutscenes**; all **8 gym leaders +
   badges**; **HM/field-move gating** (Cut, Surf, Strength, Whirlpool, Waterfall, Fly, Flash) wired
-  to overworld locomotion (extends the M4 addendum); rival fights and the **Team Rocket** arc
-  (Slowpoke Well, Radio Tower).
+  to overworld locomotion (extends the M4 addendum); **fishing** (Old Rod / Good Rod / Super Rod
+  as field-move-adjacent item actions, dot-timing prompt, water encounter tables from M16);
+  rival fights and the **Team Rocket** arc (Slowpoke Well, Radio Tower).
 - **Acceptance:** a continuous playthrough from New Bark through all 8 Johto badges is possible,
-  gated correctly by badges/HMs, with story events firing in order and persisting across saves.
+  gated correctly by badges/HMs, with story events firing in order and persisting across saves;
+  fishing from a water tile produces the correct species for the map's fish group.
 - **Depends on:** M9, M10, M14, M15, M16. **Risks:** script breadth & ordering. *Mitigation:* lean
   on the M9 interpreter; track story flags explicitly.
 
@@ -629,22 +674,35 @@ already exist in the code.
   *Mitigation:* start from the straight 5→8-bit scale, golden-image per tileset, and a later
   optional perceptual curve.
 
-##### M20 — Time & telephony  · L
+##### M20 — Time, Pokégear & telephony  · L
 - **Deliverables:** **RTC day/night** clock and time-of-day tinting (selecting the palette sets
   built in **M23**); time-based events &
-  encounters (incl. swarms, morning/day/night tables); the **phone** (register/receive calls,
-  rematches, gifts, tips); the **bug-catching contest**; **Radio** programs.
-- **Acceptance:** the clock advances day/night with correct palettes and encounter tables; a
-  registered trainer calls and offers a rematch; the bug contest runs on its schedule.
-- **Depends on:** M9, M16. **Risks:** RTC source-of-truth. *Mitigation:* drive from real wall clock;
-  make it test-injectable.
+  encounters (incl. swarms, morning/day/night tables); the **Pokégear UI** (map screen with
+  fly-point markers, radio tuner with station selection, phone contact list — the gear itself is
+  opened from the Start menu / select button and hosts the phone/radio/map tabs); the **phone**
+  (register/receive calls, rematches, gifts, tips); **trainer rematches** (phone-registered
+  trainers offer rematches with progressively stronger teams — requires the rematch party data
+  from `data/trainers/` and a rematch-ready flag per trainer, checked on phone call generation);
+  the **bug-catching contest**; **Radio** programs (Prof. Oak's talk, Pokémon music, Lucky Channel,
+  Buena's Password, Team Rocket radio — each program has scripted effects on encounters/events).
+- **Acceptance:** the clock advances day/night with correct palettes and encounter tables; the
+  Pokégear opens with working map/radio/phone tabs; a registered trainer calls and offers a
+  rematch with a stronger team; the bug contest runs on its schedule; radio stations produce
+  their scripted effects.
+- **Depends on:** M9, M16, M11 (menu framework). **Risks:** RTC source-of-truth. *Mitigation:*
+  drive from real wall clock; make it test-injectable.
 
 ##### M21 — Breeding, apricorns & diversions  · L
 - **Deliverables:** **Day-Care & breeding** (egg generation, inheritance, hatching); **berries**;
   **apricorns + Kurt's custom Poké Balls**; the **Game Corner** (slots/prizes); **Mom's savings**;
-  and the **Ruins of Alph** puzzles (unlock Unown).
+  the **Ruins of Alph** puzzles (unlock Unown); and **Unown letter forms** — DV-based letter
+  derivation (`engine/pokemon/unown_form.asm`), per-letter sprite loading from
+  `gfx/pokemon/unown/`, the Unown dex (a tracked set of caught letter forms persisted in save),
+  and the word-display wall inside the Ruins.
 - **Acceptance:** leave two compatible Pokémon at the Day-Care, receive and hatch an egg with
-  inherited moves; turn apricorns into balls via Kurt; Ruins of Alph puzzles unlock Unown.
+  inherited moves; turn apricorns into balls via Kurt; Ruins of Alph puzzles unlock Unown;
+  catching Unown records the letter form in the Unown dex; all 26 letter forms are visually
+  distinct and derivable from DVs.
 - **Depends on:** M15, M9. **Risks:** breeding-inheritance rules. *Mitigation:* port inheritance
   tables from the disassembly; unit-test egg generation.
 
@@ -658,6 +716,62 @@ already exist in the code.
   This is the **project Definition of Done gate**.
 - **Depends on:** M15, M16, M17, M19. **Risks:** the "completable dex" constraint (trade-evos,
   exclusives, events). *Mitigation:* D7–D9 make every species reachable single-player.
+
+##### M24 — Intro, title screen & new-game flow  · M
+- **Why this exists:** the game currently hard-boots into the overworld with a pre-seeded save
+  state. A real playthrough needs the full boot sequence. Without this, there is no "fresh save"
+  path to DoD-2.
+- **Deliverables:**
+  - **Title screen:** Game Freak logo fade → title screen with Ho-Oh sprite animation, scrolling
+    Pokémon, "PRESS START" prompt. Source: `engine/menus/title.asm`, `gfx/title/`.
+  - **Main menu:** New Game / Continue / Options (+ Mystery Gift placeholder). Continue loads the
+    existing M7 save; Options drives the existing `OptionsScene`.
+    Source: `engine/menus/main_menu.asm`.
+  - **New-game sequence:** Prof. Oak intro (sprite + text), player name entry (keyboard grid or
+    preset names), rival name entry, gender selection (Crystal had it; Gold does not — confirm
+    and skip), opening cutscene (shrink into Game Boy, wake up in bedroom).
+    Source: `engine/menus/intro_menu.asm`, `engine/menus/naming_screen.asm`.
+  - **Name-entry screen:** reusable keyboard-grid scene (also needed for box naming, Pokémon
+    nicknames). Source: `gfx/naming_screen/`, `engine/menus/naming_screen.asm`.
+- **Acceptance:** cold-start the game → see title → select New Game → enter a name → arrive in
+  the player's bedroom in New Bark Town with the starter event ready to fire; Continue loads an
+  existing save correctly.
+- **Depends on:** M11 (menu framework), M9 (scripting for Oak's intro), M5 (text).
+- **Risks:** the intro has bespoke animations not used elsewhere. *Mitigation:* these are
+  self-contained scenes; implement as one-off renderers, not general systems.
+
+##### M25 — Battle move animations  · M  *(optional — conscious scope decision)*
+- **Status:** **Deferred by design.** The original game has ~250 move animations built from a
+  custom animation scripting language (`engine/battle_anims/`, `data/battle_anims/`). These are
+  purely cosmetic — they don't affect gameplay correctness. The port can ship DoD-2 without them
+  (moves resolve instantly with HP bar changes and text, as they currently do).
+- **If picked up:** parse the battle animation script language (`anim_*` macros in
+  `macros/scripts/battle_anims.asm`) into a DU; implement the ~30 animation primitives
+  (sprite movement, palette flash, screen shake, particle spawn) in `BattleRenderer`; bake
+  animation data via DataGen. This is high effort / low gameplay value but high *feel* value.
+- **Recommendation:** revisit after DoD-2. A post-DoD polish pass where move animations,
+  evolution animations, and Hall of Fame animations all land together.
+
+##### M26 — Multiplayer (future)  · XL  *(post-DoD-2, not on critical path)*
+- **Why this exists:** the `PokeGold.Game` / `PokeGold.Host` architecture already separates
+  pure game logic from platform I/O. The battle engine is deterministic (seeded LCG RNG).
+  These properties make multiplayer structurally feasible without a rewrite.
+- **Deliverables (sketch — to be scoped when picked up):**
+  - **Online trading:** extend the offline trade terminal (D7/M22) with a network transport.
+    Two players connect, browse each other's boxes, propose/accept trades. The `TradeData`
+    contract already exists; the transport is the new work (WebSocket or relay server).
+  - **Online battling:** two clients share a battle seed + team data; each turn, both select a
+    move and exchange selections. The deterministic battle engine runs identically on both
+    sides — only move indices are transmitted, not game state. Latency-tolerant by design
+    (turn-based). Needs a lobby/matchmaking stub and a spectator-friendly replay log.
+  - **Link Cable emulation (stretch):** a virtual "link cable" session that mimics the GB serial
+    protocol at a high level — enabling any link-cable interaction (trade, battle, time capsule,
+    mystery gift) through a single transport. Lower priority than purpose-built trade/battle.
+- **Acceptance:** two instances of the game on different machines can trade a Pokémon and battle
+  each other with correct move resolution.
+- **Depends on:** M22 (trading infrastructure), M14 (battle), M15 (growth — traded mons must
+  level correctly). **Risks:** NAT traversal, relay hosting, cheat prevention. *Mitigation:*
+  start with LAN/direct-connect; relay and anti-cheat are separate milestones.
 
 #### Engineering tooling (cross-cutting, not on the content critical path)
 
@@ -695,40 +809,52 @@ sequence and can land whenever useful.
 ## Dependency graph
 
 ```
-Vertical slice (M0–M8):
+Vertical slice (M0–M8):  ✅ ALL COMPLETE
   M0 → M1 → M2 → M3 → M4 ─┐
                  │        ├→ M7
                  └→ M5 ───┤
                           └→ M6
   M2 → M8
 
-Full game (M9–M22):
-  M5,M4 → M9 ─┬→ M10 ┐
+Full game (M9–M22+):
+  M5,M4 → M9 ─┬→ M10 ┐                        ✅ M9–M13 COMPLETE
               │       ├→ M17 → M18 → M19 ┐
   M2 → M16 ───┼→ M15 ┤                   ├→ M22  (Definition of Done)
   M6 → M13 → M14 ─────┘                  │
   M7 → M11 → M12                         │
-  M9,M16 → M20
-  M3,M9,M10 → M23 → M20  (GBC palettes precede day/night tinting)                           │
+  M9,M16 → M20                           │
+  M3,M9,M10 → M23 → M20                  │
   M15,M9 → M21 ──────────────────────────┘
+  M13.R (gap closure) — parallel to M14+, no hard deps, items feed into M16/M17
+  M11,M9,M5 → M24 (intro/new-game — required for DoD-2 "fresh save" gate)
+
+Post-DoD-2 (not on critical path):
+  M22 → M25 (move animations — optional polish)
+  M22,M14,M15 → M26 (multiplayer)
 ```
 Phase A (M9–M12) widens the overworld; Phase B (M13–M15) completes battle & growth; Phase C
 (M16–M19) is content & progression through Red; Phase D (M20–M22) adds Gen-2 systems and closes
-on a completable Pokédex.
+on a completable Pokédex. M24 (intro) is required for DoD-2 but can land any time after M11.
+M25 (move animations) and M26 (multiplayer) are post-DoD-2 stretch goals.
 
 ## Risk register (top)
 
 | Risk | Impact | Likelihood | Mitigation / owner-action |
 |------|--------|------------|---------------------------|
-| F#+MonoGame tooling friction | Blocks M0 | Med | Reference DesktopGL NuGet directly from F# exe; spike in M0 |
-| Data-extraction strategy churn (D1) | Rework M2+ | Med | Decide D1 before M2; isolate behind a loader interface |
-| Gen-2 map/block model complexity | Slips M2/M3 | Med | Model only what the slice needs; golden-image tests |
-| Damage formula / battle edge cases | Subtle M6/M13 bugs | High | Worked-example unit tests from disassembly |
-| Audio synthesis fidelity | M8 sounds wrong | High | One channel/track first; iterate |
-| Script/event command long-tail | Story gaps, M9/M17 slip | High | Enumerate the full command table up front; test the interpreter on real script bytes |
+| F#+MonoGame tooling friction | Blocks M0 | Med | ✅ Resolved — F# exe + DesktopGL NuGet works |
+| Data-extraction strategy churn (D1) | Rework M2+ | Med | ✅ Resolved — parse repo assets directly |
+| Gen-2 map/block model complexity | Slips M2/M3 | Med | ✅ Resolved — model complete, golden-image tests pass |
+| Damage formula / battle edge cases | Subtle M6/M13 bugs | High | ✅ Mitigated — 120+ effects implemented with worked-example tests |
+| Audio synthesis fidelity | M8 sounds wrong | High | ✅ Mitigated — faithful APU emulator from PyBoy reference |
+| Script/event command long-tail | Story gaps, M9/M17 slip | High | Enumerate the full command table up front; ~110 opcodes remain for M17+ |
 | Content volume (M16–M19, M21) | Long grind, data bugs | High | Generated loaders + per-table count/spot-check tests; reuse systems, add only data |
 | Completable-dex constraints (trade-evo, exclusives, events) | Blocks DoD-2 at M22 | Med | D7–D9: offline trade terminal + built-in event unlocks make every species single-player-reachable |
-| Save schema churn as state grows | Save/reload breakage | Med | Version the save from M7; migrate on load |
+| Save schema churn as state grows | Save/reload breakage | Med | Version the save from M7; migrate on load (v4 schema in place) |
+| Wild encounter integration gap | Grass/water encounters never trigger | High | M13.R explicitly owns the wiring; source of truth identified (`TryWildEncounter`) |
+| Intro/new-game flow missing | No "fresh save" path to DoD-2 | Med | M24 added; can land any time after M11; self-contained scenes |
+| Shiny/Unown visual identity | Players can't identify shinies or Unown forms | Low | M13.R (shiny) + M21 (Unown) — pure DV derivation, low risk |
+| Pokégear UI not owned | Phone/radio/map tabs have no scene | Med | M20 now explicitly owns the Pokégear scene + all tabs |
+| Multiplayer scope creep | NAT/relay/cheat concerns grow unbounded | Med | M26 explicitly post-DoD-2; start LAN-only; relay is a separate milestone |
 
 ## Definition of done
 
@@ -748,6 +874,7 @@ completion is the bar.
 
 ## Tracking
 
-Milestones M0–M22 are mirrored as todos in the session database with dependencies. Update status
-there as work proceeds. M0–M8 (vertical slice) are scoped tightly; M9–M22 (full game) are coarse
-and get split into sub-tasks as each is picked up.
+Milestones M0–M26 are mirrored as todos in the session database with dependencies. Update status
+there as work proceeds. M0–M13 (vertical slice + battle mechanics) are **complete**. M13.R (gap
+closure) runs in parallel with M14+. M14–M22 + M24 are the DoD-2 critical path. M25 (move
+animations) and M26 (multiplayer) are post-DoD-2 stretch goals.
