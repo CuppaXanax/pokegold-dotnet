@@ -234,7 +234,7 @@ let private makePlayer () : PlayerState =
         |> Bag.add "POTION"    5
         |> Bag.add "ANTIDOTE"  2
         |> Bag.add "POKE_BALL" 3
-    { PlayerState.initial with Money = 99999; Bag = bag }
+    { PlayerStateOps.initial with Money = 99999; Bag = bag }
 
 let private martItems = MartsData.byConstant.["MART_AZALEA"]
 

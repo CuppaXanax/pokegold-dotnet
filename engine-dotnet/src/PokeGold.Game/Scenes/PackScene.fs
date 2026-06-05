@@ -255,7 +255,16 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                         Stay
                     | "USE" ->
                         mode <- Browsing
-                        if PackUseGive.isHpHeal id then
+                        if PackUseGive.isRepel id then
+                            match PackUseGive.applyRepel id currentPlayer with
+                            | Some newPlayer ->
+                                currentPlayer <- newPlayer
+                                rebuildMenus newPlayer.Bag
+                                onChange newPlayer
+                                Pop
+                            | None ->
+                                Pop
+                        elif PackUseGive.isHpHeal id then
                             // HP-restore item: push Party as a target picker.
                             Push(
                                 PartyScene(content, currentPlayer, onChange,

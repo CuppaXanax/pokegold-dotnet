@@ -7,7 +7,7 @@ type GameOptions =
       Sound: int }     // 0=mono, 1=stereo
 
 /// The full persistent player state.
-type PlayerState =
+type PersistentPlayerState =
     { Name: string
       Money: int
       Party: Party
@@ -16,7 +16,11 @@ type PlayerState =
       DexOwn: Set<int>
       Badges: int
       Options: GameOptions
-      Pc: PcStorage }
+      Pc: PcStorage
+      RepelSteps: int }
+
+/// Public alias for the persistent player state record.
+type PlayerState = PersistentPlayerState
 
 module Options =
 
@@ -28,7 +32,7 @@ module Options =
         | 1 -> 5   // SLOW
         | _ -> 3   // MID (default)
 
-module PlayerState =
+module PlayerStateOps =
 
     let defaultOptions = { TextSpeed = 2; BoxBorder = 0; Sound = 0 }
 
@@ -42,4 +46,14 @@ module PlayerState =
           DexOwn = Set.empty
           Badges = 0
           Options = defaultOptions
-          Pc = Storage.empty }
+          Pc = Storage.empty
+          RepelSteps = 0 }
+
+module Repel =
+
+    /// Check whether an active repel suppresses this wild encounter.
+    let blocks (player: PlayerState) (wildLevel: int) : bool =
+        player.RepelSteps > 0 &&
+        match player.Party with
+        | lead :: _ -> lead.Level >= wildLevel
+        | [] -> false

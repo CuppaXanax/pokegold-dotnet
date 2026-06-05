@@ -83,7 +83,7 @@ let ``captureWith then JSON round-trip restores world flags, vars, and player`` 
         |> World.setVar "VAR_BADGES" 1
         |> World.setScene "" 2
 
-    let player = { PlayerState.initial with Bag = Bag.empty |> Bag.add "POTION" 3 |> Bag.add "GS_BALL" 1 }
+    let player = { PlayerStateOps.initial with Bag = Bag.empty |> Bag.add "POTION" 3 |> Bag.add "GS_BALL" 1 }
 
     // Round-trip through the actual on-disk JSON shape.
     let back =

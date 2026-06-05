@@ -18,7 +18,7 @@ let private makePlayer () : PlayerState =
     let pidgey     = PartyMon.create 16  4
     let pidgeyWeak = { pidgey with Hp = max 1 (pidgey.MaxHp / 3) }
     let totodile   = PartyMon.create 158 5
-    { PlayerState.initial with Party = [ cyndaquil; pidgeyWeak; totodile ] }
+    { PlayerStateOps.initial with Party = [ cyndaquil; pidgeyWeak; totodile ] }
 
 /// Build a fresh PartyScene (default/menu mode) and a getter for the most-recent
 /// `onChange` argument.
@@ -265,3 +265,38 @@ let ``PartyScene Render draws non-zero pixels at box top-left (tile 0,0)`` () =
             if fb.Pixels.[i] <> 0uy || fb.Pixels.[i+1] <> 0uy || fb.Pixels.[i+2] <> 0uy then
                 anyNonZero <- true
     Assert.True(anyNonZero, "BoxTopLeft glyph at tile (0,0) should write non-zero pixels")
+
+[<Fact>]
+let ``DVs 0xAFFF are shiny (atk=10, def=15, spd=15, spc=15)`` () =
+    Assert.True(PartyMon.isShiny 0xAFFF)
+
+[<Fact>]
+let ``DVs 0x0000 are not shiny (atk=0, bit 1 not set)`` () =
+    Assert.False(PartyMon.isShiny 0x0000)
+
+[<Fact>]
+let ``DVs 0x2AAA are shiny (atk=2, def=10, spd=10, spc=10)`` () =
+    Assert.True(PartyMon.isShiny 0x2AAA)
+
+[<Fact>]
+let ``DVs 0x2A9A are not shiny (spd=9, below threshold)`` () =
+    Assert.False(PartyMon.isShiny 0x2A9A)
+
+[<Fact>]
+let ``DVs 0x1FFF are not shiny (atk=1, bit 1 not set)`` () =
+    Assert.False(PartyMon.isShiny 0x1FFF)
+
+[<Fact>]
+let ``DVs 0x0000 yield Unown letter A (index 0)`` () =
+    Assert.Equal(0, PartyMon.unownLetter 0x0000)
+    Assert.Equal('A', PartyMon.unownChar 0)
+
+[<Fact>]
+let ``DVs 0xFFFF yield Unown letter Z (index 25)`` () =
+    Assert.Equal(25, PartyMon.unownLetter 0xFFFF)
+    Assert.Equal('Z', PartyMon.unownChar 25)
+
+[<Fact>]
+let ``DVs produce expected intermediate letters`` () =
+    Assert.Equal(25, PartyMon.unownLetter 0x6666)
+    Assert.Equal(8, PartyMon.unownLetter 0x2222)

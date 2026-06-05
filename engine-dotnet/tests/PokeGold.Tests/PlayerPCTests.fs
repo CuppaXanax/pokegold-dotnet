@@ -35,19 +35,19 @@ let private makeMail (author: string) (body: string) : Mail =
 
 [<Fact>]
 let ``PlayerPCScene starts in PcItemMain mode`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     Assert.Equal(PlayerPCMode.PcItemMain, scene.Mode)
 
 [<Fact>]
 let ``B in PcItemMain returns Pop`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     Assert.Equal(Pop, pressB scene)
 
 // ── LOG OFF ───────────────────────────────────────────────────────────────────
 
 [<Fact>]
 let ``A on LOG OFF returns Pop`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     // LOG OFF is at cursor 4 (WITHDRAW=0, DEPOSIT=1, TOSS=2, MAIL BOX=3, LOG OFF=4).
     for _ in 1 .. 4 do pressDown scene |> ignore
     Assert.Equal(Pop, pressA scene)
@@ -56,7 +56,7 @@ let ``A on LOG OFF returns Pop`` () =
 
 [<Fact>]
 let ``A on WITHDRAW with empty stash shows PcItemMsg mode`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     // WITHDRAW is at cursor 0 — just press A.
     pressA scene |> ignore
     match scene.Mode with
@@ -67,7 +67,7 @@ let ``A on WITHDRAW with empty stash shows PcItemMsg mode`` () =
 
 [<Fact>]
 let ``A on DEPOSIT with depositable items enters PcItemPick mode`` () =
-    let player = { PlayerState.initial with Bag = Bag.add "POTION" 3 Bag.empty }
+    let player = { PlayerStateOps.initial with Bag = Bag.add "POTION" 3 Bag.empty }
     let scene, _ = makeScene player
     // DEPOSIT is at cursor 1.
     pressDown scene |> ignore
@@ -79,7 +79,7 @@ let ``A on DEPOSIT with depositable items enters PcItemPick mode`` () =
 [<Fact>]
 let ``A on DEPOSIT with empty depositable list shows PcItemMsg`` () =
     // Empty bag and no depositable items (only KeyItems in bag are excluded).
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     pressDown scene |> ignore   // move to DEPOSIT
     pressA scene |> ignore
     match scene.Mode with
@@ -88,7 +88,7 @@ let ``A on DEPOSIT with empty depositable list shows PcItemMsg`` () =
 
 [<Fact>]
 let ``A in PcItemPick DEPOSIT deposits item and fires onChange`` () =
-    let player = { PlayerState.initial with Bag = Bag.add "POTION" 3 Bag.empty }
+    let player = { PlayerStateOps.initial with Bag = Bag.add "POTION" 3 Bag.empty }
     let scene, getUpdated = makeScene player
     // Navigate to DEPOSIT, enter pick mode.
     pressDown scene |> ignore
@@ -104,7 +104,7 @@ let ``A in PcItemPick DEPOSIT deposits item and fires onChange`` () =
 
 [<Fact>]
 let ``B in PcItemPick returns to PcItemMain`` () =
-    let player = { PlayerState.initial with Bag = Bag.add "POTION" 3 Bag.empty }
+    let player = { PlayerStateOps.initial with Bag = Bag.add "POTION" 3 Bag.empty }
     let scene, _ = makeScene player
     pressDown scene |> ignore
     pressA scene |> ignore
@@ -118,7 +118,7 @@ let ``B in PcItemPick returns to PcItemMain`` () =
 let ``A in PcItemPick WITHDRAW withdraws item and fires onChange`` () =
     // Seed PC stash with a POTION.
     let pc = { Storage.empty with PcItems = [("POTION", 3)] }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let scene, getUpdated = makeScene player
     // WITHDRAW is at cursor 0; press A to enter pick mode.
     pressA scene |> ignore
@@ -135,7 +135,7 @@ let ``A in PcItemPick WITHDRAW withdraws item and fires onChange`` () =
 
 [<Fact>]
 let ``PcItemMsg clears on A and returns to PcItemMain`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     pressA scene |> ignore  // WITHDRAW with empty stash → PcItemMsg
     match scene.Mode with
     | PlayerPCMode.PcItemMsg _ -> ()
@@ -147,7 +147,7 @@ let ``PcItemMsg clears on A and returns to PcItemMain`` () =
 
 [<Fact>]
 let ``A on MAIL BOX with no mail shows PcItemMsg`` () =
-    let scene, _ = makeScene PlayerState.initial
+    let scene, _ = makeScene PlayerStateOps.initial
     // MAIL BOX is at cursor 3.
     for _ in 1 .. 3 do pressDown scene |> ignore
     pressA scene |> ignore
@@ -159,7 +159,7 @@ let ``A on MAIL BOX with no mail shows PcItemMsg`` () =
 let ``A on MAIL BOX with mail enters PcMailBrowse`` () =
     let mail = makeMail "SILVER" "Battle!"
     let pc   = { Storage.empty with Mailbox = [mail] }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let scene, _ = makeScene player
     for _ in 1 .. 3 do pressDown scene |> ignore
     pressA scene |> ignore
@@ -171,7 +171,7 @@ let ``A on MAIL BOX with mail enters PcMailBrowse`` () =
 let ``A in PcMailBrowse enters PcMailRead`` () =
     let mail = makeMail "SILVER" "Battle!"
     let pc   = { Storage.empty with Mailbox = [mail] }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let scene, _ = makeScene player
     for _ in 1 .. 3 do pressDown scene |> ignore
     pressA scene |> ignore   // enter PcMailBrowse
@@ -184,7 +184,7 @@ let ``A in PcMailBrowse enters PcMailRead`` () =
 let ``A in PcMailRead returns to PcMailBrowse`` () =
     let mail = makeMail "SILVER" "Battle!"
     let pc   = { Storage.empty with Mailbox = [mail] }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let scene, _ = makeScene player
     for _ in 1 .. 3 do pressDown scene |> ignore
     pressA scene |> ignore   // PcMailBrowse
@@ -198,7 +198,7 @@ let ``A in PcMailRead returns to PcMailBrowse`` () =
 let ``B in PcMailBrowse returns to PcItemMain`` () =
     let mail = makeMail "RED" "Hey"
     let pc   = { Storage.empty with Mailbox = [mail] }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let scene, _ = makeScene player
     for _ in 1 .. 3 do pressDown scene |> ignore
     pressA scene |> ignore   // PcMailBrowse
@@ -210,7 +210,7 @@ let ``B in PcMailBrowse returns to PcItemMain`` () =
 [<Fact>]
 let ``PcMenuScene A on PLAYER'S PC pushes PlayerPCScene`` () =
     let mutable updated: PlayerState option = None
-    let scene = PcMenuScene(content (), PlayerState.initial, fun p -> updated <- Some p)
+    let scene = PcMenuScene(content (), PlayerStateOps.initial, fun p -> updated <- Some p)
     // PLAYER'S PC is at cursor 1 (BILL'S PC=0, PLAYER'S PC=1, LOG OFF=2).
     (scene :> Scene).Update({ Buttons.none with Down = true }) |> ignore
     (scene :> Scene).Update(Buttons.none) |> ignore

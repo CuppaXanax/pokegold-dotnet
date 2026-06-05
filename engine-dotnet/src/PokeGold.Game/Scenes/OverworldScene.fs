@@ -27,7 +27,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Coord triggers already fired this visit (fire-once).
     let mutable firedCoords: Set<int * int> = Set.empty
     /// The player's full persistent state (party, bag, dex, money, etc.).
-    let mutable player: PlayerState = PlayerState.initial
+    let mutable player: PokeGold.Game.Player.PlayerState = PlayerStateOps.initial
     /// Staged battle data for the next `startbattle` call.
     let mutable stagedWild: (string * int) option = None
     let mutable stagedTrainer: (string * string) option = None
@@ -441,6 +441,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     if after = before then
                         Stay
                     else
+                        if player.RepelSteps > 0 then
+                            player <- { player with RepelSteps = player.RepelSteps - 1 }
+
                         // Stepping onto a warp tile sends the player to its paired
                         // warp on the destination map (a no-op until that map is
                         // wired up). Otherwise a coord trigger may fire.

@@ -15,7 +15,7 @@ open PokeGold.Game.Scenes
 // Species 5 (Charmeleon) is NOT in DexSeen — used for the "unseen" branch.
 
 let private makePlayer () : PlayerState =
-    { PlayerState.initial with
+    { PlayerStateOps.initial with
         DexSeen = Set.ofList [ 1; 4; 25 ]
         DexOwn  = Set.ofList [ 1; 25 ] }
 

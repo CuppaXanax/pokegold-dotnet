@@ -26,7 +26,7 @@ let private makePlayer () : PlayerState =
         |> Bag.add "ANTIDOTE"  2
         |> Bag.add "POKE_BALL" 10
         |> Bag.add "BICYCLE"   1
-    { PlayerState.initial with Bag = bag }
+    { PlayerStateOps.initial with Bag = bag }
 
 /// Build a fresh PackScene and a getter for the most-recent onChange argument.
 let private makeScene () =

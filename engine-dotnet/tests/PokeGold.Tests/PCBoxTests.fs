@@ -12,7 +12,7 @@ let private content () = Content()
 
 let private makePlayer (partySize: int) : PlayerState =
     let party = List.init partySize (fun i -> PartyMon.create (1 + i) (5 + i))
-    { PlayerState.initial with Party = party }
+    { PlayerStateOps.initial with Party = party }
 
 let private makeScene (player: PlayerState) =
     let mutable updated: PlayerState option = None

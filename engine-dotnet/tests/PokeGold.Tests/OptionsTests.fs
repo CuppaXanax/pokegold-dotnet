@@ -91,7 +91,7 @@ let private pressB     s = press { Buttons.none with B     = true } s
 let private pressStart s = press { Buttons.none with Start = true } s
 
 let private defaultScene () =
-    OptionsScene(Content(), PlayerState.initial, fun _ -> ())
+    OptionsScene(Content(), PlayerStateOps.initial, fun _ -> ())
 
 [<Fact>]
 let ``OptionsScene initial cursor is 0 (TEXT SPEED)`` () =
@@ -186,7 +186,7 @@ let ``OptionsScene Left/Right return Stay`` () =
 [<Fact>]
 let ``OptionsScene B calls onChange with updated PlayerState`` () =
     let mutable committed: PlayerState option = None
-    let scene = OptionsScene(Content(), PlayerState.initial, fun p -> committed <- Some p)
+    let scene = OptionsScene(Content(), PlayerStateOps.initial, fun p -> committed <- Some p)
     pressRight scene |> ignore    // change TextSpeed 2→3
     pressB scene |> ignore
     Assert.True(committed.IsSome)
@@ -200,17 +200,17 @@ let ``OptionsScene B returns Pop`` () =
 [<Fact>]
 let ``OptionsScene Start returns Pop and commits`` () =
     let mutable committed = false
-    let scene = OptionsScene(Content(), PlayerState.initial, fun _ -> committed <- true)
+    let scene = OptionsScene(Content(), PlayerStateOps.initial, fun _ -> committed <- true)
     Assert.Equal(Pop, pressStart scene)
     Assert.True(committed)
 
 [<Fact>]
 let ``OptionsScene B with no changes commits original options`` () =
     let mutable committed: PlayerState option = None
-    let scene = OptionsScene(Content(), PlayerState.initial, fun p -> committed <- Some p)
+    let scene = OptionsScene(Content(), PlayerStateOps.initial, fun p -> committed <- Some p)
     pressB scene |> ignore
     Assert.True(committed.IsSome)
-    Assert.Equal(PlayerState.initial.Options, committed.Value.Options)
+    Assert.Equal(PlayerStateOps.initial.Options, committed.Value.Options)
 
 // ── OptionsScene Render: non-zero pixels in box area ─────────────────────────
 

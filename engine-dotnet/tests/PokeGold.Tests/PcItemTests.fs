@@ -24,7 +24,7 @@ let private makeMail (author: string) (body: string) : Mail =
 
 [<Fact>]
 let ``depositItem moves item from bag to stash`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 3
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 3
     match PcItemOps.depositItem "POTION" 2 p with
     | Ok p2 ->
         Assert.Equal(1, Bag.count "POTION" p2.Bag)
@@ -34,21 +34,21 @@ let ``depositItem moves item from bag to stash`` () =
 
 [<Fact>]
 let ``depositItem fails when bag has fewer than qty`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 1
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 1
     match PcItemOps.depositItem "POTION" 2 p with
     | Error _ -> ()
     | Ok _ -> Assert.Fail("Should have rejected deposit with insufficient bag count")
 
 [<Fact>]
 let ``depositItem removes bag entry when count reaches zero`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 2
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 2
     match PcItemOps.depositItem "POTION" 2 p with
     | Ok p2 -> Assert.Equal(0, Bag.count "POTION" p2.Bag)
     | Error e -> Assert.Fail(e)
 
 [<Fact>]
 let ``depositItem stacks into an existing stash entry`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 5 |> withStashItem "POTION" 10
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 5 |> withStashItem "POTION" 10
     match PcItemOps.depositItem "POTION" 3 p with
     | Ok p2 ->
         let stashed = p2.Pc.PcItems |> List.find (fun (id, _) -> id = "POTION") |> snd
@@ -57,7 +57,7 @@ let ``depositItem stacks into an existing stash entry`` () =
 
 [<Fact>]
 let ``depositItem caps stash stack at 99`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 10 |> withStashItem "POTION" 95
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 10 |> withStashItem "POTION" 95
     match PcItemOps.depositItem "POTION" 10 p with
     | Ok p2 ->
         let stashed = p2.Pc.PcItems |> List.find (fun (id, _) -> id = "POTION") |> snd
@@ -68,7 +68,7 @@ let ``depositItem caps stash stack at 99`` () =
 
 [<Fact>]
 let ``withdrawItem moves item from stash to bag`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 5
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 5
     match PcItemOps.withdrawItem "POTION" 2 p with
     | Ok p2 ->
         Assert.Equal(2, Bag.count "POTION" p2.Bag)
@@ -78,7 +78,7 @@ let ``withdrawItem moves item from stash to bag`` () =
 
 [<Fact>]
 let ``withdrawItem removes stash entry when count reaches zero`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 2
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 2
     match PcItemOps.withdrawItem "POTION" 2 p with
     | Ok p2 ->
         Assert.Empty(p2.Pc.PcItems)
@@ -87,14 +87,14 @@ let ``withdrawItem removes stash entry when count reaches zero`` () =
 
 [<Fact>]
 let ``withdrawItem fails when stash has fewer than qty`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 1
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 1
     match PcItemOps.withdrawItem "POTION" 2 p with
     | Error _ -> ()
     | Ok _ -> Assert.Fail("Should have rejected withdraw with insufficient stash count")
 
 [<Fact>]
 let ``withdrawItem fails when item not in stash at all`` () =
-    let p = PlayerState.initial
+    let p = PlayerStateOps.initial
     match PcItemOps.withdrawItem "POTION" 1 p with
     | Error _ -> ()
     | Ok _ -> Assert.Fail("Should have rejected withdraw of absent item")
@@ -103,7 +103,7 @@ let ``withdrawItem fails when item not in stash at all`` () =
 
 [<Fact>]
 let ``deposit then withdraw round-trips correctly`` () =
-    let p = PlayerState.initial |> withBagItem "POTION" 5
+    let p = PlayerStateOps.initial |> withBagItem "POTION" 5
     match PcItemOps.depositItem "POTION" 3 p with
     | Ok p2 ->
         match PcItemOps.withdrawItem "POTION" 3 p2 with
@@ -117,26 +117,26 @@ let ``deposit then withdraw round-trips correctly`` () =
 
 [<Fact>]
 let ``tossItem removes items from stash`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 5
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 5
     let p2 = PcItemOps.tossItem "POTION" 3 p
     let stashed = p2.Pc.PcItems |> List.tryFind (fun (id, _) -> id = "POTION") |> Option.map snd |> Option.defaultValue 0
     Assert.Equal(2, stashed)
 
 [<Fact>]
 let ``tossItem removes all when qty equals stash count`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 3
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 3
     let p2 = PcItemOps.tossItem "POTION" 3 p
     Assert.Empty(p2.Pc.PcItems)
 
 [<Fact>]
 let ``tossItem clamps silently when qty exceeds stash count`` () =
-    let p = PlayerState.initial |> withStashItem "POTION" 2
+    let p = PlayerStateOps.initial |> withStashItem "POTION" 2
     let p2 = PcItemOps.tossItem "POTION" 99 p
     Assert.Empty(p2.Pc.PcItems)
 
 [<Fact>]
 let ``tossItem is a no-op for absent item`` () =
-    let p = PlayerState.initial
+    let p = PlayerStateOps.initial
     let p2 = PcItemOps.tossItem "POTION" 1 p
     Assert.Equal(p, p2)
 
@@ -144,7 +144,7 @@ let ``tossItem is a no-op for absent item`` () =
 
 [<Fact>]
 let ``storeMail appends to mailbox`` () =
-    let p    = PlayerState.initial
+    let p    = PlayerStateOps.initial
     let mail = makeMail "RED" "Hello!"
     match PcItemOps.storeMail mail p with
     | Ok p2 ->
@@ -154,7 +154,7 @@ let ``storeMail appends to mailbox`` () =
 
 [<Fact>]
 let ``storeMail preserves insertion order`` () =
-    let p = PlayerState.initial
+    let p = PlayerStateOps.initial
     let m1 = makeMail "RED"   "Hi"
     let m2 = makeMail "BLUE"  "Yo"
     let p2 =
@@ -168,7 +168,7 @@ let ``storeMail preserves insertion order`` () =
 [<Fact>]
 let ``storeMail fails when mailbox is full`` () =
     // Fill mailbox to capacity (10).
-    let mutable p = PlayerState.initial
+    let mutable p = PlayerStateOps.initial
     for i in 1 .. Storage.mailboxCapacity do
         match PcItemOps.storeMail (makeMail (sprintf "A%d" i) "x") p with
         | Ok pp -> p <- pp
@@ -182,7 +182,7 @@ let ``storeMail fails when mailbox is full`` () =
 
 [<Fact>]
 let ``readMail returns correct mail at index`` () =
-    let p    = PlayerState.initial
+    let p    = PlayerStateOps.initial
     let mail = makeMail "SILVER" "Fight me!"
     match PcItemOps.storeMail mail p with
     | Ok p2 ->
@@ -193,7 +193,7 @@ let ``readMail returns correct mail at index`` () =
 
 [<Fact>]
 let ``readMail returns None for out-of-range index`` () =
-    let p = PlayerState.initial
+    let p = PlayerStateOps.initial
     Assert.Equal(None, PcItemOps.readMail 0 p)
     Assert.Equal(None, PcItemOps.readMail -1 p)
     Assert.Equal(None, PcItemOps.readMail 99 p)
@@ -202,7 +202,7 @@ let ``readMail returns None for out-of-range index`` () =
 
 [<Fact>]
 let ``takeMail removes the entry at the given index`` () =
-    let p  = PlayerState.initial
+    let p  = PlayerStateOps.initial
     let m1 = makeMail "RED"  "Hi"
     let m2 = makeMail "BLUE" "Yo"
     let p2 =
@@ -215,7 +215,7 @@ let ``takeMail removes the entry at the given index`` () =
 
 [<Fact>]
 let ``takeMail is a no-op for out-of-range index`` () =
-    let p    = PlayerState.initial
+    let p    = PlayerStateOps.initial
     let mail = makeMail "RED" "Hi"
     match PcItemOps.storeMail mail p with
     | Ok p2 ->
@@ -231,7 +231,7 @@ let ``takeMail is a no-op for out-of-range index`` () =
 let ``deposit item and store mail then save-reload round-trip persists both`` () =
     let content = Content()
     let ow      = OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down
-    let p0      = PlayerState.initial |> withBagItem "POTION" 5
+    let p0      = PlayerStateOps.initial |> withBagItem "POTION" 5
     // Deposit 3 POTIONs into the PC stash.
     match PcItemOps.depositItem "POTION" 3 p0 with
     | Ok p1 ->

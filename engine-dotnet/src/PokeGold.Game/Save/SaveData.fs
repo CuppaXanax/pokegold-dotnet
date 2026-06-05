@@ -71,7 +71,8 @@ type PlayerSave =
       PocketedBag: PocketSave
       DexSeen: int[]; DexOwn: int[]
       Badges: int; Options: GameOptionsSave
-      Pc: PcStorageSave }
+      Pc: PcStorageSave
+      RepelSteps: int }
 
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
@@ -188,7 +189,7 @@ module SaveData =
         { TextSpeed = o.TextSpeed; BoxBorder = o.BoxBorder; Sound = o.Sound }
 
     let private optionsOfSave (s: GameOptionsSave) : GameOptions =
-        if box s = null then PlayerState.defaultOptions
+        if box s = null then PlayerStateOps.defaultOptions
         else { TextSpeed = s.TextSpeed; BoxBorder = s.BoxBorder; Sound = s.Sound }
 
     // PcStorage conversions
@@ -233,7 +234,8 @@ module SaveData =
           PocketedBag = bagToSave p.Bag
           DexSeen = p.DexSeen |> Set.toArray; DexOwn = p.DexOwn |> Set.toArray
           Badges = p.Badges; Options = optionsToSave p.Options
-          Pc = pcToSave p.Pc }
+          Pc = pcToSave p.Pc
+          RepelSteps = p.RepelSteps }
 
     /// The PlayerState a save restores. For v1/v2 saves (no Player block),
     /// migrates the flat Bag to a pocketed Bag; party/dex/money start empty/zero.
@@ -243,7 +245,7 @@ module SaveData =
         | null ->
             // v1/v2 migration: re-pocket the flat bag from the Bag field
             let flatBag = bagOf save
-            { PlayerState.initial with Bag = Bag.ofFlat flatBag }
+            { PlayerStateOps.initial with Bag = Bag.ofFlat flatBag }
         | _ ->
             let ps = save.Player
             { Name = nullToEmptyStr ps.Name
@@ -254,7 +256,8 @@ module SaveData =
               DexOwn = nullToEmpty ps.DexOwn |> Set.ofArray
               Badges = ps.Badges
               Options = optionsOfSave ps.Options
-              Pc = pcOfSave ps.Pc }
+              Pc = pcOfSave ps.Pc
+              RepelSteps = ps.RepelSteps }
 
     /// Snapshot a live overworld plus its script world, bag, and player state into a save.
     let captureWith (s: OverworldState) (world: World) (player: PlayerState) : SaveData =
@@ -265,7 +268,7 @@ module SaveData =
           Player = playerToSave player }
 
     /// Snapshot just the overworld position (empty world/player) — the M7 entry point.
-    let capture (s: OverworldState) : SaveData = captureWith s World.empty PlayerState.initial
+    let capture (s: OverworldState) : SaveData = captureWith s World.empty PlayerStateOps.initial
 
     /// Rebuild a live overworld from a save, restoring the player's map,
     /// cell, and facing. Requires the asset cache to reload the map.

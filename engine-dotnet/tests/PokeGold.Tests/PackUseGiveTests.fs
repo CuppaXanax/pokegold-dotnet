@@ -20,7 +20,7 @@ let private makePlayer () : PlayerState =
         |> Bag.add "POTION"    5   // HP +20, Item pocket
         |> Bag.add "ANTIDOTE"  3   // status cure — deferred
         |> Bag.add "POKE_BALL" 10  // Ball pocket
-    { PlayerState.initial with Bag = bag; Party = makeParty () }
+    { PlayerStateOps.initial with Bag = bag; Party = makeParty () }
 
 // ── Pure applyGive ─────────────────────────────────────────────────────────────
 
@@ -104,6 +104,16 @@ let ``applyHpHeal does not decrement bag when mon is at full HP`` () =
     let p  = makePlayer ()
     let _  = PackUseGive.applyHpHeal "POTION" 1 p
     Assert.Equal(5, Bag.count "POTION" p.Bag)  // original unchanged
+
+[<Fact>]
+let ``applyRepel sets step counter and removes item`` () =
+    let player = { PlayerStateOps.initial with Bag = Bag.add "REPEL" 1 Bag.empty }
+
+    match PackUseGive.applyRepel "REPEL" player with
+    | Some updated ->
+        Assert.Equal(100, updated.RepelSteps)
+        Assert.Equal(0, Bag.count "REPEL" updated.Bag)
+    | None -> Assert.Fail("should have applied")
 
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
@@ -229,7 +239,7 @@ let ``PackScene USE POTION on full-HP mon pops without consuming item`` () =
 let ``PackScene USE ANTIDOTE (deferred status cure) pushes TextBoxScene`` () =
     let antidotePlayer =
         let bag = Bag.empty |> Bag.add "ANTIDOTE" 3
-        { PlayerState.initial with Bag = bag; Party = makeParty () }
+        { PlayerStateOps.initial with Bag = bag; Party = makeParty () }
     let mutable captured: PlayerState option = None
     let scene = PackScene(Content(), antidotePlayer, fun p -> captured <- Some p)
     // A → action menu for ANTIDOTE. Actions = [USE, GIVE, TOSS, CANCEL].

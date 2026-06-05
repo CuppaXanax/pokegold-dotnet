@@ -22,8 +22,14 @@ let private hpRestoreIds =
           "FRESH_WATER"; "SODA_POP"; "LEMONADE"; "MOOMOO_MILK"; "BERRY_JUICE"
           "RAGECANDYBAR"; "BERRY"; "GOLD_BERRY" ]
 
+let private repelItems =
+    Map.ofList [ "REPEL", 100; "SUPER_REPEL", 200; "MAX_REPEL", 250 ]
+
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
+
+/// True when this item is a repel item.
+let isRepel (itemName: string) : bool = repelItems.ContainsKey itemName
 
 // ── Pure mutation helpers (unit-testable without the scene stack) ──────────────
 
@@ -62,3 +68,11 @@ let applyHpHeal (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerSt
         let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then newMon else m)
         let newBag   = Bag.remove itemId 1 player.Bag
         Some { player with Party = newParty; Bag = newBag }
+
+/// Apply a REPEL item: consume one copy and set the repel counter.
+let applyRepel (itemName: string) (player: PlayerState) : PlayerState option =
+    match Map.tryFind itemName repelItems with
+    | Some steps ->
+        let newBag = Bag.remove itemName 1 player.Bag
+        Some { player with Bag = newBag; RepelSteps = steps }
+    | None -> None

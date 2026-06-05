@@ -20,3 +20,11 @@ let ``FieldMoves.canUse returns true when badge and move are present`` () =
     let world = World.setFlag "ENGINE_HIVEBADGE" World.empty
 
     Assert.True(FieldMoves.canUse "CUT" world [ mon ])
+
+[<Fact>]
+let ``Repel.blocks suppresses weak encounters when lead mon is strong enough`` () =
+    let lead = PartyMon.create 155 10
+    let player = { PlayerStateOps.initial with Party = [ lead ]; RepelSteps = 50 }
+
+    Assert.True(PokeGold.Game.Player.Repel.blocks player 5)
+    Assert.False(PokeGold.Game.Player.Repel.blocks player 15)

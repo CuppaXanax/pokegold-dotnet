@@ -33,7 +33,7 @@ let ``save round-trip preserves a deposited mon in box 3`` () =
             Boxes =
                 Storage.empty.Boxes
                 |> Array.mapi (fun i b -> if i = 2 then { b with Mons = [ mon ] } else b) }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let json =
         SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
         |> SaveFile.serialize
@@ -64,7 +64,7 @@ let ``save round-trip preserves box name rename`` () =
             Boxes =
                 Storage.empty.Boxes
                 |> Array.mapi (fun i b -> if i = 0 then { b with Name = "FIRE" } else b) }
-    let player = { PlayerState.initial with Pc = pc }
+    let player = { PlayerStateOps.initial with Pc = pc }
     let back =
         SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
         |> SaveFile.serialize

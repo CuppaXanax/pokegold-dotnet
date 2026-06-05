@@ -76,10 +76,11 @@ let ``SaveData v3 round-trip preserves PlayerState`` () =
     let content = PokeGold.Game.Data.Content()
     let state = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Up
     let player =
-        { PlayerState.initial with
+        { PlayerStateOps.initial with
             Money = 1234
             DexSeen = Set.ofList [1; 2; 155]
-            Party = [ PartyMon.create 155 5 ] }
+            Party = [ PartyMon.create 155 5 ]
+            RepelSteps = 75 }
     let save = SaveData.captureWith state PokeGold.Game.Overworld.Script.World.empty player
     let json = SaveFile.serialize save
     let back = SaveFile.deserialize json |> Option.get
@@ -88,6 +89,7 @@ let ``SaveData v3 round-trip preserves PlayerState`` () =
     Assert.True(p2.DexSeen.Contains 155)
     Assert.Equal(1, p2.Party.Length)
     Assert.Equal(155, p2.Party.[0].SpeciesId)
+    Assert.Equal(75, p2.RepelSteps)
 
 [<Fact>]
 let ``SaveData v2 migration: flat bag repocketed, party empty, money uses default`` () =
@@ -95,7 +97,7 @@ let ``SaveData v2 migration: flat bag repocketed, party empty, money uses defaul
     let save = SaveFile.deserialize v2Json |> Option.get
     let player = SaveData.playerOf save
     // v2 saves had no player state, so money, party, dex all use initial/empty defaults
-    Assert.Equal(PlayerState.initial.Money, player.Money)  // Default starting money
+    Assert.Equal(PlayerStateOps.initial.Money, player.Money)  // Default starting money
     Assert.Equal(0, player.Party.Length)
     Assert.Equal(3, Bag.count "POTION" player.Bag)
     Assert.Equal(5, Bag.count "POKE_BALL" player.Bag)
