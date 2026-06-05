@@ -21,6 +21,8 @@ module Effects =
         | Speed -> m.SpdStage
         | SpAttack -> m.SpAtkStage
         | SpDefense -> m.SpDefStage
+        | Accuracy -> m.AccStage
+        | Evasion -> m.EvaStage
 
     /// Return a mon with the given stat's stage shifted by `delta`, clamped to
     /// the −6..+6 range the hardware enforces.
@@ -33,6 +35,8 @@ module Effects =
         | Speed -> { m with SpdStage = clamp (m.SpdStage + delta) }
         | SpAttack -> { m with SpAtkStage = clamp (m.SpAtkStage + delta) }
         | SpDefense -> { m with SpDefStage = clamp (m.SpDefStage + delta) }
+        | Accuracy -> { m with AccStage = clamp (m.AccStage + delta) }
+        | Evasion -> { m with EvaStage = clamp (m.EvaStage + delta) }
 
     let private statName =
         function
@@ -41,11 +45,20 @@ module Effects =
         | Speed -> "SPEED"
         | SpAttack -> "SPECIAL ATK"
         | SpDefense -> "SPECIAL DEF"
+        | Accuracy -> "ACCURACY"
+        | Evasion -> "EVASION"
 
-    /// Map a move's effect constant to its command sequence. Damaging moves with
-    /// no special effect are a single `Damage`; the recognised stat moves drop
-    /// the target's stat. Unknown effects fall back to `Damage` when the move
-    /// has power, otherwise do nothing.
+    let private oppositeGender (user: BattleMon) (foe: BattleMon) : bool =
+        match user.Gender, foe.Gender with
+        | Male, Female -> true
+        | Female, Male -> true
+        | _ -> false
+
+    /// Map a move's effect constant to its command sequence. Damaging moves
+    /// with no special effect are a single `Damage`; the recognised stat moves
+    /// drop the target's stat. Unknown effects fall back to `Damage` when the
+    /// move has power, otherwise do nothing.
+
     let forMove (move: MoveData) : EffectCommand list =
         match move.Effect with
         | "EFFECT_NORMAL_HIT" -> [ Damage ]
@@ -53,10 +66,30 @@ module Effects =
         | "EFFECT_ATTACK_DOWN" -> [ LowerTargetStat Attack ]
         | "EFFECT_DEFENSE_DOWN" -> [ LowerTargetStat Defense ]
         | "EFFECT_SPEED_DOWN" -> [ LowerTargetStat Speed ]
+        | "EFFECT_SP_ATK_DOWN" -> [ LowerTargetStat SpAttack ]
+        | "EFFECT_SP_DEF_DOWN" -> [ LowerTargetStat SpDefense ]
+        | "EFFECT_ACCURACY_DOWN" -> [ LowerTargetStat Accuracy ]
+        | "EFFECT_EVASION_DOWN" -> [ LowerTargetStat Evasion ]
         | "EFFECT_ATTACK_UP" -> [ RaiseUserStat Attack ]
         | "EFFECT_DEFENSE_UP" -> [ RaiseUserStat Defense ]
+        | "EFFECT_SP_ATK_UP" -> [ RaiseUserStat SpAttack ]
+        | "EFFECT_SP_DEF_UP" -> [ RaiseUserStat SpDefense ]
+        | "EFFECT_ACCURACY_UP" -> [ RaiseUserStat Accuracy ]
+        | "EFFECT_EVASION_UP" -> [ RaiseUserStat Evasion ]
+        | "EFFECT_ATTACK_DOWN_2" -> [ LowerTargetStat Attack; LowerTargetStat Attack ]
+        | "EFFECT_DEFENSE_DOWN_2" -> [ LowerTargetStat Defense; LowerTargetStat Defense ]
+        | "EFFECT_SPEED_DOWN_2" -> [ LowerTargetStat Speed; LowerTargetStat Speed ]
+        | "EFFECT_SP_ATK_DOWN_2" -> [ LowerTargetStat SpAttack; LowerTargetStat SpAttack ]
+        | "EFFECT_SP_DEF_DOWN_2" -> [ LowerTargetStat SpDefense; LowerTargetStat SpDefense ]
+        | "EFFECT_ATTACK_UP_2" -> [ RaiseUserStat Attack; RaiseUserStat Attack ]
+        | "EFFECT_DEFENSE_UP_2" -> [ RaiseUserStat Defense; RaiseUserStat Defense ]
+        | "EFFECT_SPEED_UP_2" -> [ RaiseUserStat Speed; RaiseUserStat Speed ]
+        | "EFFECT_SP_ATK_UP_2" -> [ RaiseUserStat SpAttack; RaiseUserStat SpAttack ]
+        | "EFFECT_SP_DEF_UP_2" -> [ RaiseUserStat SpDefense; RaiseUserStat SpDefense ]
         | "EFFECT_SLEEP" -> [ InflictSleep ]
         | "EFFECT_POISON" -> [ InflictPoison ]
+        | "EFFECT_BURN" -> [ InflictBurn ]
+        | "EFFECT_FREEZE" -> [ InflictFreeze ]
         | "EFFECT_TOXIC" -> [ InflictToxic ]
         | "EFFECT_PARALYZE" -> [ InflictParalyze ]
         | "EFFECT_CONFUSE" -> [ InflictConfuse ]
@@ -66,10 +99,26 @@ module Effects =
         | "EFFECT_MIST" -> [ SetMist ]
         | "EFFECT_FOCUS_ENERGY" -> [ SetFocusEnergy ]
         | "EFFECT_MEAN_LOOK" -> [ SetMeanLook ]
-        // EFFECT_FLINCH_HIT is a secondary-on-hit effect (M13.6 wires the
-        // chance roll); here we map it as Damage + SetFlinch so the command
-        // exists and can be tested. M13.6 will gate SetFlinch behind EffectChance.
-        | "EFFECT_FLINCH_HIT" -> [ Damage; SetFlinch ]
+        | "EFFECT_FLINCH_HIT" -> [ Damage; EffectChance SetFlinch ]
+        | "EFFECT_CONFUSE_HIT" -> [ Damage; EffectChance InflictConfuse ]
+        | "EFFECT_POISON_HIT" -> [ Damage; EffectChance InflictPoison ]
+        | "EFFECT_BURN_HIT" -> [ Damage; EffectChance InflictBurn ]
+        | "EFFECT_PARALYZE_HIT" -> [ Damage; EffectChance InflictParalyze ]
+        | "EFFECT_FREEZE_HIT" -> [ Damage; EffectChance InflictFreeze ]
+        | "EFFECT_ATTACK_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat Attack) ]
+        | "EFFECT_DEFENSE_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat Defense) ]
+        | "EFFECT_SPEED_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat Speed) ]
+        | "EFFECT_SP_ATK_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat SpAttack) ]
+        | "EFFECT_SP_DEF_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat SpDefense) ]
+        | "EFFECT_ACCURACY_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat Accuracy) ]
+        | "EFFECT_EVASION_DOWN_HIT" -> [ Damage; EffectChance (LowerTargetStat Evasion) ]
+        | "EFFECT_ATTACK_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Attack) ]
+        | "EFFECT_DEFENSE_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Defense) ]
+        | "EFFECT_SP_ATK_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat SpAttack) ]
+        | "EFFECT_SP_DEF_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat SpDefense) ]
+        | "EFFECT_ACCURACY_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Accuracy) ]
+        | "EFFECT_EVASION_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Evasion) ]
+        | "EFFECT_ATTRACT" -> [ InflictAttract ]
         // --- M13.5: damage-shaping & fixed damage family ---
         | "EFFECT_LEVEL_DAMAGE"   -> [ LevelDamage ]
         | "EFFECT_PSYWAVE"        -> [ PsywaveDamage ]
@@ -106,7 +155,7 @@ module Effects =
 
     /// Apply one effect command to a MoveContext. Returns the updated context
     /// with user/foe/messages/lastDamage modified as needed.
-    let applyCtx (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
+    let rec applyCtx (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
@@ -249,6 +298,46 @@ module Effects =
             | _ ->
                 { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
+        | InflictBurn ->
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
+            match ctx.Foe.Status with
+            | Burn ->
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already burned!" ] }
+            | Healthy ->
+                let foe = { ctx.Foe with Status = Burn }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was burned!" ] }
+            | _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        | InflictFreeze ->
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
+            match ctx.Foe.Status with
+            | Freeze ->
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already frozen solid!" ] }
+            | Healthy ->
+                let foe = { ctx.Foe with Status = Freeze }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was frozen solid!" ] }
+            | _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        | InflictAttract ->
+            if ctx.Foe.Volatile.Substitute.IsSome then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            elif not (oppositeGender ctx.User ctx.Foe) then
+                { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
+            elif ctx.Foe.Volatile.Attracted then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already infatuated!" ] }
+            else
+                let vol = { ctx.Foe.Volatile with Attracted = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ "It fell for the charm!" ] }
+
         // --- M13.4: volatile status commands ---
 
         | InflictConfuse ->
@@ -268,11 +357,18 @@ module Effects =
                 let foe = { ctx.Foe with Volatile = vol }
                 { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} became confused!" ] }
 
+        | EffectChance cmd ->
+            let roll, rng' = Rng.next ctx.Rng
+            if roll < ctx.Move.EffectChance then
+                applyCtx { ctx with Rng = rng' } cmd
+            else
+                { ctx with Rng = rng' }
+
         | SetFlinch ->
             // BattleCommand_FlinchTarget (effect_commands.asm l.5314).
             // Blocked by substitute, frozen/sleeping target, or if user went second.
-            // The "went first" check is handled by the caller (M13.6 secondary system);
-            // here we just set the flag. The pre-move gate ignores Flinch if the
+            // The "went first" check is handled in preMoveStatusCheck;
+            // here we only set the flag. The pre-move gate ignores Flinch if the
             // flinched mon moved first (see preMoveStatusCheck).
             match ctx.Foe.Volatile.Substitute with
             | Some _ -> ctx

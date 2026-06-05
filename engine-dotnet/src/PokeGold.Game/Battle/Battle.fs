@@ -45,13 +45,13 @@ module Battle =
     /// Pre-move status gate, faithful to `CheckTurn` / `BattleCommand_CheckTurn`
     /// in `engine/battle/effect_commands.asm` (l.121-342).
     ///
-    /// Gate order (M13.3 non-volatile + M13.4 volatile):
+    /// Gate order (M13.3 non-volatile + M13.4/M13.6 volatile):
     ///   1. Sleep -- decrement counter; wake at 0, else "fast asleep!" (no RNG draw)
     ///   2. Freeze -- "frozen solid!"; Flame Wheel / Sacred Fire self-defrost (no RNG)
     ///   3. Flinch -- flinched can't move (no RNG draw). Cleared after check.
     ///   4. Paralysis -- 25% full-para (1 RNG draw: roll < 64 = can't act)
     ///   5. Confusion -- dec counter; at 0 snap out; else 50% self-hit (1 RNG draw)
-    ///   (6. Attract -- M13.6)
+    ///   6. Attract -- 50% chance to fail the turn when the mon is infatuated
     ///
     /// Returns: (canAct, confusionSelfHit, updatedUser, messages, rng)
     /// When confusionSelfHit = true, the caller must apply a 40-power typeless
@@ -79,9 +79,8 @@ module Battle =
 
         // 3. Flinch gate (effect_commands.asm l.223-233).
         // Flinch only matters if the flinch flag was set by the opponent who
-        // moved first. Since moves execute in speed order and flinch is set
-        // during the first mover's executeMove, if userMovedFirst is true the
-        // flag cannot have been set yet, so we skip the gate.
+        // moved first. The pre-move gate receives the move-order context so it
+        // can skip the flinch block when the user moved first this turn.
         let user, flinchBlock =
             if user.Volatile.Flinch then
                 let cleared = { user with Volatile = { user.Volatile with Flinch = false } }
@@ -91,40 +90,54 @@ module Battle =
         if flinchBlock then
             (false, false, user, [ $"{user.Species.Name} flinched!" ], rng)
         else
+            // 4. Paralysis full-para gate (25% = 64/256)
+            let mutable canAct = true
+            let mutable selfHit = false
+            let mutable messages: string list = []
+            let mutable rng' = rng
 
-        // 4. Paralysis full-para gate (25% = 64/256)
-        match user.Status with
-        | Paralysis ->
-            let roll, rng' = Rng.next rng
-            if roll < 64 then
-                (false, false, user, [ $"{user.Species.Name} is fully paralyzed!" ], rng')
-            else
-                (true, false, user, [], rng')
-        | _ ->
+            match user.Status with
+            | Paralysis ->
+                let roll, nextRng = Rng.next rng'
+                rng' <- nextRng
+                if roll < 64 then
+                    canAct <- false
+                    messages <- [ $"{user.Species.Name} is fully paralyzed!" ]
+            | _ -> ()
 
-        // 5. Confusion gate (effect_commands.asm l.253-288).
-        match user.Volatile.Confusion with
-        | Some turns ->
-            let remaining = turns - 1
-            if remaining = 0 then
-                // Snap out.
-                let vol = { user.Volatile with Confusion = None }
-                let user' = { user with Volatile = vol }
-                (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng)
+            if not canAct then
+                (false, selfHit, user, messages, rng')
             else
-                let vol = { user.Volatile with Confusion = Some remaining }
-                let user' = { user with Volatile = vol }
-                let msgs = [ $"{user.Species.Name} is confused!" ]
-                // 50% self-hit: BattleRandom; cp 128; jr nc, .not_confused
-                let roll, rng' = Rng.next rng
-                if roll < 128 then
-                    // Self-hit: caller applies the 40-power typeless physical hit.
-                    (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], rng')
+                // 5. Confusion gate (effect_commands.asm l.253-288).
+                let canAct, selfHit, user, messages, rng' =
+                    match user.Volatile.Confusion with
+                    | Some turns ->
+                        let remaining = turns - 1
+                        if remaining = 0 then
+                            let vol = { user.Volatile with Confusion = None }
+                            let user' = { user with Volatile = vol }
+                            (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng')
+                        else
+                            let vol = { user.Volatile with Confusion = Some remaining }
+                            let user' = { user with Volatile = vol }
+                            let msgs = [ $"{user.Species.Name} is confused!" ]
+                            let roll, nextRng = Rng.next rng'
+                            if roll < 128 then
+                                (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], nextRng)
+                            else
+                                (true, false, user', msgs, nextRng)
+                    | None ->
+                        (true, false, user, [], rng')
+
+                // 6. Attract gate.
+                if canAct && user.Volatile.Attracted then
+                    let roll, rng' = Rng.next rng'
+                    if roll < 128 then
+                        (false, selfHit, user, messages @ [ $"{user.Species.Name} is immobilized by attraction!" ], rng')
+                    else
+                        (true, selfHit, user, messages, rng')
                 else
-                    (true, false, user', msgs, rng')
-        | None ->
-
-        (true, false, user, [], rng)
+                    (canAct, selfHit, user, messages, rng')
 
     // -- Phase: confusion self-hit -------------------------------------------
 
@@ -294,7 +307,9 @@ module Battle =
     /// 10% random thaw (HandleDefrost, core.asm l.1468-1498).
     /// `BattleRandom; cp 10 percent` -> roll < 25 = thaw.
     /// Only fires if the mon was NOT just frozen this turn (wPlayerJustGotFrozen).
-    /// We don't track "just got frozen" since freeze infliction is M13.6;
+    /// We don't track "just got frozen" because freeze infliction is now
+    /// modeled as a status effect; the gate is conservative and keeps the
+    /// turn-order logic pure.
     /// for now, always eligible.
     let private applyDefrost (m: BattleMon) (rng: Rng) : BattleMon * string list * Rng =
         match m.Status with

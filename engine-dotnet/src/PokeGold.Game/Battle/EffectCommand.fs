@@ -39,6 +39,8 @@ type Stat =
     | Speed
     | SpAttack
     | SpDefense
+    | Accuracy
+    | Evasion
 
 /// The battle-effect command language: a small DU mirroring the disassembly's
 /// per-move effect scripts (`engine/battle/move_effects/...`). A move's effect
@@ -63,14 +65,21 @@ type EffectCommand =
     /// Paralyze the target (EFFECT_PARALYZE). Blocked if target already statused.
     /// Gen 2 has NO electric-type paralysis immunity.
     | InflictParalyze
+    /// Burn the target (EFFECT_BURN / EFFECT_BURN_HIT). Blocked if already statused.
+    | InflictBurn
+    /// Freeze the target (EFFECT_FREEZE / EFFECT_FREEZE_HIT). Blocked if already statused.
+    | InflictFreeze
+    /// Infatuate the target when explicit battle genders are opposite.
+    | InflictAttract
     // --- M13.4: volatile status commands ---
     /// Confuse the target (EFFECT_CONFUSE). 2-5 turns via Rng (rand & 3 + 2).
     /// Blocked if target already confused or has a substitute.
     | InflictConfuse
     /// Set Flinch on the target (EFFECT_FLINCH_HIT secondary).
     /// Only effective if the user moved first. The pre-move gate checks the flag.
-    /// M13.6 will wire the secondary-on-hit chance; M13.4 provides the command.
     | SetFlinch
+    /// Execute a secondary effect only when the move's effect-chance roll succeeds.
+    | EffectChance of EffectCommand
     /// Seed the target with Leech Seed (EFFECT_LEECH_SEED).
     /// Blocked if target is Grass-type or already seeded.
     | ApplyLeechSeed

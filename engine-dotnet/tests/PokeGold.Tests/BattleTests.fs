@@ -94,6 +94,7 @@ let private mon name t1 t2 level hp atk def spd : BattleMon =
       SpDefStage = 0
       AccStage = 0
       EvaStage = 0
+      Gender = Unknown
       Volatile = VolatileStatus.empty }
 
 let private move name effect power typ : MoveData =
@@ -167,6 +168,163 @@ let ``a stat-down move lowers the target's stage`` () =
     let after = Battle.create player enemy 3u |> Battle.chooseMove 0
     // Player is faster and lowers the enemy's Attack stage to -1.
     Assert.Equal(-1, after.Enemy.AtkStage)
+
+[<Fact>]
+let ``secondary-on-hit flinch uses the move's effect chance`` () =
+    let flinchHit = { move "HEADBUTT" "EFFECT_FLINCH_HIT" 10 (ty "NORMAL") with EffectChance = 100 }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ flinchHit ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let ctx =
+        { User = player
+          Foe = enemy
+          Move = flinchHit
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let applied = Effects.forMove flinchHit |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.True(applied.Foe.Volatile.Flinch)
+
+[<Fact>]
+let ``stat-stage family maps special and accuracy/evasion effects to non-fallback commands`` () =
+    let spAtk = Moves.byName "GROWTH"
+    let acc = Moves.byName "SAND_ATTACK"
+    let evasion = Moves.byName "DOUBLE_TEAM"
+    Assert.Contains(RaiseUserStat SpAttack, Effects.forMove spAtk)
+    Assert.Contains(LowerTargetStat Accuracy, Effects.forMove acc)
+    Assert.Contains(RaiseUserStat Evasion, Effects.forMove evasion)
+
+[<Fact>]
+let ``secondary poison-on-hit only applies when the effect-chance roll succeeds`` () =
+    let move = { move "POISON_HIT" "EFFECT_POISON_HIT" 0 (ty "NORMAL") with EffectChance = 100 }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ move ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let ctx =
+        { User = player
+          Foe = enemy
+          Move = move
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let applied = Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.Equal(Poison, applied.Foe.Status)
+
+[<Fact>]
+let ``secondary poison-on-hit does not apply when the effect chance fails`` () =
+    let move = { move "POISON_HIT" "EFFECT_POISON_HIT" 0 (ty "NORMAL") with EffectChance = 0 }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ move ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let ctx =
+        { User = player
+          Foe = enemy
+          Move = move
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let applied = Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.Equal(Healthy, applied.Foe.Status)
+
+[<Fact>]
+let ``ATTRACT maps to an explicit effect command`` () =
+    Assert.Contains(InflictAttract, Effects.forMove (Moves.byName "ATTRACT"))
+
+[<Fact>]
+let ``ATTRACT infatuates opposite explicit genders`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ Moves.byName "ATTRACT" ]; Gender = Male }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ]; Gender = Female }
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = Moves.byName "ATTRACT"
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0 }
+    let applied = Effects.forMove (Moves.byName "ATTRACT") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.True(applied.Foe.Volatile.Attracted)
+
+[<Fact>]
+let ``ATTRACT fails for same, genderless, and unknown genders`` () =
+    let baseUser = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ Moves.byName "ATTRACT" ] }
+    let baseFoe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+
+    let cases =
+        [ ("same gender", { baseUser with Gender = Male }, { baseFoe with Gender = Male })
+          ("genderless", { baseUser with Gender = Genderless }, { baseFoe with Gender = Genderless })
+          ("unknown", { baseUser with Gender = Unknown }, { baseFoe with Gender = Unknown }) ]
+
+    let run (label, user, foe) =
+        let ctx =
+            { User = user
+              Foe = foe
+              Move = Moves.byName "ATTRACT"
+              Crit = false
+              Roll = Damage.MaxRoll
+              Rng = Rng.create 0u
+              Messages = []
+              LastDamage = 0
+              IsStruggle = false
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0 }
+        let applied = Effects.forMove (Moves.byName "ATTRACT") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+        label, applied.Foe.Volatile.Attracted
+
+    let results = cases |> List.map run
+    Assert.All(results, fun (label, attracted) -> Assert.False(attracted, label))
+
+[<Fact>]
+let ``attract gate blocks a move with the infatuation flag set`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ strongHit ]; Volatile = { VolatileStatus.empty with Attracted = true } }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let state = Battle.create player enemy 0u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "immobilized by attraction!")
+
+[<Fact>]
+let ``confusion gate runs before attract gate`` () =
+    let vol = { VolatileStatus.empty with Confusion = Some 2; Attracted = true }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ strongHit ]; Volatile = vol }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let state = Battle.create player enemy 0u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "hurt itself in its confusion!")
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains "immobilized by attraction!")
+
+[<Fact>]
+let ``two-stage stat boosts raise the user's stage by two`` () =
+    let swordsDance = { move "SWORDS_DANCE" "EFFECT_ATTACK_UP_2" 0 (ty "NORMAL") with EffectChance = 0 }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ swordsDance ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+    Assert.Equal(2, after.Player.AtkStage)
 
 // --- M13.1 Accuracy / miss hit check -----------------------------------------
 

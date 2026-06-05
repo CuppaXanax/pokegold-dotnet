@@ -15,6 +15,14 @@ type StatusCondition =
     | Freeze
     | Paralysis
 
+/// Explicit per-battler gender used by Attract. Unknown is conservative when
+/// no party/wild gender data has been threaded into the battle state yet.
+type Gender =
+    | Male
+    | Female
+    | Genderless
+    | Unknown
+
 /// Per-battle volatile status flags that reset on switch-out.
 /// M13.0 defined the data shape; M13.4 added Mist/CantEscape and implements
 /// confusion, flinch, leech seed, trap/wrap, substitute, focus energy, mist,
@@ -47,11 +55,15 @@ type VolatileStatus =
       /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
       Rampage: int option
       /// Mist is active: blocks opponent's stat-lowering moves.
-      /// Extension point for M13.6 (stat-stage family).
+      /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
+      /// Accuracy, and Evasion.
       Mist: bool
       /// Mean Look / Spider Web: prevents fleeing. Cleared on switch-out.
       /// Extension point for M13.7 (multi-turn family) and M14 (switching).
-      CantEscape: bool }
+      CantEscape: bool
+      /// Attract infatuation: the mon is attracted to its opponent and has a
+      /// 50% chance to fail its move on the pre-move gate.
+      Attracted: bool }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -66,7 +78,8 @@ module VolatileStatus =
           Recharge = false
           Rampage = None
           Mist = false
-          CantEscape = false }
+          CantEscape = false
+          Attracted = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;
@@ -95,6 +108,8 @@ type BattleMon =
       AccStage: int
       /// Evasion stage (-6..+6). Used by M13.1 hit check.
       EvaStage: int
+      /// Explicit battle gender used by Attract. Defaults to Unknown.
+      Gender: Gender
       /// Per-battle volatile status flags. See VolatileStatus type.
       Volatile: VolatileStatus }
 
@@ -221,4 +236,5 @@ module BattleMon =
           SpDefStage = 0
           AccStage = 0
           EvaStage = 0
+          Gender = Unknown
           Volatile = VolatileStatus.empty }
