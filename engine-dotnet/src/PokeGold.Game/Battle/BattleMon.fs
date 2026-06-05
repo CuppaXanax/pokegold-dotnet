@@ -72,6 +72,22 @@ type VolatileStatus =
       Nightmare: bool
       /// Curse is active on this mon; it chips cursed targets for MaxHP/4 each turn.
       Curse: bool
+      /// Protect is active for one turn.
+      Protect: bool
+      /// Endure is active for one turn.
+      Endure: bool
+      /// Destiny Bond will faint the attacker when this mon faints.
+      DestinyBond: bool
+      /// Encore countdown on this mon; 0 means inactive.
+      EncoreTimer: int option
+      /// Disable countdown on this mon; 0 means inactive.
+      DisableTimer: int option
+      /// The move index disabled by Disable.
+      DisabledMoveIndex: int option
+      /// Lock On guarantees the next move hits.
+      LockOn: bool
+      /// Foresight bypasses Ghost/Evasion interaction.
+      Foresight: bool
       /// Attract infatuation: the mon is attracted to its opponent and has a
       /// 50% chance to fail its move on the pre-move gate.
       Attracted: bool }
@@ -96,6 +112,14 @@ module VolatileStatus =
           CantEscape = false
           Nightmare = false
           Curse = false
+          Protect = false
+          Endure = false
+          DestinyBond = false
+          EncoreTimer = None
+          DisableTimer = None
+          DisabledMoveIndex = None
+          LockOn = false
+          Foresight = false
           Attracted = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,

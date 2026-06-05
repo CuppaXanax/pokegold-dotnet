@@ -126,6 +126,30 @@ type EffectCommand =
     | SetNightmare
     /// Apply Curse to the target or user (EFFECT_CURSE).
     | SetCurse
+    // --- M13.9: remaining move-effect commands ---
+    | HealUser
+    | WeatherHeal
+    | SetRainDance
+    | SetSunnyDay
+    | Swagger
+    | ResetStats
+    | Protect
+    | Endure
+    | BellyDrum
+    | PsychUp
+    | DestinyBond
+    | PainSplit
+    | AllUpHit
+    | SnoreDamage
+    | SetEncore
+    | SetDisable
+    | DefrostFoe
+    | ReducePP
+    | CounterDamage
+    | MirrorCoatDamage
+    | HealBellEffect
+    | SetLockOn
+    | SetForesight
 
     // -----------------------------------------------------------------------
     //  M13.5: damage-shaping & fixed damage family
@@ -244,4 +268,6 @@ type MoveContext =
       /// The current side state for the enemy team.
       EnemySide: SideState
       /// Weather timer for the battle. None = clear.
-      WeatherTimer: int option }
+      WeatherTimer: int option
+      /// Weather type for the battle. None = clear, Some "RAIN"/"SUN"/"SAND".
+      WeatherType: string option }

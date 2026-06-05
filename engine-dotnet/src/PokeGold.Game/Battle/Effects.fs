@@ -117,6 +117,47 @@ module Effects =
         | "EFFECT_SPIKES" -> [ SetSpikes ]
         | "EFFECT_NIGHTMARE" -> [ SetNightmare ]
         | "EFFECT_CURSE" -> [ SetCurse ]
+        | "EFFECT_SPEED_UP" -> [ RaiseUserStat Speed ]
+        | "EFFECT_ACCURACY_DOWN_2" -> [ LowerTargetStat Accuracy; LowerTargetStat Accuracy ]
+        | "EFFECT_ACCURACY_UP_2" -> [ RaiseUserStat Accuracy; RaiseUserStat Accuracy ]
+        | "EFFECT_EVASION_DOWN_2" -> [ LowerTargetStat Evasion; LowerTargetStat Evasion ]
+        | "EFFECT_EVASION_UP_2" -> [ RaiseUserStat Evasion; RaiseUserStat Evasion ]
+        | "EFFECT_SPLASH" -> []
+        | "EFFECT_ALWAYS_HIT" -> [ Damage ]
+        | "EFFECT_PRIORITY_HIT" -> [ Damage ]
+        | "EFFECT_TELEPORT" -> []
+        | "EFFECT_SOLARBEAM" -> [ Damage; BeginCharging ]
+        | "EFFECT_THUNDER" -> [ Damage; EffectChance InflictParalyze ]
+        | "EFFECT_DEFENSE_CURL" -> [ RaiseUserStat Defense ]
+        | "EFFECT_FLAME_WHEEL" -> [ Damage; EffectChance InflictBurn ]
+        | "EFFECT_SACRED_FIRE" -> [ Damage; EffectChance InflictBurn ]
+        | "EFFECT_HEAL" -> [ HealUser ]
+        | "EFFECT_MORNING_SUN" -> [ WeatherHeal ]
+        | "EFFECT_SYNTHESIS" -> [ WeatherHeal ]
+        | "EFFECT_MOONLIGHT" -> [ WeatherHeal ]
+        | "EFFECT_RAIN_DANCE" -> [ SetRainDance ]
+        | "EFFECT_SUNNY_DAY" -> [ SetSunnyDay ]
+        | "EFFECT_SWAGGER" -> [ Swagger ]
+        | "EFFECT_RESET_STATS" -> [ ResetStats ]
+        | "EFFECT_PROTECT" -> [ Protect ]
+        | "EFFECT_ENDURE" -> [ Endure ]
+        | "EFFECT_BELLY_DRUM" -> [ BellyDrum ]
+        | "EFFECT_PSYCH_UP" -> [ PsychUp ]
+        | "EFFECT_DESTINY_BOND" -> [ DestinyBond ]
+        | "EFFECT_PAIN_SPLIT" -> [ PainSplit ]
+        | "EFFECT_ALL_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Attack); EffectChance (RaiseUserStat Defense); EffectChance (RaiseUserStat Speed); EffectChance (RaiseUserStat SpAttack); EffectChance (RaiseUserStat SpDefense) ]
+        | "EFFECT_FAKE_OUT" -> [ Damage; SetFlinch ]
+        | "EFFECT_SNORE" -> [ SnoreDamage ]
+        | "EFFECT_ENCORE" -> [ SetEncore ]
+        | "EFFECT_DISABLE" -> [ SetDisable ]
+        | "EFFECT_DEFROST_OPPONENT" -> [ Damage; DefrostFoe ]
+        | "EFFECT_SPITE" -> [ ReducePP ]
+        | "EFFECT_COUNTER" -> [ CounterDamage ]
+        | "EFFECT_MIRROR_COAT" -> [ MirrorCoatDamage ]
+        | "EFFECT_HEAL_BELL" -> [ HealBellEffect ]
+        | "EFFECT_LOCK_ON" -> [ SetLockOn ]
+        | "EFFECT_FORESIGHT" -> [ SetForesight ]
+        | "EFFECT_TRI_ATTACK" -> [ Damage; EffectChance InflictBurn ]
         | "EFFECT_FLINCH_HIT" -> [ Damage; EffectChance SetFlinch ]
         | "EFFECT_CONFUSE_HIT" -> [ Damage; EffectChance InflictConfuse ]
         | "EFFECT_POISON_HIT" -> [ Damage; EffectChance InflictPoison ]
@@ -514,7 +555,121 @@ module Effects =
                 { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} can't escape now!" ] }
 
         | SetSandstorm ->
-            { ctx with WeatherTimer = Some 5; Messages = ctx.Messages @ [ "A sandstorm brewed!" ] }
+            { ctx with WeatherTimer = Some 5; WeatherType = Some "SAND"; Messages = ctx.Messages @ [ "A sandstorm brewed!" ] }
+
+        | SetRainDance ->
+            { ctx with WeatherTimer = Some 5; WeatherType = Some "RAIN"; Messages = ctx.Messages @ [ "It started to rain!" ] }
+
+        | SetSunnyDay ->
+            { ctx with WeatherTimer = Some 5; WeatherType = Some "SUN"; Messages = ctx.Messages @ [ "The sun is shining!" ] }
+
+        | HealUser ->
+            let heal = ctx.User.MaxHp / 2
+            let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
+            { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
+
+        | WeatherHeal ->
+            let heal =
+                if ctx.WeatherTimer.IsSome && ctx.WeatherType = Some "SAND" then ctx.User.MaxHp / 4
+                elif ctx.WeatherType = Some "SUN" then ctx.User.MaxHp * 2 / 3
+                else ctx.User.MaxHp / 2
+            let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
+            { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
+
+        | Swagger ->
+            let confused = applyCtx { ctx with Messages = ctx.Messages } InflictConfuse
+            let foe = shiftStage Attack 2 confused.Foe
+            { confused with Foe = foe; Messages = confused.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] }
+
+        | ResetStats ->
+            let user = { ctx.User with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0; Volatile = VolatileStatus.empty }
+            let foe = { ctx.Foe with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0; Volatile = VolatileStatus.empty }
+            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "All stat changes were eliminated!" ] }
+
+        | Protect ->
+            if ctx.User.Volatile.Protect then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with Protect = true } }; Messages = ctx.Messages @ [ "protected itself!" ] }
+
+        | Endure ->
+            if ctx.User.Volatile.Endure then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with Endure = true } }; Messages = ctx.Messages @ [ "braced itself!" ] }
+
+        | BellyDrum ->
+            if ctx.User.Hp <= ctx.User.MaxHp / 2 then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let user = { ctx.User with Hp = ctx.User.Hp - (ctx.User.MaxHp / 2); AtkStage = 6 }
+                { ctx with User = user; Messages = ctx.Messages @ [ "cut its HP and maximized ATTACK!" ] }
+
+        | PsychUp ->
+            let user = { ctx.User with AtkStage = ctx.Foe.AtkStage; DefStage = ctx.Foe.DefStage; SpdStage = ctx.Foe.SpdStage; SpAtkStage = ctx.Foe.SpAtkStage; SpDefStage = ctx.Foe.SpDefStage; AccStage = ctx.Foe.AccStage; EvaStage = ctx.Foe.EvaStage }
+            { ctx with User = user; Messages = ctx.Messages @ [ "copied stat changes!" ] }
+
+        | DestinyBond ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with DestinyBond = true } }
+            { ctx with User = user; Messages = ctx.Messages @ [ "is trying to take its foe with it!" ] }
+
+        | PainSplit ->
+            let avg = (ctx.User.Hp + ctx.Foe.Hp) / 2
+            let user = { ctx.User with Hp = min ctx.User.MaxHp avg }
+            let foe = { ctx.Foe with Hp = min ctx.Foe.MaxHp avg }
+            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "The battlers shared their pain!" ] }
+
+        | SnoreDamage ->
+            match ctx.User.Status with
+            | Sleep _ ->
+                let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
+                let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ "It was asleep!" ]; LastDamage = dmg }
+            | _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        | SetEncore ->
+            if ctx.Foe.Volatile.Substitute.IsSome then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with EncoreTimer = Some 3 } }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ "encore started!" ] }
+
+        | SetDisable ->
+            if ctx.Foe.Volatile.Substitute.IsSome then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let roll, rng' = Rng.next ctx.Rng
+                let index = if ctx.Foe.Moves.IsEmpty then 0 else roll % ctx.Foe.Moves.Length
+                let foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with DisableTimer = Some 4; DisabledMoveIndex = Some index } }
+                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ "disabled a move!" ] }
+
+        | DefrostFoe ->
+            let foe = if ctx.Foe.Status = Freeze then { ctx.Foe with Status = Healthy } else ctx.Foe
+            { ctx with Foe = foe; Messages = ctx.Messages @ [ "The foe thawed out!" ] }
+
+        | ReducePP ->
+            let roll, rng' = Rng.next ctx.Rng
+            let amount = 2 + (roll % 4)
+            let idxRoll, rng'' = Rng.next rng'
+            let idx = if ctx.Foe.Pp.IsEmpty then 0 else idxRoll % ctx.Foe.Pp.Length
+            let pp' = ctx.Foe.Pp |> List.mapi (fun i pp -> if i = idx then max 0 (pp - amount) else pp)
+            let foe = { ctx.Foe with Pp = pp' }
+            { ctx with Foe = foe; Rng = rng''; Messages = ctx.Messages @ [ "PP was reduced!" ] }
+
+        | CounterDamage ->
+            let dmg = max 0 (ctx.LastDamage * 2)
+            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            { ctx with Foe = foe; Messages = ctx.Messages @ [ "Countered the attack!" ]; LastDamage = dmg }
+
+        | MirrorCoatDamage ->
+            let dmg = max 0 (ctx.LastDamage * 2)
+            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            { ctx with Foe = foe; Messages = ctx.Messages @ [ "Mirror Coated the attack!" ]; LastDamage = dmg }
+
+        | HealBellEffect ->
+            { ctx with User = { ctx.User with Status = Healthy }; Messages = ctx.Messages @ [ "A bell chimed!" ] }
+
+        | AllUpHit ->
+            ctx
+
+        | SetLockOn ->
+            { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with LockOn = true } }; Messages = ctx.Messages @ [ "took aim!" ] }
+
+        | SetForesight ->
+            { ctx with Foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with Foresight = true } }; Messages = ctx.Messages @ [ "was identified!" ] }
 
         | SetPerishSong ->
             let playerSide = { ctx.PlayerSide with PerishCounter = Some 3 }
@@ -1208,6 +1363,7 @@ module Effects =
               UserIsPlayer = true
               PlayerSide = SideState.Empty
               EnemySide = SideState.Empty
-              WeatherTimer = None }
+              WeatherTimer = None
+              WeatherType = None }
         let ctx' = applyCtx ctx cmd
         ctx'.User, ctx'.Foe, ctx'.Messages

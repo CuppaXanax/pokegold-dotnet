@@ -18,6 +18,7 @@ type BattleState =
       Outcome: Outcome option
       Rng: Rng
       WeatherTimer: int option
+      WeatherType: string option
       PlayerSide: SideState
       EnemySide: SideState }
 
@@ -31,6 +32,7 @@ module Battle =
           Outcome = None
           Rng = Rng.create seed
           WeatherTimer = None
+          WeatherType = None
           PlayerSide = SideState.Empty
           EnemySide = SideState.Empty }
 
@@ -219,7 +221,7 @@ module Battle =
     ///   2. Crit roll      — rollHit  (skipped on miss)
     ///   3. Spread roll    — rollHit  (skipped on miss)
     let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) (userIsPlayer: bool) (battle: BattleState)
-        : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option =
+        : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
         // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
@@ -233,9 +235,9 @@ module Battle =
             if move.Effect = "EFFECT_JUMP_KICK" then
                 let crash = max 1 (user.MaxHp / 8)
                 let user = { user with Hp = max 0 (user.Hp - crash) }
-                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer)
+                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType)
             else
-                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer)
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType)
         else
 
         let crit, roll, rng = rollHit (CriticalHit.critStage user.Volatile.FocusEnergy move) rng
@@ -258,7 +260,8 @@ module Battle =
               UserIsPlayer = userIsPlayer
               PlayerSide = battle.PlayerSide
               EnemySide = battle.EnemySide
-              WeatherTimer = battle.WeatherTimer }
+              WeatherTimer = battle.WeatherTimer
+              WeatherType = battle.WeatherType }
 
         let ctx =
             Effects.forMove move
@@ -273,7 +276,7 @@ module Battle =
                 ctx.Foe
 
         let ctx = { ctx with Foe = foe }
-        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer
+        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType
 
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 
@@ -415,15 +418,20 @@ module Battle =
                 let chip = max 1 (m.MaxHp / 8)
                 ({ m with Hp = max 0 (m.Hp - chip) }, [ $"{m.Species.Name} is buffeted by the sandstorm!" ])
 
-    let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng) (weatherTimer: int option) (playerSide: SideState) (enemySide: SideState)
-        : BattleMon * BattleMon * SideState * SideState * int option * string list * Rng =
+    let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng) (weatherTimer: int option) (weatherType: string option) (playerSide: SideState) (enemySide: SideState)
+        : BattleMon * BattleMon * SideState * SideState * int option * string option * string list * Rng =
         let mutable p = player
         let mutable e = enemy
         let mutable r = rng
         let mutable msgs: string list = []
         let mutable wt = weatherTimer
+        let mutable wtType = weatherType
         let mutable ps = playerSide
         let mutable es = enemySide
+
+        // Clear one-turn flags at the start of the turn.
+        p <- { p with Volatile = { p.Volatile with Protect = false; Endure = false } }
+        e <- { e with Volatile = { e.Volatile with Protect = false; Endure = false } }
 
         // Slot 1: Future Sight countdown.
         let p', e', futureMsgs = applyFutureSight p e
@@ -436,7 +444,9 @@ module Battle =
             let e', eWeatherMsgs = applyWeather e
             e <- e'; msgs <- msgs @ eWeatherMsgs
             wt <- Some (wt.Value - 1)
-            if wt.Value = 0 then wt <- None
+            if wt.Value = 0 then
+                wt <- None
+                wtType <- None
 
         // Slot 3: Wrap/Bind/Clamp chip.
         let p', pWrapMsgs = applyWrap p
@@ -528,10 +538,19 @@ module Battle =
         ps <- { ps with ReflectTimer = psReflect; LightScreenTimer = psLightScreen }
         es <- { es with ReflectTimer = esReflect; LightScreenTimer = esLightScreen }
 
-        // Slot 14: Encore timer — stub (M13.9)
-        // Slot 15: Disable timer — stub (M13.9)
+        // Slot 14: Encore timer.
+        let pEncore = if p.Volatile.EncoreTimer.IsSome then Some (p.Volatile.EncoreTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let eEncore = if e.Volatile.EncoreTimer.IsSome then Some (e.Volatile.EncoreTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        p <- { p with Volatile = { p.Volatile with EncoreTimer = pEncore } }
+        e <- { e with Volatile = { e.Volatile with EncoreTimer = eEncore } }
 
-        (p, e, ps, es, wt, msgs, r)
+        // Slot 15: Disable timer.
+        let pDisable = if p.Volatile.DisableTimer.IsSome then Some (p.Volatile.DisableTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let eDisable = if e.Volatile.DisableTimer.IsSome then Some (e.Volatile.DisableTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        p <- { p with Volatile = { p.Volatile with DisableTimer = pDisable; DisabledMoveIndex = if pDisable.IsSome then p.Volatile.DisabledMoveIndex else None } }
+        e <- { e with Volatile = { e.Volatile with DisableTimer = eDisable; DisabledMoveIndex = if eDisable.IsSome then e.Volatile.DisabledMoveIndex else None } }
+
+        (p, e, ps, es, wt, wtType, msgs, r)
 
     // -- Phase: faint check --------------------------------------------------
 
@@ -608,6 +627,7 @@ module Battle =
         let mutable enemy = s.Enemy
         let mutable rng = s.Rng
         let mutable weatherTimer = s.WeatherTimer
+        let mutable weatherType = s.WeatherType
         let mutable playerSide = s.PlayerSide
         let mutable enemySide = s.EnemySide
         let mutable msgs: string list = struggleMsgs
@@ -660,11 +680,12 @@ module Battle =
                         true
                     else
                         // Phase: execute move
-                        let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer' = executeMove user foe moveToUse isStruggle rng playerIsUser s
+                        let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType' = executeMove user foe moveToUse isStruggle rng playerIsUser s
                         rng <- rng'
                         playerSide <- playerSide'
                         enemySide <- enemySide'
                         weatherTimer <- weatherTimer'
+                        weatherType <- weatherType'
                         msgs <- msgs @ moveMsgs
 
                         // Clear the charge window after the second-turn execution.
@@ -700,12 +721,13 @@ module Battle =
 
         // Phase: end-of-turn residuals (only if nobody fainted mid-turn)
         if outcome.IsNone then
-            let p, e, playerSide', enemySide', weatherTimer', residualMsgs, rng' = betweenTurns player enemy rng weatherTimer playerSide enemySide
+            let p, e, playerSide', enemySide', weatherTimer', weatherType', residualMsgs, rng' = betweenTurns player enemy rng weatherTimer weatherType playerSide enemySide
             player <- p
             enemy <- e
             playerSide <- playerSide'
             enemySide <- enemySide'
             weatherTimer <- weatherTimer'
+            weatherType <- weatherType'
             rng <- rng'
             msgs <- msgs @ residualMsgs
 
@@ -723,6 +745,7 @@ module Battle =
             Outcome = outcome
             Rng = rng
             WeatherTimer = weatherTimer
+            WeatherType = weatherType
             PlayerSide = playerSide
             EnemySide = enemySide }
 
