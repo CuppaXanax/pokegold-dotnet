@@ -54,6 +54,16 @@ module Effects =
         | Female, Male -> true
         | _ -> false
 
+    let private damageToUserSide (ctx: MoveContext) (dmg: int) : int =
+        let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
+        if TypeChart.isPhysical ctx.Move.Type && defenderSide.ReflectTimer.IsSome && defenderSide.ReflectTimer.Value > 0 then max 1 (dmg / 2)
+        elif not (TypeChart.isPhysical ctx.Move.Type) && defenderSide.LightScreenTimer.IsSome && defenderSide.LightScreenTimer.Value > 0 then max 1 (dmg / 2)
+        else dmg
+
+    let private safeguardBlocked (ctx: MoveContext) : bool =
+        let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
+        defenderSide.SafeguardTimer.IsSome && defenderSide.SafeguardTimer.Value > 0
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -99,6 +109,14 @@ module Effects =
         | "EFFECT_MIST" -> [ SetMist ]
         | "EFFECT_FOCUS_ENERGY" -> [ SetFocusEnergy ]
         | "EFFECT_MEAN_LOOK" -> [ SetMeanLook ]
+        | "EFFECT_SANDSTORM" -> [ SetSandstorm ]
+        | "EFFECT_PERISH_SONG" -> [ SetPerishSong ]
+        | "EFFECT_SAFEGUARD" -> [ SetSafeguard ]
+        | "EFFECT_REFLECT" -> [ SetReflect ]
+        | "EFFECT_LIGHT_SCREEN" -> [ SetLightScreen ]
+        | "EFFECT_SPIKES" -> [ SetSpikes ]
+        | "EFFECT_NIGHTMARE" -> [ SetNightmare ]
+        | "EFFECT_CURSE" -> [ SetCurse ]
         | "EFFECT_FLINCH_HIT" -> [ Damage; EffectChance SetFlinch ]
         | "EFFECT_CONFUSE_HIT" -> [ Damage; EffectChance InflictConfuse ]
         | "EFFECT_POISON_HIT" -> [ Damage; EffectChance InflictPoison ]
@@ -169,6 +187,7 @@ module Effects =
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
+            let dmg = damageToUserSide ctx dmg
             // Substitute absorbs damage (effect_commands.asm CheckSubstitute).
             let foe, subBroke =
                 match ctx.Foe.Volatile.Substitute with
@@ -224,120 +243,140 @@ module Effects =
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name}'s {statName s} rose!" ] }
 
         | InflictSleep ->
-            // BattleCommand_SleepTarget (effect_commands.asm l.3552).
-            // Fails if: foe already asleep, foe already has any status, attack missed.
-            // Blocked by substitute.
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            match ctx.Foe.Status with
-            | Sleep _ ->
-                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already asleep!" ] }
-            | Healthy ->
-                // Random sleep counter: 2-7 turns, faithful to the rejection loop.
-                // BattleRandom AND SLP_MASK (0-7); reject 0 and 7; inc -> 2-7.
-                let rec sleepLoop rng =
-                    let v, rng' = Rng.next rng
-                    let masked = v &&& 7
-                    if masked = 0 || masked = 7 then sleepLoop rng'
-                    else (masked + 1), rng'
-                let turns, rng' = sleepLoop ctx.Rng
-                let foe = { ctx.Foe with Status = Sleep turns }
-                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} fell asleep!" ] }
-            | _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
+            else
+                // BattleCommand_SleepTarget (effect_commands.asm l.3552).
+                // Fails if: foe already asleep, foe already has any status, attack missed.
+                // Blocked by substitute.
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    match ctx.Foe.Status with
+                    | Sleep _ ->
+                        { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already asleep!" ] }
+                    | Healthy ->
+                        // Random sleep counter: 2-7 turns, faithful to the rejection loop.
+                        // BattleRandom AND SLP_MASK (0-7); reject 0 and 7; inc -> 2-7.
+                        let rec sleepLoop rng =
+                            let v, rng' = Rng.next rng
+                            let masked = v &&& 7
+                            if masked = 0 || masked = 7 then sleepLoop rng'
+                            else (masked + 1), rng'
+                        let turns, rng' = sleepLoop ctx.Rng
+                        let foe = { ctx.Foe with Status = Sleep turns }
+                        { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} fell asleep!" ] }
+                    | _ ->
+                        { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | InflictPoison ->
-            // BattleCommand_Poison (effect_commands.asm l.3672).
-            // Immune: Poison-type, already has a status.
-            // Blocked by substitute.
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            let poisonType = TypeChart.value "POISON"
-            if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
-                { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
-            elif ctx.Foe.Status <> Healthy then
-                match ctx.Foe.Status with
-                | Poison | BadPoison _ ->
-                    { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already poisoned!" ] }
-                | _ ->
-                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
             else
-                let foe = { ctx.Foe with Status = Poison }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was poisoned!" ] }
+                // BattleCommand_Poison (effect_commands.asm l.3672).
+                // Immune: Poison-type, already has a status.
+                // Blocked by substitute.
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    let poisonType = TypeChart.value "POISON"
+                    if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
+                        { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
+                    elif ctx.Foe.Status <> Healthy then
+                        match ctx.Foe.Status with
+                        | Poison | BadPoison _ ->
+                            { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already poisoned!" ] }
+                        | _ ->
+                            { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                    else
+                        let foe = { ctx.Foe with Status = Poison }
+                        { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was poisoned!" ] }
 
         | InflictToxic ->
-            // BattleCommand_Poison with EFFECT_TOXIC path (effect_commands.asm l.3735).
-            // Same immunities as Poison, but sets BadPoison with counter starting at 0.
-            // Blocked by substitute.
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            let poisonType = TypeChart.value "POISON"
-            if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
-                { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
-            elif ctx.Foe.Status <> Healthy then
-                match ctx.Foe.Status with
-                | Poison | BadPoison _ ->
-                    { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already poisoned!" ] }
-                | _ ->
-                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
             else
-                let foe = { ctx.Foe with Status = BadPoison 0 }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was badly poisoned!" ] }
+                // BattleCommand_Poison with EFFECT_TOXIC path (effect_commands.asm l.3735).
+                // Same immunities as Poison, but sets BadPoison with counter starting at 0.
+                // Blocked by substitute.
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    let poisonType = TypeChart.value "POISON"
+                    if ctx.Foe.Species.Type1 = poisonType || ctx.Foe.Species.Type2 = poisonType then
+                        { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
+                    elif ctx.Foe.Status <> Healthy then
+                        match ctx.Foe.Status with
+                        | Poison | BadPoison _ ->
+                            { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already poisoned!" ] }
+                        | _ ->
+                            { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                    else
+                        let foe = { ctx.Foe with Status = BadPoison 0 }
+                        { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was badly poisoned!" ] }
 
         | InflictParalyze ->
-            // BattleCommand_Paralyze (effect_commands.asm l.5788).
-            // Gen 2: NO electric-type immunity for paralysis.
-            // Fails if: already paralyzed, already has any status.
-            // Blocked by substitute.
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            match ctx.Foe.Status with
-            | Paralysis ->
-                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already paralyzed!" ] }
-            | Healthy ->
-                let foe = { ctx.Foe with Status = Paralysis }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} is paralyzed! It may be unable to move!" ] }
-            | _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
+            else
+                // BattleCommand_Paralyze (effect_commands.asm l.5788).
+                // Gen 2: NO electric-type immunity for paralysis.
+                // Fails if: already paralyzed, already has any status.
+                // Blocked by substitute.
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    match ctx.Foe.Status with
+                    | Paralysis ->
+                        { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already paralyzed!" ] }
+                    | Healthy ->
+                        let foe = { ctx.Foe with Status = Paralysis }
+                        { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} is paralyzed! It may be unable to move!" ] }
+                    | _ ->
+                        { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | InflictBurn ->
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            match ctx.Foe.Status with
-            | Burn ->
-                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already burned!" ] }
-            | Healthy ->
-                let foe = { ctx.Foe with Status = Burn }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was burned!" ] }
-            | _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
+            else
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    match ctx.Foe.Status with
+                    | Burn ->
+                        { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already burned!" ] }
+                    | Healthy ->
+                        let foe = { ctx.Foe with Status = Burn }
+                        { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was burned!" ] }
+                    | _ ->
+                        { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | InflictFreeze ->
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            match ctx.Foe.Status with
-            | Freeze ->
-                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already frozen solid!" ] }
-            | Healthy ->
-                let foe = { ctx.Foe with Status = Freeze }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was frozen solid!" ] }
-            | _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
+            else
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    match ctx.Foe.Status with
+                    | Freeze ->
+                        { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already frozen solid!" ] }
+                    | Healthy ->
+                        let foe = { ctx.Foe with Status = Freeze }
+                        { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was frozen solid!" ] }
+                    | _ ->
+                        { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | InflictAttract ->
-            if ctx.Foe.Volatile.Substitute.IsSome then
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
+            else if ctx.Foe.Volatile.Substitute.IsSome then
                 { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
             elif not (oppositeGender ctx.User ctx.Foe) then
                 { ctx with Messages = ctx.Messages @ [ $"It doesn't affect {ctx.Foe.Species.Name}..." ] }
@@ -351,21 +390,24 @@ module Effects =
         // --- M13.4: volatile status commands ---
 
         | InflictConfuse ->
-            // BattleCommand_Confuse (effect_commands.asm l.5707).
-            // Blocked by substitute. Fails if already confused.
-            match ctx.Foe.Volatile.Substitute with
-            | Some _ ->
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | None ->
-            if ctx.Foe.Volatile.Confusion.IsSome then
-                { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already confused!" ] }
+            if safeguardBlocked ctx then
+                { ctx with Messages = ctx.Messages @ [ "The opponent is protected by Safeguard!" ] }
             else
-                // 2-5 turns: BattleRandom AND %11 + 2
-                let roll, rng' = Rng.next ctx.Rng
-                let turns = (roll &&& 3) + 2
-                let vol = { ctx.Foe.Volatile with Confusion = Some turns }
-                let foe = { ctx.Foe with Volatile = vol }
-                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} became confused!" ] }
+                // BattleCommand_Confuse (effect_commands.asm l.5707).
+                // Blocked by substitute. Fails if already confused.
+                match ctx.Foe.Volatile.Substitute with
+                | Some _ ->
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | None ->
+                    if ctx.Foe.Volatile.Confusion.IsSome then
+                        { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} is already confused!" ] }
+                    else
+                        // 2-5 turns: BattleRandom AND %11 + 2
+                        let roll, rng' = Rng.next ctx.Rng
+                        let turns = (roll &&& 3) + 2
+                        let vol = { ctx.Foe.Volatile with Confusion = Some turns }
+                        let foe = { ctx.Foe with Volatile = vol }
+                        { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{foe.Species.Name} became confused!" ] }
 
         | EffectChance cmd ->
             let roll, rng' = Rng.next ctx.Rng
@@ -470,6 +512,62 @@ module Effects =
                 let vol = { ctx.Foe.Volatile with CantEscape = true }
                 let foe = { ctx.Foe with Volatile = vol }
                 { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} can't escape now!" ] }
+
+        | SetSandstorm ->
+            { ctx with WeatherTimer = Some 5; Messages = ctx.Messages @ [ "A sandstorm brewed!" ] }
+
+        | SetPerishSong ->
+            let playerSide = { ctx.PlayerSide with PerishCounter = Some 3 }
+            let enemySide = { ctx.EnemySide with PerishCounter = Some 3 }
+            { ctx with PlayerSide = playerSide; EnemySide = enemySide; Messages = ctx.Messages @ [ "Both sides are marked by Perish Song!" ] }
+
+        | SetSafeguard ->
+            let side = if ctx.UserIsPlayer then ctx.PlayerSide else ctx.EnemySide
+            let side' = { side with SafeguardTimer = Some 5 }
+            if ctx.UserIsPlayer then
+                { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "A protective veil shrouded the team!" ] }
+            else
+                { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "A protective veil shrouded the team!" ] }
+
+        | SetReflect ->
+            let side = if ctx.UserIsPlayer then ctx.PlayerSide else ctx.EnemySide
+            let side' = { side with ReflectTimer = Some 5 }
+            if ctx.UserIsPlayer then
+                { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Reflect raised the team's defense!" ] }
+            else
+                { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "Reflect raised the team's defense!" ] }
+
+        | SetLightScreen ->
+            let side = if ctx.UserIsPlayer then ctx.PlayerSide else ctx.EnemySide
+            let side' = { side with LightScreenTimer = Some 5 }
+            if ctx.UserIsPlayer then
+                { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Light Screen raised the team's defenses!" ] }
+            else
+                { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "Light Screen raised the team's defenses!" ] }
+
+        | SetSpikes ->
+            let side = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
+            let side' = { side with Spikes = min 3 (side.Spikes + 1) }
+            if ctx.UserIsPlayer then
+                { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
+            else
+                { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
+
+        | SetNightmare ->
+            let vol = { ctx.Foe.Volatile with Nightmare = true }
+            let foe = { ctx.Foe with Volatile = vol }
+            { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was haunted by Nightmare!" ] }
+
+        | SetCurse ->
+            let ghostType = TypeChart.value "GHOST"
+            if ctx.Foe.Species.Type1 = ghostType || ctx.Foe.Species.Type2 = ghostType then
+                let user = { ctx.User with Hp = max 0 (ctx.User.Hp - (ctx.User.MaxHp / 2)) }
+                let vol = { ctx.Foe.Volatile with Curse = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} cut its own HP with Curse!" ] }
+            else
+                let user = { ctx.User with AtkStage = min 6 (ctx.User.AtkStage + 1); DefStage = min 6 (ctx.User.DefStage + 1); SpdStage = max -6 (ctx.User.SpdStage - 1) }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} was cursed!" ] }
 
         | BeginCharging ->
             let user = { ctx.User with Volatile = { ctx.User.Volatile with Charging = Some 1; ChargingMove = Some ctx.Move } }
@@ -1094,8 +1192,22 @@ module Effects =
         (cmd: EffectCommand)
         : BattleMon * BattleMon * string list =
         let ctx : MoveContext =
-            { User = attacker; Foe = defender; Move = move; Crit = crit; Roll = roll
-              Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-              FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+            { User = attacker
+              Foe = defender
+              Move = move
+              Crit = crit
+              Roll = roll
+              Rng = Rng.create 0u
+              Messages = []
+              LastDamage = 0
+              IsStruggle = false
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None }
         let ctx' = applyCtx ctx cmd
         ctx'.User, ctx'.Foe, ctx'.Messages

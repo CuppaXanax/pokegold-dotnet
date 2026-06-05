@@ -42,6 +42,21 @@ type Stat =
     | Accuracy
     | Evasion
 
+/// Shared battle-side timer/flag state used by M13.8 effects.
+type SideState =
+    { PerishCounter: int option
+      SafeguardTimer: int option
+      ReflectTimer: int option
+      LightScreenTimer: int option
+      Spikes: int }
+
+    static member Empty =
+        { PerishCounter = None
+          SafeguardTimer = None
+          ReflectTimer = None
+          LightScreenTimer = None
+          Spikes = 0 }
+
 /// The battle-effect command language: a small DU mirroring the disassembly's
 /// per-move effect scripts (`engine/battle/move_effects/...`). A move's effect
 /// constant maps to a sequence of these, which the turn loop interprets.
@@ -95,6 +110,22 @@ type EffectCommand =
     | SetFocusEnergy
     /// Prevent the target from fleeing (EFFECT_MEAN_LOOK).
     | SetMeanLook
+    /// Start Sandstorm weather (EFFECT_SANDSTORM).
+    | SetSandstorm
+    /// Set Perish Song counters on both sides (EFFECT_PERISH_SONG).
+    | SetPerishSong
+    /// Set Safeguard on the user side (EFFECT_SAFEGUARD).
+    | SetSafeguard
+    /// Set Reflect on the user side (EFFECT_REFLECT).
+    | SetReflect
+    /// Set Light Screen on the user side (EFFECT_LIGHT_SCREEN).
+    | SetLightScreen
+    /// Set entry hazards on the foe side (EFFECT_SPIKES).
+    | SetSpikes
+    /// Set Nightmare on the target (EFFECT_NIGHTMARE).
+    | SetNightmare
+    /// Apply Curse to the target or user (EFFECT_CURSE).
+    | SetCurse
 
     // -----------------------------------------------------------------------
     //  M13.5: damage-shaping & fixed damage family
@@ -205,4 +236,12 @@ type MoveContext =
       /// M13.5: Defense Curl active flag for Rollout power doubling.
       DefenseCurlUsed: bool
       /// M13.5: Friendship value (0-255) for Return/Frustration.
-      Friendship: int }
+      Friendship: int
+      /// True when the user is the player's mon (used for side-state effects).
+      UserIsPlayer: bool
+      /// The current side state for the player team.
+      PlayerSide: SideState
+      /// The current side state for the enemy team.
+      EnemySide: SideState
+      /// Weather timer for the battle. None = clear.
+      WeatherTimer: int option }

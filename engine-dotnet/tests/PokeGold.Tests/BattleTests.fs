@@ -187,7 +187,11 @@ let ``secondary-on-hit flinch uses the move's effect chance`` () =
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let applied = Effects.forMove flinchHit |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.True(applied.Foe.Volatile.Flinch)
 
@@ -218,7 +222,11 @@ let ``secondary poison-on-hit only applies when the effect-chance roll succeeds`
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let applied = Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.Equal(Poison, applied.Foe.Status)
 
@@ -240,7 +248,11 @@ let ``secondary poison-on-hit does not apply when the effect chance fails`` () =
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let applied = Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.Equal(Healthy, applied.Foe.Status)
 
@@ -269,7 +281,11 @@ let ``RageDamage marks the user as raging`` () =
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let applied = Effects.forMove (Moves.byName "RAGE") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.True(applied.User.Volatile.Rage)
 
@@ -290,7 +306,11 @@ let ``conditional double damage doubles against a semi-invulnerable foe`` () =
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let baseApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) baseCtx
     let chargedCtx = { baseCtx with Foe = { defender with Volatile = { VolatileStatus.empty with Charging = Some 1 } } }
     let chargedApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) chargedCtx
@@ -317,7 +337,11 @@ let ``ATTRACT infatuates opposite explicit genders`` () =
           FuryCutterCount = 0
           RolloutCount = 0
           DefenseCurlUsed = false
-          Friendship = 0 }
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let applied = Effects.forMove (Moves.byName "ATTRACT") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.True(applied.Foe.Volatile.Attracted)
 
@@ -345,7 +369,11 @@ let ``ATTRACT fails for same, genderless, and unknown genders`` () =
               FuryCutterCount = 0
               RolloutCount = 0
               DefenseCurlUsed = false
-              Friendship = 0 }
+              Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None }
         let applied = Effects.forMove (Moves.byName "ATTRACT") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
         label, applied.Foe.Volatile.Attracted
 
@@ -377,6 +405,90 @@ let ``two-stage stat boosts raise the user's stage by two`` () =
     let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
     let after = Battle.create player enemy 0u |> Battle.chooseMove 0
     Assert.Equal(2, after.Player.AtkStage)
+
+// --- M13.8 Field effects, timers, & residuals --------------------------------
+
+[<Fact>]
+let ``SANDSTORM maps to SetSandstorm command`` () =
+    Assert.Contains(SetSandstorm, Effects.forMove (Moves.byName "SANDSTORM"))
+
+[<Fact>]
+let ``PERISH_SONG maps to SetPerishSong command`` () =
+    Assert.Contains(SetPerishSong, Effects.forMove (Moves.byName "PERISH_SONG"))
+
+[<Fact>]
+let ``REFLECT maps to SetReflect command`` () =
+    Assert.Contains(SetReflect, Effects.forMove (Moves.byName "REFLECT"))
+
+[<Fact>]
+let ``LIGHT_SCREEN maps to SetLightScreen command`` () =
+    Assert.Contains(SetLightScreen, Effects.forMove (Moves.byName "LIGHT_SCREEN"))
+
+[<Fact>]
+let ``NIGHTMARE maps to SetNightmare command`` () =
+    Assert.Contains(SetNightmare, Effects.forMove (Moves.byName "NIGHTMARE"))
+
+[<Fact>]
+let ``CURSE maps to SetCurse command`` () =
+    Assert.Contains(SetCurse, Effects.forMove (Moves.byName "CURSE"))
+
+[<Fact>]
+let ``SPIKES maps to SetSpikes command`` () =
+    Assert.Contains(SetSpikes, Effects.forMove (Moves.byName "SPIKES"))
+
+[<Fact>]
+let ``SAFEGUARD maps to SetSafeguard command`` () =
+    Assert.Contains(SetSafeguard, Effects.forMove (Moves.byName "SAFEGUARD"))
+
+[<Fact>]
+let ``SetSandstorm sets the weather timer`` () =
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+    let ctx =
+        { User = user; Foe = foe; Move = Moves.byName "SANDSTORM"
+          Crit = false; Roll = Damage.MaxRoll; Rng = Rng.create 0u
+          Messages = []; LastDamage = 0; IsStruggle = false
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false
+          Friendship = 0; UserIsPlayer = true
+          PlayerSide = SideState.Empty; EnemySide = SideState.Empty; WeatherTimer = None }
+    let applied = Effects.forMove (Moves.byName "SANDSTORM") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.Equal(Some 5, applied.WeatherTimer)
+
+[<Fact>]
+let ``SetPerishSong sets counters on both sides`` () =
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+    let ctx =
+        { User = user; Foe = foe; Move = Moves.byName "PERISH_SONG"
+          Crit = false; Roll = Damage.MaxRoll; Rng = Rng.create 0u
+          Messages = []; LastDamage = 0; IsStruggle = false
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false
+          Friendship = 0; UserIsPlayer = true
+          PlayerSide = SideState.Empty; EnemySide = SideState.Empty; WeatherTimer = None }
+    let applied = Effects.forMove (Moves.byName "PERISH_SONG") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    Assert.Equal(Some 3, applied.PlayerSide.PerishCounter)
+    Assert.Equal(Some 3, applied.EnemySide.PerishCounter)
+
+[<Fact>]
+let ``nightmare chips sleeping target each turn`` () =
+    let vol = { VolatileStatus.empty with Nightmare = true }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+                     Moves = [ strongHit ]; Status = Sleep 3; Volatile = vol }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let state = Battle.create player enemy 42u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "suffering from Nightmare!")
+
+[<Fact>]
+let ``curse chips the cursed target each turn`` () =
+    let vol = { VolatileStatus.empty with Curse = true }
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+                     Moves = [ strongHit ]; Volatile = vol }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ strongHit ] }
+    let state = Battle.create player enemy 0u
+    let after = Battle.chooseMove 0 state
+    Assert.Contains(after.Messages, fun m -> m.Contains "is hurt by Curse!")
+    Assert.True(after.Player.Hp < 200)
 
 // --- M13.1 Accuracy / miss hit check -----------------------------------------
 
@@ -1749,7 +1861,11 @@ let ``EFFECT_LEVEL_DAMAGE deals damage equal to user's level`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx LevelDamage
     Assert.Equal(50, ctx'.LastDamage)
     Assert.Equal(150, ctx'.Foe.Hp)
@@ -1763,7 +1879,11 @@ let ``EFFECT_PSYWAVE deals random 1..floor(level*1.5) damage`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 42u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx PsywaveDamage
     Assert.True(ctx'.LastDamage >= 1 && ctx'.LastDamage < 30, $"Psywave damage {ctx'.LastDamage} out of range")
     Assert.Equal(100 - ctx'.LastDamage, ctx'.Foe.Hp)
@@ -1776,7 +1896,11 @@ let ``EFFECT_SUPER_FANG deals half of target current HP, min 1`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx SuperFangDamage
     Assert.Equal(40, ctx'.LastDamage)
     Assert.Equal(40, ctx'.Foe.Hp)
@@ -1789,7 +1913,11 @@ let ``EFFECT_SUPER_FANG deals min 1 when target has 1 HP`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx SuperFangDamage
     Assert.Equal(1, ctx'.LastDamage)
     Assert.Equal(0, ctx'.Foe.Hp)
@@ -1803,7 +1931,11 @@ let ``EFFECT_STATIC_DAMAGE deals fixed move power`` () =
     let ctx s m : MoveContext =
         { User = user; Foe = s; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let c1 = Effects.applyCtx (ctx foe sonicboom) StaticDamage
     Assert.Equal(20, c1.LastDamage)
     let c2 = Effects.applyCtx (ctx foe dragonRage) StaticDamage
@@ -1817,7 +1949,11 @@ let ``EFFECT_OHKO fails if target level >= user level`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx OhkoDamage
     Assert.Equal(200, ctx'.Foe.Hp)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "missed")
@@ -1834,7 +1970,11 @@ let ``EFFECT_OHKO KOs when attacker level > target level and roll succeeds`` () 
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx OhkoDamage
     Assert.Equal(0, ctx'.Foe.Hp)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "one-hit KO")
@@ -1847,7 +1987,11 @@ let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx FalseSwipeDamage
     Assert.True(ctx'.Foe.Hp >= 1, $"False Swipe left target at {ctx'.Foe.Hp}")
 
@@ -1860,7 +2004,11 @@ let ``EFFECT_REVERSAL gives max power at lowest HP`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx ReversalDamage
     // Power 200 should deal massive damage.
     Assert.True(ctx'.LastDamage > 0)
@@ -1903,7 +2051,11 @@ let ``EFFECT_RETURN with 0 friendship gives power 1`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx ReturnDamage
     // power = max(1, 0*10/25) = 1.
     Assert.True(ctx'.LastDamage > 0)
@@ -1916,7 +2068,11 @@ let ``EFFECT_FRUSTRATION with 0 friendship gives max power`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx FrustrationDamage
     // power = max(1, 255*10/25) = 102. Should deal good damage.
     Assert.True(ctx'.LastDamage > 0)
@@ -1939,7 +2095,11 @@ let ``EFFECT_PRESENT damage tiers match thresholds`` () =
     let mkCtx seed : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create seed; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     // Run many seeds and verify all outcomes are within expected set.
     let mutable sawDamage = false
     let mutable sawHeal = false
@@ -1958,7 +2118,11 @@ let ``EFFECT_MAGNITUDE power from seeded RNG`` () =
     let mkCtx seed : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create seed; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     // Run many seeds and check magnitude messages appear.
     let mutable magnitudes = Set.empty
     for s in 0u .. 500u do
@@ -1979,7 +2143,11 @@ let ``EFFECT_HIDDEN_POWER with DV=0 gives power 31 and type FIGHTING`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx HiddenPowerDamage
     Assert.True(ctx'.LastDamage > 0)
 
@@ -1991,7 +2159,11 @@ let ``EFFECT_FURY_CUTTER doubles each consecutive hit`` () =
     let mkCtx fc : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = fc; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = fc; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let c1 = Effects.applyCtx (mkCtx 0) FuryCutterDamage  // count becomes 1, 1x
     let d1 = c1.LastDamage
     let c2 = Effects.applyCtx (mkCtx 1) FuryCutterDamage  // count becomes 2, 2x
@@ -2013,7 +2185,11 @@ let ``EFFECT_ROLLOUT power doubles each turn with Defense Curl`` () =
     let mkCtx rc curl : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = rc; DefenseCurlUsed = curl; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = rc; DefenseCurlUsed = curl; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let c1 = Effects.applyCtx (mkCtx 0 false) RolloutDamage  // count=1, doublings=0
     let c2 = Effects.applyCtx (mkCtx 1 false) RolloutDamage  // count=2, doublings=1
     let c1c = Effects.applyCtx (mkCtx 0 true) RolloutDamage  // count=1, doublings=1 (curl)
@@ -2028,7 +2204,11 @@ let ``EFFECT_TRIPLE_KICK hits 3 times with escalating power`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx TripleKickDamage
     Assert.True(ctx'.LastDamage > 0)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "3 time(s)")
@@ -2043,7 +2223,11 @@ let ``EFFECT_LEECH_HIT drains half damage dealt to heal user`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx DrainDamage
     let healed = ctx'.User.Hp - 100
     let expectedHeal = max 1 (ctx'.LastDamage / 2)
@@ -2059,7 +2243,11 @@ let ``EFFECT_DREAM_EATER only works on sleeping target`` () =
     let mkCtx foe : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     // Should fail on awake target.
     let c1 = Effects.applyCtx (mkCtx awakeFoe) DreamEaterDamage
     Assert.Contains(c1.Messages, fun m -> m.Contains "failed")
@@ -2077,7 +2265,11 @@ let ``EFFECT_RECOIL_HIT user takes 1/4 damage dealt`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     // Apply Damage then Recoil.
     let ctx' = Effects.applyCtx ctx Damage
     let ctx'' = Effects.applyCtx ctx' Recoil
@@ -2092,7 +2284,11 @@ let ``EFFECT_SELFDESTRUCT user faints after dealing damage`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx SelfdestructDamage
     Assert.Equal(0, ctx'.User.Hp)
     Assert.True(ctx'.Foe.Hp < 200)
@@ -2115,7 +2311,11 @@ let ``EFFECT_PAY_DAY includes coins message`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx PayDayDamage
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "Coins scattered")
     Assert.True(ctx'.Foe.Hp < 200)
@@ -2130,7 +2330,11 @@ let ``EFFECT_RAPID_SPIN clears leech seed and trap`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx RapidSpinDamage
     Assert.False(ctx'.User.Volatile.LeechSeed)
     Assert.Equal(None, ctx'.User.Volatile.Trapped)
@@ -2148,7 +2352,11 @@ let ``EFFECT_MULTI_HIT produces 2-5 hits with correct distribution`` () =
         let ctx : MoveContext =
             { User = user; Foe = { foe with Hp = 999 }; Move = m; Crit = false; Roll = 255
               Rng = Rng.create s; Messages = []; LastDamage = 0; IsStruggle = false
-              FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+              FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None }
         let ctx' = Effects.applyCtx ctx MultiHitDamage
         // Extract hit count from message.
         for msg in ctx'.Messages do
@@ -2169,7 +2377,11 @@ let ``EFFECT_DOUBLE_HIT always hits exactly 2 times`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx DoubleHitDamage
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "2 time(s)")
     Assert.True(ctx'.Foe.Hp < 999)
@@ -2182,7 +2394,11 @@ let ``EFFECT_POISON_MULTI_HIT (Twineedle) hits twice`` () =
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
-          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0 }
+          FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None }
     let ctx' = Effects.applyCtx ctx PoisonMultiHitDamage
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "2 time(s)")
     Assert.True(ctx'.Foe.Hp < 999)

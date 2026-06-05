@@ -68,6 +68,10 @@ type VolatileStatus =
       /// Mean Look / Spider Web: prevents fleeing. Cleared on switch-out.
       /// Extension point for M13.7 (multi-turn family) and M14 (switching).
       CantEscape: bool
+      /// Nightmare is active on this mon; it chips sleeping targets for MaxHP/4.
+      Nightmare: bool
+      /// Curse is active on this mon; it chips cursed targets for MaxHP/4 each turn.
+      Curse: bool
       /// Attract infatuation: the mon is attracted to its opponent and has a
       /// 50% chance to fail its move on the pre-move gate.
       Attracted: bool }
@@ -90,6 +94,8 @@ module VolatileStatus =
           FutureSightMove = None
           Mist = false
           CantEscape = false
+          Nightmare = false
+          Curse = false
           Attracted = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,

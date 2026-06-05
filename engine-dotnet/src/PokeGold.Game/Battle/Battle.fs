@@ -16,7 +16,10 @@ type BattleState =
       Enemy: BattleMon
       Messages: string list
       Outcome: Outcome option
-      Rng: Rng }
+      Rng: Rng
+      WeatherTimer: int option
+      PlayerSide: SideState
+      EnemySide: SideState }
 
 module Battle =
 
@@ -26,7 +29,10 @@ module Battle =
           Enemy = enemy
           Messages = [ $"Wild {enemy.Species.Name} appeared!" ]
           Outcome = None
-          Rng = Rng.create seed }
+          Rng = Rng.create seed
+          WeatherTimer = None
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty }
 
     let isOver (s: BattleState) : bool = s.Outcome.IsSome
 
@@ -212,7 +218,8 @@ module Battle =
     ///   1. Accuracy roll  — checkHit (skipped for EFFECT_ALWAYS_HIT / acc $FF)
     ///   2. Crit roll      — rollHit  (skipped on miss)
     ///   3. Spread roll    — rollHit  (skipped on miss)
-    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) =
+    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) (userIsPlayer: bool) (battle: BattleState)
+        : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
         // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
@@ -226,9 +233,9 @@ module Battle =
             if move.Effect = "EFFECT_JUMP_KICK" then
                 let crash = max 1 (user.MaxHp / 8)
                 let user = { user with Hp = max 0 (user.Hp - crash) }
-                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng)
+                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer)
             else
-                (user, foe, msgs, rng)
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer)
         else
 
         let crit, roll, rng = rollHit (CriticalHit.critStage user.Volatile.FocusEnergy move) rng
@@ -247,7 +254,11 @@ module Battle =
               FuryCutterCount = 0
               RolloutCount = 0
               DefenseCurlUsed = false
-              Friendship = 0 }
+              Friendship = 0
+              UserIsPlayer = userIsPlayer
+              PlayerSide = battle.PlayerSide
+              EnemySide = battle.EnemySide
+              WeatherTimer = battle.WeatherTimer }
 
         let ctx =
             Effects.forMove move
@@ -261,7 +272,8 @@ module Battle =
             else
                 ctx.Foe
 
-        { ctx with Foe = foe } |> fun ctx -> ctx.User, ctx.Foe, ctx.Messages, ctx.Rng
+        let ctx = { ctx with Foe = foe }
+        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer
 
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 
@@ -394,44 +406,77 @@ module Battle =
             ({ m with Volatile = vol }, [ $"{m.Species.Name} became confused after rampaging!" ])
         | None -> (m, [])
 
-    let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng)
-        : BattleMon * BattleMon * string list * Rng =
+    let private applyWeather (m: BattleMon) : BattleMon * string list =
+        if BattleMon.isFainted m then (m, [])
+        else
+            let immune = m.Species.Type1 = TypeChart.value "ROCK" || m.Species.Type1 = TypeChart.value "GROUND" || m.Species.Type1 = TypeChart.value "STEEL" || m.Species.Type2 = TypeChart.value "ROCK" || m.Species.Type2 = TypeChart.value "GROUND" || m.Species.Type2 = TypeChart.value "STEEL"
+            if immune then (m, [])
+            else
+                let chip = max 1 (m.MaxHp / 8)
+                ({ m with Hp = max 0 (m.Hp - chip) }, [ $"{m.Species.Name} is buffeted by the sandstorm!" ])
+
+    let private betweenTurns (player: BattleMon) (enemy: BattleMon) (rng: Rng) (weatherTimer: int option) (playerSide: SideState) (enemySide: SideState)
+        : BattleMon * BattleMon * SideState * SideState * int option * string list * Rng =
         let mutable p = player
         let mutable e = enemy
         let mutable r = rng
         let mutable msgs: string list = []
+        let mutable wt = weatherTimer
+        let mutable ps = playerSide
+        let mutable es = enemySide
 
         // Slot 1: Future Sight countdown.
         let p', e', futureMsgs = applyFutureSight p e
         p <- p'; e <- e'; msgs <- msgs @ futureMsgs
 
-        // Slot 2: Weather (sandstorm chip, timer) — stub (M13.8)
+        // Slot 2: Weather (sandstorm chip, timer).
+        if wt.IsSome && wt.Value > 0 then
+            let p', pWeatherMsgs = applyWeather p
+            p <- p'; msgs <- msgs @ pWeatherMsgs
+            let e', eWeatherMsgs = applyWeather e
+            e <- e'; msgs <- msgs @ eWeatherMsgs
+            wt <- Some (wt.Value - 1)
+            if wt.Value = 0 then wt <- None
 
-        // Slot 3: Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
-        // Player then enemy.
+        // Slot 3: Wrap/Bind/Clamp chip.
         let p', pWrapMsgs = applyWrap p
         p <- p'; msgs <- msgs @ pWrapMsgs
         let e', eWrapMsgs = applyWrap e
         e <- e'; msgs <- msgs @ eWrapMsgs
 
-        // Slot 4: Perish Song countdown — stub (M13.8)
+        // Slot 4: Perish Song countdown.
+        let pPer = if ps.PerishCounter.IsSome then Some (ps.PerishCounter.Value - 1) else None
+        let ePer = if es.PerishCounter.IsSome then Some (es.PerishCounter.Value - 1) else None
+        if ps.PerishCounter.IsSome then
+            if ps.PerishCounter.Value <= 1 then
+                p <- { p with Hp = 0 }
+                msgs <- msgs @ [ $"{p.Species.Name} fainted from Perish Song!" ]
+            else
+                msgs <- msgs @ [ $"{p.Species.Name} is fading from Perish Song!" ]
+        if es.PerishCounter.IsSome then
+            if es.PerishCounter.Value <= 1 then
+                e <- { e with Hp = 0 }
+                msgs <- msgs @ [ $"{e.Species.Name} fainted from Perish Song!" ]
+            else
+                msgs <- msgs @ [ $"{e.Species.Name} is fading from Perish Song!" ]
+        ps <- { ps with PerishCounter = if pPer.IsSome && pPer.Value > 0 then pPer else None }
+        es <- { es with PerishCounter = if ePer.IsSome && ePer.Value > 0 then ePer else None }
+
         // Slot 5: Leftovers / items — stub (items scope)
 
-        // Slot 6: Defrost (10% thaw). Player then enemy.
+        // Slot 6: Defrost.
         let p', pDefMsgs, r' = applyDefrost p r
         p <- p'; r <- r'; msgs <- msgs @ pDefMsgs
         let e', eDefMsgs, r' = applyDefrost e r
         e <- e'; r <- r'; msgs <- msgs @ eDefMsgs
 
-        // Slot 7: Poison/Toxic/Burn tick (ResidualDamage PSN|BRN path).
-        // Player then enemy.
+        // Slot 7: Poison/Toxic/Burn tick.
         let p', pPsnMsgs = applyResidual p
         p <- p'; msgs <- msgs @ pPsnMsgs
         let e', ePsnMsgs = applyResidual e
         e <- e'; msgs <- msgs @ ePsnMsgs
 
-        // Slot 8: Leech Seed drain (ResidualDamage, core.asm l.1008).
-        // Player-seeded drains to enemy, then enemy-seeded drains to player.
+        // Slot 8: Leech Seed drain.
         let p', e', pSeedMsgs = applyLeechSeed p e
         p <- p'; e <- e'; msgs <- msgs @ pSeedMsgs
         let e', p', eSeedMsgs = applyLeechSeed e p
@@ -443,14 +488,50 @@ module Battle =
         let e', eRampMsgs = applyRampage e
         e <- e'; msgs <- msgs @ eRampMsgs
 
-        // Slot 10: Nightmare — stub (M13.8: requires Sleep check, chip MaxHP/4)
-        // Slot 11: Curse chip — stub (M13.8: ghost-type curse, chip MaxHP/4)
-        // Slot 11: Safeguard timer — stub (M13.8)
-        // Slot 12: Reflect/Light Screen timer — stub (M13.8)
-        // Slot 13: Encore timer — stub (M13.9)
-        // Slot 14: Disable timer — stub (M13.9)
+        // Slot 10: Nightmare — chips sleeping targets MaxHP/4 per turn.
+        if p.Volatile.Nightmare then
+            match p.Status with
+            | Sleep _ ->
+                let dmg = max 1 (p.MaxHp / 4)
+                p <- { p with Hp = max 0 (p.Hp - dmg) }
+                msgs <- msgs @ [ $"{p.Species.Name} is suffering from Nightmare!" ]
+            | _ -> ()
+        if e.Volatile.Nightmare then
+            match e.Status with
+            | Sleep _ ->
+                let dmg = max 1 (e.MaxHp / 4)
+                e <- { e with Hp = max 0 (e.Hp - dmg) }
+                msgs <- msgs @ [ $"{e.Species.Name} is suffering from Nightmare!" ]
+            | _ -> ()
 
-        (p, e, msgs, r)
+        // Slot 11: Curse chip.
+        if p.Volatile.Curse then
+            let dmg = max 1 (p.MaxHp / 4)
+            p <- { p with Hp = max 0 (p.Hp - dmg) }
+            msgs <- msgs @ [ $"{p.Species.Name} is hurt by Curse!" ]
+        if e.Volatile.Curse then
+            let dmg = max 1 (e.MaxHp / 4)
+            e <- { e with Hp = max 0 (e.Hp - dmg) }
+            msgs <- msgs @ [ $"{e.Species.Name} is hurt by Curse!" ]
+
+        // Slot 12: Safeguard timer.
+        let psSafeguard = if ps.SafeguardTimer.IsSome then Some (ps.SafeguardTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let esSafeguard = if es.SafeguardTimer.IsSome then Some (es.SafeguardTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        ps <- { ps with SafeguardTimer = psSafeguard }
+        es <- { es with SafeguardTimer = esSafeguard }
+
+        // Slot 13: Reflect/Light Screen timer.
+        let psReflect = if ps.ReflectTimer.IsSome then Some (ps.ReflectTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let psLightScreen = if ps.LightScreenTimer.IsSome then Some (ps.LightScreenTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let esReflect = if es.ReflectTimer.IsSome then Some (es.ReflectTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        let esLightScreen = if es.LightScreenTimer.IsSome then Some (es.LightScreenTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
+        ps <- { ps with ReflectTimer = psReflect; LightScreenTimer = psLightScreen }
+        es <- { es with ReflectTimer = esReflect; LightScreenTimer = esLightScreen }
+
+        // Slot 14: Encore timer — stub (M13.9)
+        // Slot 15: Disable timer — stub (M13.9)
+
+        (p, e, ps, es, wt, msgs, r)
 
     // -- Phase: faint check --------------------------------------------------
 
@@ -526,6 +607,9 @@ module Battle =
         let mutable player = s.Player
         let mutable enemy = s.Enemy
         let mutable rng = s.Rng
+        let mutable weatherTimer = s.WeatherTimer
+        let mutable playerSide = s.PlayerSide
+        let mutable enemySide = s.EnemySide
         let mutable msgs: string list = struggleMsgs
         let mutable outcome: Outcome option = None
 
@@ -576,8 +660,11 @@ module Battle =
                         true
                     else
                         // Phase: execute move
-                        let user, foe, moveMsgs, rng' = executeMove user foe moveToUse isStruggle rng
+                        let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer' = executeMove user foe moveToUse isStruggle rng playerIsUser s
                         rng <- rng'
+                        playerSide <- playerSide'
+                        enemySide <- enemySide'
+                        weatherTimer <- weatherTimer'
                         msgs <- msgs @ moveMsgs
 
                         // Clear the charge window after the second-turn execution.
@@ -613,9 +700,12 @@ module Battle =
 
         // Phase: end-of-turn residuals (only if nobody fainted mid-turn)
         if outcome.IsNone then
-            let p, e, residualMsgs, rng' = betweenTurns player enemy rng
+            let p, e, playerSide', enemySide', weatherTimer', residualMsgs, rng' = betweenTurns player enemy rng weatherTimer playerSide enemySide
             player <- p
             enemy <- e
+            playerSide <- playerSide'
+            enemySide <- enemySide'
+            weatherTimer <- weatherTimer'
             rng <- rng'
             msgs <- msgs @ residualMsgs
 
@@ -631,7 +721,10 @@ module Battle =
             Enemy = enemy
             Messages = msgs
             Outcome = outcome
-            Rng = rng }
+            Rng = rng
+            WeatherTimer = weatherTimer
+            PlayerSide = playerSide
+            EnemySide = enemySide }
 
     /// The player flees the battle. Blocked if the player is trapped (Wrap/Bind)
     /// or locked in by Mean Look / Spider Web.
