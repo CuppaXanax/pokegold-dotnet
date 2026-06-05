@@ -218,7 +218,56 @@ module ScriptParser =
                     // First definition wins; ignore accidental duplicates.
                     if not (labels.ContainsKey qualified) then
                         labels.[qualified] <- commands.Count
-                | LCommand cmd -> commands.Add cmd
+                | LCommand cmd ->
+                    // Expand the `trainer` macro (macros/scripts/maps.asm l.142-153) inline
+                    // rather than emitting an Unsupported no-op. The macro is pure data in
+                    // the disassembly; the engine's TalkToTrainerScript/AlreadyBeatenTrainer
+                    // scripts (engine/events/trainer_scripts.asm) drive the actual dialog
+                    // branching. We re-express the same branching as inline script commands
+                    // so the VM produces the correct first-encounter / already-beaten flow
+                    // without needing the `trainerflagaction`/`scripttalkafter` opcodes.
+                    //
+                    // Args: trainer GROUP, ID, FLAG, SEEN_TEXT, BEATEN_TEXT, LOSS_TEXT, AFTER_SCRIPT
+                    //
+                    // Expansion (equivalent of TalkToTrainerScript):
+                    //   faceplayer
+                    //   checkevent FLAG
+                    //   iftrue AFTER_SCRIPT   ;; already beaten → jump to after-battle script
+                    //   opentext
+                    //   writetext SEEN_TEXT
+                    //   waitbutton
+                    //   closetext
+                    //   loadtrainer GROUP, ID
+                    //   startbattle
+                    //   reloadmapafterbattle
+                    //   setevent FLAG
+                    //   end                   ;; first encounter ends here (never reaches AFTER_SCRIPT)
+                    //
+                    // The AFTER_SCRIPT label (e.g. `.Script`) follows the trainer data in the
+                    // source and typically starts with `endifjustbattled` (already a no-op in
+                    // the VM), so the "talk again" path sees the after-battle dialog while
+                    // the "just won" path ended above.
+                    match cmd with
+                    | Unsupported("trainer", args) when args.Length >= 7 ->
+                        let group = args.[0]
+                        let id = args.[1]
+                        let flag = args.[2]
+                        let seenText = args.[3]
+                        let afterLabel = qualify lastGlobal args.[6]
+                        commands.AddRange(
+                            [| Faceplayer
+                               Checkevent flag
+                               Iftrue afterLabel
+                               Opentext
+                               Writetext seenText
+                               Waitbutton
+                               Closetext
+                               Loadtrainer(group, id)
+                               Startbattle
+                               Reloadmapafterbattle
+                               Setevent flag
+                               End |])
+                    | _ -> commands.Add cmd
                 | LSkip -> ()
 
         { Commands = commands.ToArray()

@@ -596,4 +596,58 @@ let ``the VM skips unsupported opcodes and runs the rest of the script`` () =
     | Suspended(_, ShowText(label, _)) -> Assert.Equal("MixedText", label)
     | other -> Assert.Fail($"expected the script to run past trainertext to the text, got {other}")
 
+// --- Trainer macro expansion tests ---
 
+[<Fact>]
+let ``trainer macro expands to TalkToTrainerScript: first encounter shows seen text`` () =
+    let prog =
+        parse
+            "TrainerBugCatcherBenny:\n\
+             \ttrainer BUG_CATCHER, BENNY1, EVENT_BEAT_BENNY, BennySeenText, BennyBeatenText, 0, .Script\n\
+             \n\
+             .Script:\n\
+             \tendifjustbattled\n\
+             \topentext\n\
+             \twritetext BennyAfterText\n\
+             \twaitbutton\n\
+             \tclosetext\n\
+             \tend\n"
+
+    // First encounter (flag not set): should show seen text, then battle.
+    let step = Script.start "TrainerBugCatcherBenny" World.empty prog
+    match step.Outcome with
+    | Suspended(vm, FacePlayer) ->
+        // resume from faceplayer → checkevent (flag not set) → iftrue not taken → opentext → writetext SeenText
+        let step2 = Script.resume None World.empty vm
+        match step2.Outcome with
+        | Suspended(_, ShowText(label, _)) ->
+            Assert.Equal("BennySeenText", label)
+        | other -> Assert.Fail($"expected seen text, got {other}")
+    | other -> Assert.Fail($"expected FacePlayer first, got {other}")
+
+[<Fact>]
+let ``trainer macro expands to TalkToTrainerScript: already beaten shows after text`` () =
+    let prog =
+        parse
+            "TrainerBugCatcherBenny:\n\
+             \ttrainer BUG_CATCHER, BENNY1, EVENT_BEAT_BENNY, BennySeenText, BennyBeatenText, 0, .Script\n\
+             \n\
+             .Script:\n\
+             \tendifjustbattled\n\
+             \topentext\n\
+             \twritetext BennyAfterText\n\
+             \twaitbutton\n\
+             \tclosetext\n\
+             \tend\n"
+
+    // Already beaten (flag set): should jump to .Script and show after text.
+    let world = World.setEvent "EVENT_BEAT_BENNY" World.empty
+    let step = Script.start "TrainerBugCatcherBenny" world prog
+    match step.Outcome with
+    | Suspended(vm, FacePlayer) ->
+        let step2 = Script.resume None world vm
+        match step2.Outcome with
+        | Suspended(_, ShowText(label, _)) ->
+            Assert.Equal("BennyAfterText", label)
+        | other -> Assert.Fail($"expected after text, got {other}")
+    | other -> Assert.Fail($"expected FacePlayer first, got {other}")
