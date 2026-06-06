@@ -65,6 +65,45 @@ let ``giveitem and verbosegiveitem default quantity to one`` () =
     )
 
 [<Fact>]
+let ``itemball expands to verbosegiveitem plus end`` () =
+    let prog =
+        parse
+            "S:\n\
+             \titemball POTION, 2\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Verbosegiveitem("POTION", 2); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``hiddenitem expands to a single verbosegiveitem plus end`` () =
+    let prog =
+        parse
+            "S:\n\
+             \thiddenitem REVIVE\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Verbosegiveitem("REVIVE", 1); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``fruittree expands to a BERRY verbosegiveitem plus end`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tfruittree\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Verbosegiveitem("BERRY", 1); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
 let ``parses changeblock with three integer arguments`` () =
     let prog =
         parse
@@ -469,6 +508,31 @@ let ``givepoke suspends with a GivePoke effect`` () =
     match Script.start "S" World.empty prog "" with
     | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None)) } -> ()
     | other -> Assert.Fail(sprintf "Expected Suspended GivePoke, got %A" other)
+
+[<Fact>]
+let ``trainer macro second talk shows the badge dialog and sets the badge flag`` () =
+    let prog =
+        parse
+            "GymLeader:\n\
+             \ttrainer FALKNER, FALKNER1, EVENT_BEAT_FALKNER, FalknerSeenText, FalknerBeatenText, 0, .Script\n\
+             \n\
+             .Script:\n\
+             \tendifjustbattled\n\
+             \topentext\n\
+             \tsetflag ENGINE_ZEPHYRBADGE\n\
+             \twritetext GotBadgeText\n\
+             \twaitbutton\n\
+             \tclosetext\n\
+             \tend\n"
+
+    match Script.start "GymLeader" World.empty prog "" with
+    | { Outcome = Suspended(vm, FacePlayer) } ->
+        let world2 = World.setEvent "EVENT_BEAT_FALKNER" World.empty
+        match Script.resume None world2 vm with
+        | { World = worldAfter; Outcome = Suspended(_, ShowText("GotBadgeText", _)) } ->
+            Assert.True(World.hasFlag "ENGINE_ZEPHYRBADGE" worldAfter)
+        | other -> Assert.Fail($"expected badge text on second talk, got {other}")
+    | other -> Assert.Fail($"expected initial FacePlayer, got {other}")
 
 [<Fact>]
 let ``unsupported opcodes are skipped so the script keeps running`` () =

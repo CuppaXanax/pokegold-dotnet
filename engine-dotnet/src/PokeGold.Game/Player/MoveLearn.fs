@@ -44,6 +44,33 @@ module MoveLearn =
                 |> List.mapi (fun i entry ->
                     if i = weakestIndex then moveIndex, moveData.Pp else entry)
 
+    /// Seed a newly created mon's moves from its species learnset.
+    /// Gives all moves at or below its current level (up to 4, latest moves preferred).
+    let seedStartingMoves (mon: PartyMon) : PartyMon =
+        let speciesName =
+            Species.all
+            |> Map.tryPick (fun name stats -> if stats.Dex = mon.SpeciesId then Some name else None)
+            |> Option.defaultValue ""
+
+        match EvosAttacksAccess.forSpecies speciesName with
+        | None -> mon
+        | Some data ->
+            let eligible =
+                data.Learnset
+                |> List.filter (fun entry -> entry.Level <= mon.Level)
+                |> List.rev
+                |> List.truncate 4
+                |> List.rev
+
+            let moves =
+                eligible
+                |> List.choose (fun entry ->
+                    MovesData.byIndex
+                    |> Array.tryFindIndex (fun move -> move.Name = entry.Move)
+                    |> Option.map (fun idx -> idx, MovesData.byIndex.[idx].Pp))
+
+            { mon with Moves = moves }
+
     /// Apply level-up move learning to a PartyMon.
     /// Checks the learnset for the mon's species at its current level.
     let learnMovesForLevel (mon: PartyMon) : PartyMon =

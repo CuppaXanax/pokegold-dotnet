@@ -275,6 +275,13 @@ module ScriptParser =
                                Reloadmapafterbattle
                                Setevent flag
                                End |])
+                    | Unsupported("itemball", args) when args.Length >= 1 ->
+                        let qty = if args.Length > 1 then intArg args.[1] else 1
+                        commands.AddRange([| Verbosegiveitem(args.[0], qty); End |])
+                    | Unsupported("hiddenitem", args) when args.Length >= 1 ->
+                        commands.AddRange([| Verbosegiveitem(args.[0], 1); End |])
+                    | Unsupported("fruittree", _) ->
+                        commands.AddRange([| Verbosegiveitem("BERRY", 1); End |])
                     | _ -> commands.Add cmd
                 | LSkip -> ()
 

@@ -24,3 +24,16 @@ let ``tryLearnMove does not duplicate existing move`` () =
         let result = MoveLearn.tryLearnMove "TACKLE" existing
         Assert.Equal(1, result.Length)
     | None -> ()
+
+[<Fact>]
+let ``seedStartingMoves gives Cyndaquil TACKLE and LEER at level 5`` () =
+    let mon = PartyMon.create (Species.byName "CYNDAQUIL").Dex 5
+    let seeded = MoveLearn.seedStartingMoves mon
+
+    let hasMove name =
+        seeded.Moves
+        |> List.exists (fun (moveId, _) -> MovesData.byIndex.[moveId].Name = name)
+
+    Assert.True(seeded.Moves.Length > 0, "should have starting moves")
+    Assert.True(hasMove "TACKLE", "should include TACKLE")
+    Assert.True(hasMove "LEER", "should include LEER")

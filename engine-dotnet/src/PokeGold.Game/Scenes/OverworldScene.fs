@@ -170,6 +170,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | Some stats ->
                     let mon = PokeGold.Game.Player.PartyMon.create stats.Dex level
                     let mon = match item with Some i -> { mon with HeldItem = Some i } | None -> mon
+                    let mon = PokeGold.Game.Player.MoveLearn.seedStartingMoves mon
                     if player.Party.Length < 6 then
                         player <- { player with Party = player.Party @ [ mon ] }
                         this.Drive(Script.resume (Some 1) world vm)
@@ -486,26 +487,36 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop), buttons) :> Scene)
                 elif aPressed && not state.Player.Moving then
-                    // Talk to / read whatever the player faces. Objects are resolved
-                    // over the *live* NPC set (a wandering NPC is talked to where it
-                    // now stands), filtered to those currently present.
-                    let objectScriptAt fx fy =
-                        state.Npcs
-                        |> Array.tryFind (fun n ->
-                            MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
-                        |> Option.map (fun n -> n.Event.Script)
+                    let fx, fy = Triggers.facedCell state.Player.CellX state.Player.CellY state.Player.Facing
+                    let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy
 
-                    // A counter/desk tile in front of the player: GSC reaches one tile
-                    // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
-                    let isCounter fx fy =
-                        Collision.isCounterId (
-                            MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
+                    if collId = FieldMoves.CollCutTree && FieldMoves.canUse "CUT" world player.Party then
+                        printfn "HM tile detected: CUT at (%d, %d)" fx fy
+                        Stay
+                    elif collId = FieldMoves.CollSurf && FieldMoves.canUse "SURF" world player.Party then
+                        printfn "HM tile detected: SURF at (%d, %d)" fx fy
+                        Stay
+                    else
+                        // Talk to / read whatever the player faces. Objects are resolved
+                        // over the *live* NPC set (a wandering NPC is talked to where it
+                        // now stands), filtered to those currently present.
+                        let objectScriptAt fx fy =
+                            state.Npcs
+                            |> Array.tryFind (fun n ->
+                                MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
+                            |> Option.map (fun n -> n.Event.Script)
 
-                    match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
-                    | Some label when state.Script.Labels.ContainsKey label ->
-                        sound.PlaySfx "Sfx_Menu"
-                        this.Drive(Script.start label world state.Script state.MapId)
-                    | _ -> Stay
+                        // A counter/desk tile in front of the player: GSC reaches one tile
+                        // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
+                        let isCounter fx fy =
+                            Collision.isCounterId (
+                                MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
+
+                        match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                        | Some label when state.Script.Labels.ContainsKey label ->
+                            sound.PlaySfx "Sfx_Menu"
+                            this.Drive(Script.start label world state.Script state.MapId)
+                        | _ -> Stay
                 else
                     let before = state.Player.CellX, state.Player.CellY
                     state <- OverworldState.tick (fun n -> MapEvents.objectVisible world n.Event) buttons state

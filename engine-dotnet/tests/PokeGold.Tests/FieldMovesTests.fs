@@ -22,6 +22,18 @@ let ``FieldMoves.canUse returns true when badge and move are present`` () =
     Assert.True(FieldMoves.canUse "CUT" world [ mon ])
 
 [<Fact>]
+let ``CUT collision ID is 0x12`` () =
+    Assert.Equal(0x12uy, FieldMoves.CollCutTree)
+
+[<Fact>]
+let ``canUse CUT requires HIVEBADGE`` () =
+    let world = World.empty
+    Assert.False(FieldMoves.canUse "CUT" world [])
+
+    let worldWithBadge = World.setFlag "ENGINE_HIVEBADGE" world
+    Assert.False(FieldMoves.canUse "CUT" worldWithBadge [])
+
+[<Fact>]
 let ``Repel.blocks suppresses weak encounters when lead mon is strong enough`` () =
     let lead = PartyMon.create 155 10
     let player = { PlayerStateOps.initial with Party = [ lead ]; RepelSteps = 50 }
