@@ -42,6 +42,7 @@ type Game() =
         let state = OverworldState.loadById content "PlayersHouse2F"
         let ow = OverworldScene(content, audio, state)
         ow.Restore(world, { PlayerStateOps.initial with Name = name })
+        overworld <- ow
         ow
 
     let titleScene =
@@ -54,7 +55,10 @@ type Game() =
                     (fun () -> Replace(NamingScene(content.Font, "ENTER NAME", fun name -> Replace(newGameScene name)))),
                     (fun () ->
                         match SaveFile.tryRead() with
-                        | Some save -> Replace(OverworldScene.OfSave(content, audio, save))
+                        | Some save ->
+                            let ow = OverworldScene.OfSave(content, audio, save)
+                            overworld <- ow
+                            Replace(ow)
                         | None -> Stay),
                     (fun () -> Push(OptionsScene(content, PlayerStateOps.initial, fun _ -> ()))))))
     /// The debug command bridge. Background clients (the named pipe) submit

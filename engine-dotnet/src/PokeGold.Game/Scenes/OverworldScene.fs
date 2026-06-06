@@ -392,23 +392,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             |> World.setFlag "ENGINE_FLYPOINT_CHERRYGROVE"
             |> World.setFlag "ENGINE_FLYPOINT_NEWBARK"
         ow.Restore(debugWorld, DebugSeed.seed PlayerStateOps.initial)
-        ow.RunSceneScript ow.DebugState.MapId |> ignore
         ow
 
     /// Restore an overworld scene from a save (position, world flags, and player state).
     static member OfSave(content: Content, sound: ISoundBoard, save: SaveData) : OverworldScene =
         let scene = OverworldScene(content, sound, SaveData.apply content save)
         scene.Restore(SaveData.worldOf save, SaveData.playerOf save)
-        scene.RunSceneScript scene.DebugState.MapId |> ignore
         scene
 
     /// Snapshot this scene's persistable state (position, world flags, player state).
     member _.Capture() : SaveData = SaveData.captureWith state world player
 
-    /// Seed the script world and player state onto a freshly built scene (used by OfSave).
-    member _.Restore(w: World, p: PlayerState) =
+    /// Seed the script world and player state, then run the map's scene script.
+    member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        this.RunSceneScript state.MapId |> ignore
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
     // These give the debug channel a race-free window onto the scene's private
