@@ -25,6 +25,12 @@ module TypeChart =
     /// The numeric id of a named type (e.g. "FIRE" -> 20).
     let value (name: string) : int = TypeChartData.typeIds.[name]
 
+    /// The name of a numeric type id (e.g. 20 -> "FIRE").
+    let nameOfType (typeId: int) : string =
+        match TypeChartData.typeIds |> Map.toSeq |> Seq.tryFind (fun (_, id) -> id = typeId) with
+        | Some (name, _) -> name
+        | None -> "UNKNOWN"
+
     /// True when a move of the given type id is physical (uses Attack/Defense).
     let isPhysical (typeId: int) : bool = typeId < SpecialBoundary
 

@@ -96,6 +96,7 @@
     <Compile Include="Battle\EffectCommand.fs" />
     <Compile Include="Battle\Effects.fs" />
     <Compile Include="Battle\BattleAI.fs" />
+    <Compile Include="Battle\BattleAnim.fs" />
     <Compile Include="Battle\Battle.fs" />
     <Compile Include="Battle\Experience.fs" />
     <!-- Player: persistent party, bag, dex state. -->
@@ -145,6 +146,7 @@
     <Compile Include="Scenes\PokegearScene.fs" />
     <Compile Include="Scenes\OptionsScene.fs" />
     <Compile Include="Scenes\SaveMenuScene.fs" />
+    <Compile Include="Scenes\TitleScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Debug command pipe (T1): inspect/poke a running instance. -->
     <Compile Include="Debug\DebugChannel.fs" />

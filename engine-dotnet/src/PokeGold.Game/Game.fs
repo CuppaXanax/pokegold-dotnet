@@ -22,6 +22,7 @@ type Game() =
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
     let mutable overworld = OverworldScene.Load(content, audio)
+    let titleScene = TitleScene(content, overworld :> Scene)
     /// The debug command bridge. Background clients (the named pipe) submit
     /// commands here; they're drained on the game thread each Tick via `Pump`.
     let debug = DebugChannel()
@@ -39,7 +40,7 @@ type Game() =
     /// player would. Mutated only on the game thread (from `RunDebugCommand`).
     let injected = Queue<Buttons>()
 
-    do scenes.Push(overworld :> Scene)
+    do scenes.Push(titleScene :> Scene)
 
     /// Make the given overworld scene the sole, bottom scene (used on load).
     member private _.ResetTo(ow: OverworldScene) =

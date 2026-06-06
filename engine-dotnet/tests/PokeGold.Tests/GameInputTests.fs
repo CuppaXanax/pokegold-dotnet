@@ -35,9 +35,15 @@ let ``except with an empty mask is identity`` () =
 /// The active (top) scene type, read through the debug command bridge.
 let private topScene (g: Game) = g.RunDebugCommand "scene"
 
+let private startOverworld () =
+    let g = Game()
+    g.Tick({ Buttons.none with Start = true })
+    g.Tick(Buttons.none)
+    g
+
 [<Fact>]
 let ``holding Start keeps the start menu open instead of flickering`` () =
-    let g = Game()
+    let g = startOverworld ()
     let start = { Buttons.none with Start = true }
     Assert.Equal("OverworldScene", topScene g)
 
@@ -52,7 +58,7 @@ let ``holding Start keeps the start menu open instead of flickering`` () =
 
 [<Fact>]
 let ``releasing then re-pressing Start closes the start menu`` () =
-    let g = Game()
+    let g = startOverworld ()
     let start = { Buttons.none with Start = true }
 
     g.Tick(start)                                    // open
@@ -67,7 +73,7 @@ let ``the A that opens a submenu does not bleed into it`` () =
     // Open the start menu, then press A on the default entry (POKéDEX) to push a
     // child scene. Holding A across the transition must not act inside the child:
     // the systemic input mask hides the carried-over A until it's released.
-    let g = Game()
+    let g = startOverworld ()
     g.Tick({ Buttons.none with Start = true })       // open start menu
     g.Tick(Buttons.none)                             // release Start
     Assert.Equal("StartMenuScene", topScene g)

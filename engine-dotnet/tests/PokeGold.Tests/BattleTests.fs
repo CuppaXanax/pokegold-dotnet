@@ -2604,3 +2604,13 @@ let ``forMove maps all M13.5 effects to non-fallback commands`` () =
         let m = { move "TEST" eff 40 (ty "NORMAL") with Power = 40 }
         let cmds = Effects.forMove m
         Assert.True(cmds <> [ Damage ], $"{eff} should not fall back to [Damage]")
+
+[<Fact>]
+let ``battle anim maps fire move to FireBurst`` () =
+    let move = Moves.byName "EMBER"
+    Assert.Equal(FireBurst, BattleAnim.effectForMove move)
+
+[<Fact>]
+let ``battle anim maps status move to StatusEffect`` () =
+    let move = Moves.byName "GROWL"
+    Assert.Equal(StatusEffect, BattleAnim.effectForMove move)
