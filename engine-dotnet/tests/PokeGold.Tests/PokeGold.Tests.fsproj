@@ -44,6 +44,7 @@
     <Compile Include="MartTests.fs" />
     <Compile Include="EvosAttacksTests.fs" />
     <Compile Include="EvolutionTests.fs" />
+    <Compile Include="TradingTests.fs" />
     <Compile Include="BreedingTests.fs" />
     <Compile Include="MoveLearnTests.fs" />
     <Compile Include="StorageSaveTests.fs" />

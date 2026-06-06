@@ -102,6 +102,8 @@
     <Compile Include="Player\PartyMon.fs" />
     <Compile Include="Player\Breeding.fs" />
     <Compile Include="Player\Evolution.fs" />
+    <Compile Include="Player\Trading.fs" />
+    <Compile Include="Player\DexCompletion.fs" />
     <Compile Include="Player\MoveLearn.fs" />
     <Compile Include="Overworld\FieldMoves.fs" />
     <Compile Include="Player\Heal.fs" />
