@@ -20,14 +20,33 @@ open PokeGold.Game.Save
 type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldState) =
     let mutable state = initial
     /// The script flag/var/scene world — mutated as scripts run; persisted in M9.5.
-    let mutable world = World.empty
+    /// Seeded with Azalea-appropriate story flags so the boot state is coherent.
+    let mutable world =
+        World.empty
+        // Pre-game flags: player has starter, Elm quest done, Sprout Tower visited
+        |> World.setEvent "EVENT_GOT_A_POKEMON_FROM_ELM"
+        |> World.setEvent "EVENT_GAVE_MYSTERY_EGG_TO_ELM"
+        |> World.setEvent "EVENT_GOT_POKEDEX"
+        // Azalea: Team Rocket cleared, Slowpoke Well done
+        |> World.setEvent "EVENT_CLEARED_SLOWPOKE_WELL"
+        |> World.setEvent "EVENT_AZALEA_TOWN_SLOWPOKETAIL_ROCKET"
+        |> World.setEvent "EVENT_SLOWPOKE_WELL_ROCKETS"
+        // Gym badges earned so far (Falkner + Bugsy)
+        |> World.setFlag "ENGINE_ZEPHYRBADGE"
+        |> World.setFlag "ENGINE_HIVEBADGE"
+        |> World.setFlag "ENGINE_FLYPOINT_AZALEA"
+        |> World.setFlag "ENGINE_FLYPOINT_VIOLET"
+        |> World.setFlag "ENGINE_FLYPOINT_CHERRYGROVE"
+        |> World.setFlag "ENGINE_FLYPOINT_NEWBARK"
     /// The map's active scene name (gates coord triggers). Scene *progression* is
     /// deeper than M9, so this stays at the map's default; rival coords stay off.
     let activeScene = MapEvents.defaultScene initial.Events
     /// Coord triggers already fired this visit (fire-once).
     let mutable firedCoords: Set<int * int> = Set.empty
     /// The player's full persistent state (party, bag, dex, money, etc.).
-    let mutable player: PokeGold.Game.Player.PlayerState = PlayerStateOps.initial
+    /// Seeded with a debug party so the boot state is playable.
+    let mutable player: PokeGold.Game.Player.PlayerState =
+        DebugSeed.seed PlayerStateOps.initial
     /// Staged battle data for the next `startbattle` call.
     let mutable stagedWild: (string * int) option = None
     let mutable stagedTrainer: (string * string) option = None

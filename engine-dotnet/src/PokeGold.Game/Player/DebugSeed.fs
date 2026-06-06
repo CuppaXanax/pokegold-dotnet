@@ -8,12 +8,10 @@ module DebugSeed =
     /// four pockets, and several Pokédex flags. Safe to call multiple times
     /// (overwrites previous seed). Debug-only — never applied to a real save.
     let seed (player: PlayerState) : PlayerState =
-        let cyndaquil = PartyMon.create 155 5   // Cyndaquil L5
-        let pidgey = PartyMon.create 16 4        // Pidgey L4
-        // Make Pidgey have reduced HP so HP bars vary in the debug view
+        let cyndaquil = MoveLearn.seedStartingMoves (PartyMon.create 155 15)   // Cyndaquil L15
+        let pidgey = MoveLearn.seedStartingMoves (PartyMon.create 16 12)       // Pidgey L12
         let pidgeyWeak = { pidgey with Hp = max 1 (pidgey.MaxHp / 3) }
-        // Totodile L5 at full HP
-        let totodile = PartyMon.create 158 5
+        let totodile = MoveLearn.seedStartingMoves (PartyMon.create 158 14)    // Totodile L14
 
         let bag =
             Bag.empty
