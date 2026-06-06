@@ -123,7 +123,8 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
               Badges  = 3
               Options = { TextSpeed = 3; BoxBorder = 1; Sound = 0 }
               Pc = Unchecked.defaultof<_>
-              RepelSteps = 0 } }
+              RepelSteps = 0
+              PhoneContacts = [| "PHONE_ELM" |] } }
 
     let json = SaveFile.serialize save
 

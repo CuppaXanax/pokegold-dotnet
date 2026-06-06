@@ -137,6 +137,7 @@
     <Compile Include="Scenes\PlayerPCScene.fs" />
     <Compile Include="Scenes\PcMenuScene.fs" />
     <Compile Include="Scenes\PokedexScene.fs" />
+    <Compile Include="Scenes\PokegearScene.fs" />
     <Compile Include="Scenes\OptionsScene.fs" />
     <Compile Include="Scenes\SaveMenuScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />

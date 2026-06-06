@@ -72,6 +72,18 @@ let ``PartyMon MaxHp matches BattleMon for same species+level`` () =
 // --- SaveData v3 round-trip tests -----------------------------------------------
 
 [<Fact>]
+let ``PhoneContacts starts empty`` () =
+    Assert.True(PlayerStateOps.initial.PhoneContacts.IsEmpty)
+
+[<Fact>]
+let ``can add and check phone contacts`` () =
+    let player =
+        { PlayerStateOps.initial with
+            PhoneContacts = Set.add "PHONE_ELM" PlayerStateOps.initial.PhoneContacts }
+
+    Assert.True(Set.contains "PHONE_ELM" player.PhoneContacts)
+
+[<Fact>]
 let ``SaveData v3 round-trip preserves PlayerState`` () =
     let content = PokeGold.Game.Data.Content()
     let state = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Up

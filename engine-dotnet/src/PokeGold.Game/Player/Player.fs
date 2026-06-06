@@ -17,7 +17,8 @@ type PersistentPlayerState =
       Badges: int
       Options: GameOptions
       Pc: PcStorage
-      RepelSteps: int }
+      RepelSteps: int
+      PhoneContacts: Set<string> }
 
 /// Public alias for the persistent player state record.
 type PlayerState = PersistentPlayerState
@@ -47,7 +48,8 @@ module PlayerStateOps =
           Badges = 0
           Options = defaultOptions
           Pc = Storage.empty
-          RepelSteps = 0 }
+          RepelSteps = 0
+          PhoneContacts = Set.empty }
 
 module Repel =
 

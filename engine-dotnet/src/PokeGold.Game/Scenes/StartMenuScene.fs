@@ -5,12 +5,13 @@ open PokeGold.Game.Data
 open PokeGold.Game.Render
 open PokeGold.Game.Ui
 
-/// The six entries in the GSC start menu.
-/// (POKéGEAR is deferred to M20; STATUS/QUIT are out of scope.)
+/// The seven entries in the GSC start menu.
+/// (STATUS/QUIT are out of scope.)
 type StartEntry =
     | Pokedex
     | Pokemon
     | Pack
+    | Pokegear
     | Save
     | Option
     | Exit
@@ -26,11 +27,11 @@ type StartEntry =
 /// without consulting `openEntry`.
 type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?heldAtOpen: Buttons) =
 
-    // GSC order: POKéDEX, POKéMON, PACK, SAVE, OPTION, EXIT.
-    let entryLabels = [| "POKéDEX"; "POKéMON"; "PACK"; "SAVE"; "OPTION"; "EXIT" |]
-    let entryDUs    = [| Pokedex;   Pokemon;   Pack;  Save;  Option;  Exit   |]
+    // GSC order: POKéDEX, POKéMON, PACK, POKéGEAR, SAVE, OPTION, EXIT.
+    let entryLabels = [| "POKéDEX"; "POKéMON"; "PACK"; "POKéGEAR"; "SAVE"; "OPTION"; "EXIT" |]
+    let entryDUs    = [| Pokedex;   Pokemon;   Pack;  Pokegear;   Save;  Option;  Exit   |]
 
-    // All 6 entries always fit in the visible window — no scrolling needed.
+    // All 7 entries always fit in the visible window — no scrolling needed.
     let mutable menu = MenuList.create entryLabels.Length entryLabels.Length true
     // Seed the edge detector with the buttons that were held when the menu opened
     // (Start, typically) so that press doesn't immediately re-fire and close it.

@@ -530,6 +530,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             // result back into the overworld so fishing checks the
                             // facing water tile and stages fishEncounter here.
                             Push(PackScene(content, player, fun p -> player <- p) :> Scene)
+                        | Pokegear -> Push(PokegearScene(content.Font, player) :> Scene)
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop), buttons) :> Scene)

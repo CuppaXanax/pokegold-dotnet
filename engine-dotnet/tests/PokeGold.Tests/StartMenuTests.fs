@@ -48,22 +48,22 @@ let ``StartMenu Down moves cursor from 0 to 1`` () =
 [<Fact>]
 let ``StartMenu Down repeated moves through all entries`` () =
     let scene = StartMenuScene(Content(), fun _ -> Stay)
-    for expected in 1 .. 5 do
+    for expected in 1 .. 6 do
         pressDown scene |> ignore
         Assert.Equal(expected, scene.Cursor)
 
 [<Fact>]
-let ``StartMenu Down wraps from EXIT (5) back to POKéDEX (0)`` () =
+let ``StartMenu Down wraps from EXIT (6) back to POKéDEX (0)`` () =
     let scene = StartMenuScene(Content(), fun _ -> Stay)
-    for _ in 1 .. 6 do
+    for _ in 1 .. 7 do
         pressDown scene |> ignore
     Assert.Equal(0, scene.Cursor)
 
 [<Fact>]
-let ``StartMenu Up wraps from POKéDEX (0) to EXIT (5)`` () =
+let ``StartMenu Up wraps from POKéDEX (0) to EXIT (6)`` () =
     let scene = StartMenuScene(Content(), fun _ -> Stay)
     pressUp scene |> ignore
-    Assert.Equal(5, scene.Cursor)
+    Assert.Equal(6, scene.Cursor)
 
 [<Fact>]
 let ``StartMenu Up decrements cursor`` () =
@@ -103,24 +103,31 @@ let ``StartMenu A on PACK (index 2) calls openEntry with Pack`` () =
     Assert.Equal(Some Pack, getCaptured())
 
 [<Fact>]
-let ``StartMenu A on SAVE (index 3) calls openEntry with Save`` () =
+let ``StartMenu A on POKéGEAR (index 3) calls openEntry with Pokegear`` () =
     let scene, getCaptured = captureScene ()
     for _ in 1 .. 3 do pressDown scene |> ignore
+    pressA scene |> ignore
+    Assert.Equal(Some Pokegear, getCaptured())
+
+[<Fact>]
+let ``StartMenu A on SAVE (index 4) calls openEntry with Save`` () =
+    let scene, getCaptured = captureScene ()
+    for _ in 1 .. 4 do pressDown scene |> ignore
     pressA scene |> ignore
     Assert.Equal(Some Save, getCaptured())
 
 [<Fact>]
-let ``StartMenu A on OPTION (index 4) calls openEntry with Option`` () =
+let ``StartMenu A on OPTION (index 5) calls openEntry with Option`` () =
     let scene, getCaptured = captureScene ()
-    for _ in 1 .. 4 do pressDown scene |> ignore
+    for _ in 1 .. 5 do pressDown scene |> ignore
     pressA scene |> ignore
     Assert.Equal(Some Option, getCaptured())
 
 [<Fact>]
-let ``StartMenu A on EXIT (index 5) returns Pop without calling openEntry`` () =
+let ``StartMenu A on EXIT (index 6) returns Pop without calling openEntry`` () =
     let mutable called = false
     let scene = StartMenuScene(Content(), fun _ -> called <- true; Stay)
-    for _ in 1 .. 5 do pressDown scene |> ignore
+    for _ in 1 .. 6 do pressDown scene |> ignore
     let t = pressA scene
     Assert.Equal(Pop, t)
     Assert.False(called)

@@ -217,6 +217,29 @@ let ``halloffame sets EVENT_BEAT_ELITE_FOUR`` () =
     | other -> Assert.Fail($"expected HallOfFame effect, got {other}")
 
 [<Fact>]
+let ``real Kanto quest scripts still parse through their current opcode coverage`` () =
+    let powerPlant = AsmLoad.script "maps/PowerPlant.asm"
+    let ceruleanGym = AsmLoad.script "maps/CeruleanGym.asm"
+
+    Assert.Contains(
+        Unsupported("pause", [ "30" ]),
+        ScriptProgram.blockAt "PowerPlantGuardPhoneScript" powerPlant)
+
+    Assert.Contains(
+        Unsupported("sdefer", [ "CeruleanGymGruntRunsOutScript" ]),
+        ScriptProgram.blockAt "CeruleanGymGruntRunsOutScene" ceruleanGym)
+
+    Assert.Contains(
+        Unsupported("showemote", [ "EMOTE_SHOCK"; "CERULEANGYM_ROCKET"; "15" ]),
+        ScriptProgram.blockAt "CeruleanGymGruntRunsOutScript" ceruleanGym)
+
+[<Fact>]
+let ``S.S. Aqua is gated by EVENT_BEAT_ELITE_FOUR`` () =
+    let world = World.setEvent "EVENT_BEAT_ELITE_FOUR" World.empty
+
+    Assert.True(World.hasEvent "EVENT_BEAT_ELITE_FOUR" world)
+
+[<Fact>]
 let ``checktime sets script var to the current time-of-day`` () =
     let expected = TimeOfDay.toScriptVar (TimeOfDay.current())
     let prog =

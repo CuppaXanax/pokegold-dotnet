@@ -72,7 +72,8 @@ type PlayerSave =
       DexSeen: int[]; DexOwn: int[]
       Badges: int; Options: GameOptionsSave
       Pc: PcStorageSave
-      RepelSteps: int }
+      RepelSteps: int
+      PhoneContacts: string[] }
 
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
@@ -235,7 +236,8 @@ module SaveData =
           DexSeen = p.DexSeen |> Set.toArray; DexOwn = p.DexOwn |> Set.toArray
           Badges = p.Badges; Options = optionsToSave p.Options
           Pc = pcToSave p.Pc
-          RepelSteps = p.RepelSteps }
+          RepelSteps = p.RepelSteps
+          PhoneContacts = p.PhoneContacts |> Set.toArray }
 
     /// The PlayerState a save restores. For v1/v2 saves (no Player block),
     /// migrates the flat Bag to a pocketed Bag; party/dex/money start empty/zero.
@@ -257,7 +259,8 @@ module SaveData =
               Badges = ps.Badges
               Options = optionsOfSave ps.Options
               Pc = pcOfSave ps.Pc
-              RepelSteps = ps.RepelSteps }
+              RepelSteps = ps.RepelSteps
+              PhoneContacts = nullToEmpty ps.PhoneContacts |> Set.ofArray }
 
     /// Snapshot a live overworld plus its script world, bag, and player state into a save.
     let captureWith (s: OverworldState) (world: World) (player: PlayerState) : SaveData =
