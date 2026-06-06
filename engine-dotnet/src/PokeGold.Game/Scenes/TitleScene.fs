@@ -22,13 +22,14 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
     // 32×18 Game Boy BG map, not a packed 20×18 visible-screen map.
     let tilemap = Assets.readBytes "gfx/title/logo.tilemap"
 
-    // Ho-Oh palette: gold tones from title_fg.pal palette 1
+    // Ho-Oh palette: title_fg.pal palette 0 (OBJ palette 0, OAM attr = 0)
+    // Palette 1 (gold) is for the title trail, NOT Ho-Oh.
     let hoohPal =
         Palette.ofColors
             [ Palette.rgb555 31 31 31   // 0: transparent (skipped in sprite draw)
-              Palette.rgb555 31 31 0    // 1: gold
-              Palette.rgb555 26 22 0    // 2: dark gold
-              Palette.rgb555 0 0 0 ]    // 3: black
+              Palette.rgb555 7 6 3      // 1: dark brown
+              Palette.rgb555 7 6 3      // 2: dark brown
+              Palette.rgb555 7 6 3 ]    // 3: dark brown
 
     let bgPalettes =
         [| Palette.ofColors
@@ -67,10 +68,10 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
         | Some i -> i
         | None -> tilemap.Length
 
-    // OAM data for the Gold title Ho-Oh.  It is an 8×16 OBJ animation at
-    // depixel 12,11; the PNG is raw OBJ tile memory, not a pre-composed image.
-    let hoohOamX = 12 * 8
-    let hoohOamY = 11 * 8
+    // OAM data for the Gold title Ho-Oh. depixel 12,11 means Y=12*8, X=11*8
+    // (depixel stores Y,X not X,Y).
+    let hoohOamX = 11 * 8
+    let hoohOamY = 12 * 8
 
     let hoohFrames =
         [| [| (-4, -1, 0x00); (-3, -2, 0x02); (-3, 0, 0x04); (-2, -3, 0x06); (-2, -1, 0x08); (-2, 1, 0x0a); (-1, -3, 0x0c); (-1, -1, 0x0e); (-1, 1, 0x10); (0, -3, 0x12); (0, -1, 0x14); (0, 1, 0x16); (1, -3, 0x18); (1, -1, 0x1a); (1, 1, 0x1c); (2, -1, 0x1e); (2, 1, 0x20); (3, -2, 0x22); (3, 0, 0x24) |]
@@ -126,9 +127,6 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
                 drawTileTransparent fb hoohPal x y hoohTiles.[tileId]
                 drawTileTransparent fb hoohPal x (y + 8) hoohTiles.[tileId + 1]
 
-    [<Literal>]
-    let BlinkFrames = 30
-
     interface Scene with
         member _.Update(buttons: Buttons) : Transition =
             let edges = input.Update(buttons)
@@ -155,7 +153,6 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
 
             drawHoOhSprite fb
 
-            // Blinking "PRESS START"
-            let blink = frame % (BlinkFrames * 2) < BlinkFrames
-            if blink then
-                WindowRenderer.drawString fb content.Font textPal 3 17 "PRESS  START"
+            // "PRESS START" blinks over the blank area below the logo
+            if frame % 60 < 40 then
+                WindowRenderer.drawString fb content.Font textPal 3 16 "PRESS  START"
