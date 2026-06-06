@@ -1,5 +1,6 @@
 namespace PokeGold.DataGen
 
+open System
 open System.IO
 open System.Text.RegularExpressions
 
@@ -31,6 +32,123 @@ module Parsers =
                   match typeIds.TryFind m.Groups.[1].Value, typeIds.TryFind m.Groups.[2].Value with
                   | Some a, Some d -> yield (a, d), multValue m.Groups.[3].Value
                   | _ -> () ]
+
+    // --- Collision ---------------------------------------------------------
+
+    type CollisionData =
+        { Land: byte
+          Water: byte
+          Wall: byte
+          Permissions: byte[]
+          Tilesets: Map<string, byte[]> }
+
+    let private collisionConstRx = Regex(@"^\s*DEF\s+(\w+)\s+EQU\s+(.+?)\s*$", RegexOptions.IgnoreCase)
+
+    let private evalCollisionExpr (consts: Map<string, int>) (expr: string) : int =
+        let operand (tok: string) : int =
+            let t = tok.Trim()
+
+            if t.Length = 0 then 0
+            elif t.StartsWith "$" then Convert.ToInt32(t.Substring 1, 16)
+            elif t.StartsWith "0x" || t.StartsWith "0X" then Convert.ToInt32(t.Substring 2, 16)
+            else
+                match consts.TryFind t with
+                | Some v -> v
+                | None ->
+                    match System.Int32.TryParse t with
+                    | true, v -> v
+                    | _ -> 0
+
+        expr.Split('|')
+        |> Array.fold
+            (fun acc term ->
+                let v =
+                    term.Split([| "<<" |], System.StringSplitOptions.None)
+                    |> Array.map operand
+                    |> Array.reduce (fun a b -> a <<< b)
+
+                acc ||| v)
+            0
+
+    let private parseCollisionConstants (text: string) : Map<string, int> =
+        text.Split([| '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
+        |> Array.fold
+            (fun consts raw ->
+                let line =
+                    let i = raw.IndexOf(';')
+                    if i >= 0 then raw.Substring(0, i) else raw
+
+                let m = collisionConstRx.Match line
+
+                if m.Success then
+                    let name = m.Groups.[1].Value
+                    let value = evalCollisionExpr consts m.Groups.[2].Value
+                    Map.add name value consts
+                else
+                    consts)
+            Map.empty
+
+    let private parseCollisionPermissions (consts: Map<string, int>) (text: string) : byte[] =
+        text.Split([| '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
+        |> Array.choose (fun raw ->
+            let line =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            let t = line.Trim()
+
+            if t.StartsWith "db " then Some(byte (evalCollisionExpr consts (t.Substring 3)))
+            else None)
+
+    let private parseCollisionTileset (consts: Map<string, int>) (text: string) : byte[] =
+        text.Split([| '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
+        |> Array.choose (fun raw ->
+            let line =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            let t = line.Trim()
+
+            if t.StartsWith "tilecoll" then
+                let ids =
+                    t.Substring(8).Split(',')
+                    |> Array.map (fun s ->
+                        let name = "COLL_" + s.Trim()
+
+                        match consts.TryFind name with
+                        | Some v -> byte v
+                        | None -> 0uy)
+
+                if ids.Length = 4 then Some ids else None
+            else
+                None)
+        |> Array.concat
+
+    let collision : CollisionData =
+        let consts = parseCollisionConstants (Repo.readText "constants/collision_constants.asm")
+        let permissions = parseCollisionPermissions consts (Repo.readText "data/collision/collision_permissions.asm")
+
+        if permissions.Length <> 256 then
+            failwithf "Expected 256 collision permission bytes, found %d" permissions.Length
+
+        let tilesets =
+            Directory.GetFiles(Repo.path "data/tilesets", "*_collision.asm")
+            |> Array.map (fun path ->
+                let name = Path.GetFileNameWithoutExtension path
+                let tilesetName = name.Substring(0, name.Length - "_collision".Length)
+                tilesetName, parseCollisionTileset consts (File.ReadAllText path))
+            |> Map.ofArray
+
+        let lookup k =
+            match consts.TryFind k with
+            | Some v -> byte v
+            | None -> 0uy
+
+        { Land = lookup "LAND_TILE"
+          Water = lookup "WATER_TILE"
+          Wall = lookup "WALL_TILE"
+          Permissions = permissions
+          Tilesets = tilesets }
 
     // --- Species -----------------------------------------------------------
 

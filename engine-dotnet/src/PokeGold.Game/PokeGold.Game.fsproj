@@ -8,6 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\..\gfx\font\**\*.png" LinkBase="assets\gfx\font" />
+    <EmbeddedResource Include="..\..\..\gfx\tilesets\**\*.png" LinkBase="assets\gfx\tilesets" />
+    <EmbeddedResource Include="..\..\..\gfx\sprites\**\*.png" LinkBase="assets\gfx\sprites" />
+    <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
+    <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Core: framebuffer, assets, palettes, tiles, primitives, input. -->
     <Compile Include="Core\Display.fs" />
     <Compile Include="Core\Png.fs" />
@@ -31,6 +39,7 @@
          target below. -->
     <Compile Include="Data\Tileset.fs" />
     <Compile Include="Data\Map.fs" />
+    <Compile Include="Data\Generated\Collision.Generated.fs" />
     <Compile Include="Data\Collision.fs" />
     <Compile Include="Data\Sprite.fs" />
     <Compile Include="Data\Font.fs" />
@@ -189,6 +198,9 @@
     <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\map_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\item_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\collision_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)data\collision\collision_permissions.asm" />
+    <GameDataInput Include="$(RepoRoot)data\tilesets\*_collision.asm" />
     <GameDataInput Include="$(RepoRoot)data\types\type_matchups.asm" />
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
@@ -217,6 +229,7 @@
     <GameDataInput Include="$(RepoRoot)audio\sfx.asm" />
     <GameDataInput Include="$(RepoRoot)engine\events\std_scripts.asm" />
     <GameDataInput Include="$(RepoRoot)data\text\std_text.asm" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\Collision.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />

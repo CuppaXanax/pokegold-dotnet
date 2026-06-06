@@ -48,6 +48,36 @@ module Emit =
 
         sb.ToString()
 
+    let private collisionFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated collision constants and tileset block data.") |> ignore
+        sb.AppendLine("module CollisionData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let landTile : byte = 0x" + sprintf "%02X" (int Parsers.collision.Land) + "uy") |> ignore
+        sb.AppendLine("    let waterTile : byte = 0x" + sprintf "%02X" (int Parsers.collision.Water) + "uy") |> ignore
+        sb.AppendLine("    let wallTile : byte = 0x" + sprintf "%02X" (int Parsers.collision.Wall) + "uy") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let permissions : byte[] =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+        for b in Parsers.collision.Permissions do
+            sb.AppendLine(sprintf "            0x%02Xuy" (int b)) |> ignore
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let tilesets : Map<string, byte[]> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for (name, bytes) in Parsers.collision.Tilesets |> Map.toList |> List.sortBy fst do
+            sb.AppendLine(sprintf "            (\"%s\", [|" name) |> ignore
+            for b in bytes do
+                sb.AppendLine(sprintf "                0x%02Xuy" (int b)) |> ignore
+            sb.AppendLine("            |])") |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private speciesFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -363,6 +393,7 @@ module Emit =
     /// Generate all data files into `outDir`. Returns the list of (path, changed).
     let all (outDir: string) : (string * bool) list =
         [ "TypeChart.Generated.fs", typeChart ()
+          "Collision.Generated.fs", collisionFile ()
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
           "EvosAttacks.Generated.fs", evosAttacksFile ()

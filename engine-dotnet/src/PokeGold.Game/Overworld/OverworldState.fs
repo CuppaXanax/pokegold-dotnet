@@ -125,8 +125,8 @@ module OverworldState =
     /// in the tree yet simply isn't loadable (warps onto it are a no-op).
     let private canLoad (meta: MapMeta) : bool =
         let stem = tilesetStem meta
-        File.Exists(Assets.path $"maps/{meta.Blocks}.blk")
-        && File.Exists(Assets.path $"gfx/tilesets/{stem}.png")
+        Assets.exists $"maps/{meta.Blocks}.blk"
+        && Assets.exists $"gfx/tilesets/{stem}.png"
         && File.Exists(Assets.path $"data/tilesets/{stem}_collision.asm")
 
     /// Asset spec for a map id: the loaders needed to (re)build it, derived from the

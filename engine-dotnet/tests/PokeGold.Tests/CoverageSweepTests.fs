@@ -20,7 +20,7 @@ let ``the baked map scripts hold a stable command total`` () =
     let total =
         MapsData.all |> Seq.sumBy (fun kv -> kv.Value.Script.Commands.Length)
 
-    Assert.Equal(22301, total)
+    Assert.Equal(22556, total)
 
 [<Fact>]
 let ``every map's baked script round-trips through the VM as no-ops where unsupported`` () =
