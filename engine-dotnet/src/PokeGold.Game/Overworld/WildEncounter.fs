@@ -41,6 +41,30 @@ module WildEncounter =
     /// A single encounter table entry.
     type WildEntry = { Level: int; Species: string }
 
+    let private currentGrassTable (table: WildEncounterTable) : WildSlot list =
+        let hour = System.DateTime.Now.Hour
+
+        if hour >= 5 && hour < 12 then
+            table.GrassMorn
+        elif hour >= 12 && hour < 18 then
+            table.GrassDay
+        else
+            table.GrassNite
+
+    let private currentGrassRate (table: WildEncounterTable) : int =
+        let morn, day, nite = table.GrassRate
+        let hour = System.DateTime.Now.Hour
+
+        if hour >= 5 && hour < 12 then
+            morn
+        elif hour >= 12 && hour < 18 then
+            day
+        else
+            nite
+
+    let private currentWaterTable (table: WildEncounterTable) : WildSlot list =
+        table.Water
+
     /// Hardcoded fallback encounter table (Route 29-ish).
     /// Real tables will come from M16 data generation.
     let fallbackGrassTable : WildEntry[] =
@@ -83,22 +107,54 @@ module WildEncounter =
     let waterRate = 15
 
     /// Try to trigger a wild encounter. Returns Some (species, level) or None.
-    let tryEncounter (collId: byte) (rng: System.Random) (player: PokeGold.Game.Player.PlayerState) : (string * int) option =
+    let tryEncounter (mapName: string) (collId: byte) (rng: System.Random) (player: PokeGold.Game.Player.PlayerState) : (string * int) option =
         if not (isEncounterTile collId) then
             None
         else
-            let rate = if collId = CollWater then waterRate else grassRate
-            let encounterRoll = rng.Next(256)
+            let fallbackTable = if collId = CollWater then fallbackWaterTable else fallbackGrassTable
+            let fallbackRate = if collId = CollWater then waterRate else grassRate
 
-            if not (shouldEncounter rate encounterRoll) then
-                None
-            else
-                let table = if collId = CollWater then fallbackWaterTable else fallbackGrassTable
-                let slotRoll = rng.Next(100)
-                let slot = selectSlot slotRoll
-                let entry = table.[min slot (table.Length - 1)]
+            match WildEncounters.forMap mapName with
+            | Some table when collId = CollWater && table.WaterRate > 0 ->
+                let encounterRoll = rng.Next(256)
 
-                if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                if not (shouldEncounter table.WaterRate encounterRoll) then
                     None
                 else
-                    Some(entry.Species, entry.Level)
+                    let slotRoll = rng.Next(100)
+                    let slot = selectSlot slotRoll
+                    let entry = table.Water.[min slot (table.Water.Length - 1)]
+
+                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                        None
+                    else
+                        Some(entry.Species, entry.Level)
+            | Some table when collId <> CollWater && table.GrassRate <> (0, 0, 0) ->
+                let encounterRoll = rng.Next(256)
+                let rate = currentGrassRate table
+
+                if not (shouldEncounter rate encounterRoll) then
+                    None
+                else
+                    let slotRoll = rng.Next(100)
+                    let slot = selectSlot slotRoll
+                    let entry = currentGrassTable table |> fun slots -> slots.[min slot (slots.Length - 1)]
+
+                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                        None
+                    else
+                        Some(entry.Species, entry.Level)
+            | _ ->
+                let encounterRoll = rng.Next(256)
+
+                if not (shouldEncounter fallbackRate encounterRoll) then
+                    None
+                else
+                    let slotRoll = rng.Next(100)
+                    let slot = selectSlot slotRoll
+                    let entry = fallbackTable.[min slot (fallbackTable.Length - 1)]
+
+                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                        None
+                    else
+                        Some(entry.Species, entry.Level)

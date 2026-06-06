@@ -447,6 +447,162 @@ module Parsers =
         flush ()
         Map.ofList (List.ofSeq result)
 
+    // --- Wild encounters ------------------------------------------------------
+
+    type WildSlot =
+        { Level: int
+          Species: string }
+
+    type WildEncounterTable =
+        { Map: string
+          GrassRate: int * int * int
+          GrassMorn: WildSlot list
+          GrassDay: WildSlot list
+          GrassNite: WildSlot list
+          WaterRate: int
+          Water: WildSlot list }
+
+    let private wildGrassRx = Regex(@"^\s*def_grass_wildmons\s+(\w+)\s*$")
+    let private wildWaterRx = Regex(@"^\s*def_water_wildmons\s+(\w+)\s*$")
+    let private wildRateRx = Regex(@"^\s*db\s+(\d+)\s+percent(?:,\s*(\d+)\s+percent,\s*(\d+)\s+percent)?")
+    let private wildWaterRateRx = Regex(@"^\s*db\s+(\d+)\s+percent\s*$")
+    let private wildSlotRx = Regex(@"^\s*db\s+(\d+),\s*([A-Za-z_][A-Za-z0-9_]*)\s*$")
+
+    let private cleanAsmLine (raw: string) : string =
+        let i = raw.IndexOf(';')
+        if i >= 0 then raw.Substring(0, i) else raw
+        |> fun s -> s.Trim()
+
+    let private removeConditionalBranches (lines: string seq) : string list =
+        let mutable inConditional = false
+        let mutable includeConditional = false
+
+        [ for raw in lines do
+              let line = cleanAsmLine raw
+
+              if line.StartsWith("IF DEF(") then
+                  inConditional <- true
+                  includeConditional <- line.Contains("(_GOLD)")
+              elif line.StartsWith("ELIF DEF(") then
+                  includeConditional <- line.Contains("(_GOLD)")
+              elif line = "ENDC" then
+                  inConditional <- false
+                  includeConditional <- false
+              elif inConditional && not includeConditional then
+                  ()
+              else
+                  yield line ]
+
+    let private parseWildSlots (lines: string list) : WildSlot list =
+        [ for line in lines do
+              let m = wildSlotRx.Match line
+
+              if m.Success then
+                  yield { Level = int m.Groups.[1].Value
+                          Species = m.Groups.[2].Value } ]
+
+    let private parseWildEncounterFile (relativePath: string) : WildEncounterTable list =
+        let lines = removeConditionalBranches (Repo.readText(relativePath).Split('\n'))
+        let mutable currentMap = ""
+        let mutable currentKind = ""
+        let mutable currentRate = (0, 0, 0)
+        let mutable currentWaterRate = 0
+        let mutable currentGrassMorn = ResizeArray<WildSlot>()
+        let mutable currentGrassDay = ResizeArray<WildSlot>()
+        let mutable currentGrassNite = ResizeArray<WildSlot>()
+        let mutable currentWater = ResizeArray<WildSlot>()
+        let mutable currentSection = ""
+        let results = ResizeArray<WildEncounterTable>()
+
+        let flush () =
+            if currentMap <> "" then
+                results.Add
+                    { Map = currentMap
+                      GrassRate = currentRate
+                      GrassMorn = List.ofSeq currentGrassMorn
+                      GrassDay = List.ofSeq currentGrassDay
+                      GrassNite = List.ofSeq currentGrassNite
+                      WaterRate = currentWaterRate
+                      Water = List.ofSeq currentWater }
+
+            currentMap <- ""
+            currentKind <- ""
+            currentRate <- (0, 0, 0)
+            currentWaterRate <- 0
+            currentSection <- ""
+            currentGrassMorn <- ResizeArray<WildSlot>()
+            currentGrassDay <- ResizeArray<WildSlot>()
+            currentGrassNite <- ResizeArray<WildSlot>()
+            currentWater <- ResizeArray<WildSlot>()
+
+        for line in lines do
+            match wildGrassRx.Match line, wildWaterRx.Match line with
+            | m, _ when m.Success ->
+                flush ()
+                currentMap <- m.Groups.[1].Value
+                currentKind <- "grass"
+            | _, m when m.Success ->
+                flush ()
+                currentMap <- m.Groups.[1].Value
+                currentKind <- "water"
+            | _ when line.StartsWith("db ") && currentKind = "grass" && currentSection = "" ->
+                let m = wildRateRx.Match line
+
+                if m.Success then
+                    let a = int m.Groups.[1].Value
+                    let b = if m.Groups.[2].Success then int m.Groups.[2].Value else 0
+                    let c = if m.Groups.[3].Success then int m.Groups.[3].Value else 0
+                    currentRate <- (a, b, c)
+                    currentSection <- "morn"
+                else
+                    currentSection <- ""
+            | _ when line.StartsWith("db ") && currentKind = "water" && currentSection = "" ->
+                let m = wildWaterRateRx.Match line
+
+                if m.Success then
+                    currentWaterRate <- int m.Groups.[1].Value
+                    currentSection <- "water"
+                else
+                    currentSection <- ""
+            | _ when currentKind = "grass" && line.StartsWith("db ") && currentSection <> "" ->
+                let slots = parseWildSlots [ line ]
+
+                if slots.Length > 0 then
+                    let slot = slots.[0]
+
+                    match currentSection with
+                    | "morn" -> currentGrassMorn.Add slot
+                    | "day" -> currentGrassDay.Add slot
+                    | "nite" -> currentGrassNite.Add slot
+                    | _ -> ()
+
+                    if currentGrassMorn.Count = 7 && currentGrassDay.Count = 0 && currentGrassNite.Count = 0 then
+                        currentSection <- "day"
+                    elif currentGrassMorn.Count = 7 && currentGrassDay.Count = 7 && currentGrassNite.Count = 0 then
+                        currentSection <- "nite"
+            | _ when currentKind = "water" && line.StartsWith("db ") && currentSection = "water" ->
+                let slots = parseWildSlots [ line ]
+
+                if slots.Length > 0 then
+                    currentWater.Add slots.[0]
+            | _ when line.StartsWith("; morn") ->
+                currentSection <- "morn"
+            | _ when line.StartsWith("; day") ->
+                currentSection <- "day"
+            | _ when line.StartsWith("; nite") ->
+                currentSection <- "nite"
+            | _ -> ()
+
+        flush ()
+        List.ofSeq results
+
+    let wildEncounters : WildEncounterTable list =
+        [ "data/wild/johto_grass.asm"
+          "data/wild/kanto_grass.asm"
+          "data/wild/johto_water.asm"
+          "data/wild/kanto_water.asm" ]
+        |> List.collect parseWildEncounterFile
+
     // --- Items -----------------------------------------------------------------
 
     /// Intermediate record for one item parsed from the disassembly tables.

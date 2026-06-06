@@ -46,6 +46,7 @@
     <Compile Include="Data\Generated\Items.Generated.fs" />
     <Compile Include="Data\Generated\Marts.Generated.fs" />
     <Compile Include="Data\Generated\Trainers.Generated.fs" />
+    <Compile Include="Data\Generated\WildEncounters.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
@@ -54,6 +55,7 @@
     <Compile Include="Data\Content.fs" />
     <Compile Include="Data\Items.fs" />
     <Compile Include="Data\Trainers.fs" />
+    <Compile Include="Data\WildEncounters.fs" />
     <Compile Include="Data\Dex.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
@@ -187,6 +189,10 @@
     <GameDataInput Include="$(RepoRoot)data\items\descriptions.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\marts.asm" />
     <GameDataInput Include="$(RepoRoot)constants\mart_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\johto_grass.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\kanto_grass.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\johto_water.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\kanto_water.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\parties.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
@@ -212,6 +218,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Items.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Trainers.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\WildEncounters.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>
 

@@ -539,7 +539,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let mutable encounterTransition = Stay
                         let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors (fst after) (snd after)
 
-                        match WildEncounter.tryEncounter collId encounterRng player with
+                        match WildEncounter.tryEncounter state.MapId collId encounterRng player with
                         | Some(species, level) ->
                             stagedWild <- Some(species, level)
                             stagedTrainer <- None

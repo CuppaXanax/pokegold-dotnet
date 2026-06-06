@@ -285,6 +285,53 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private wildEncountersFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated wild encounter tables, keyed by map constant name.") |> ignore
+        sb.AppendLine("module WildEncountersData =") |> ignore
+        sb.AppendLine() |> ignore
+
+        let mergeWildEncounter (entries: Parsers.WildEncounterTable list) : Parsers.WildEncounterTable =
+            entries
+            |> List.fold
+                (fun acc entry ->
+                    { Map = entry.Map
+                      GrassRate = if entry.GrassRate <> (0, 0, 0) then entry.GrassRate else acc.GrassRate
+                      GrassMorn = if entry.GrassMorn <> [] then entry.GrassMorn else acc.GrassMorn
+                      GrassDay = if entry.GrassDay <> [] then entry.GrassDay else acc.GrassDay
+                      GrassNite = if entry.GrassNite <> [] then entry.GrassNite else acc.GrassNite
+                      WaterRate = if entry.WaterRate <> 0 then entry.WaterRate else acc.WaterRate
+                      Water = if entry.Water <> [] then entry.Water else acc.Water })
+                { Map = ""
+                  GrassRate = (0, 0, 0)
+                  GrassMorn = []
+                  GrassDay = []
+                  GrassNite = []
+                  WaterRate = 0
+                  Water = [] }
+
+        let entries =
+            Parsers.wildEncounters
+            |> List.groupBy (fun entry -> entry.Map)
+            |> List.map (fun (map, rows) -> mergeWildEncounter rows)
+
+        sb.AppendLine("    let all : Map<string, WildEncounterTable> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for entry in entries do
+            let a, b, c = entry.GrassRate
+            let grassMorn = entry.GrassMorn |> List.map (fun slot -> sprintf "{ Level = %d; Species = \"%s\" }" slot.Level slot.Species) |> String.concat "; "
+            let grassDay = entry.GrassDay |> List.map (fun slot -> sprintf "{ Level = %d; Species = \"%s\" }" slot.Level slot.Species) |> String.concat "; "
+            let grassNite = entry.GrassNite |> List.map (fun slot -> sprintf "{ Level = %d; Species = \"%s\" }" slot.Level slot.Species) |> String.concat "; "
+            let water = entry.Water |> List.map (fun slot -> sprintf "{ Level = %d; Species = \"%s\" }" slot.Level slot.Species) |> String.concat "; "
+            sb.AppendLine(sprintf "            (\"%s\", { Map = \"%s\"; GrassRate = (%d, %d, %d); GrassMorn = [ %s ]; GrassDay = [ %s ]; GrassNite = [ %s ]; WaterRate = %d; Water = [ %s ] })" entry.Map entry.Map a b c grassMorn grassDay grassNite entry.WaterRate water) |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private dexFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -327,6 +374,7 @@ module Emit =
           "Items.Generated.fs", itemsFile ()
           "Marts.Generated.fs", martsFile ()
           "Trainers.Generated.fs", trainersFile ()
+          "WildEncounters.Generated.fs", wildEncountersFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)

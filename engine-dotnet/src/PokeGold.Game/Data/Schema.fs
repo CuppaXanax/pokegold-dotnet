@@ -79,6 +79,21 @@ type DexEntry =
       WeightHg: int
       Description: string }
 
+/// A single wild encounter slot: a species at a level.
+type WildSlot =
+    { Level: int
+      Species: string }
+
+/// Per-map wild encounter data.
+type WildEncounterTable =
+    { Map: string
+      GrassRate: int * int * int
+      GrassMorn: WildSlot list
+      GrassDay: WildSlot list
+      GrassNite: WildSlot list
+      WaterRate: int
+      Water: WildSlot list }
+
 /// A single Pokémon in a trainer's party.
 type TrainerMon =
     { Species: string
