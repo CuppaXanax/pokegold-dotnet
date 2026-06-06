@@ -104,6 +104,25 @@ let ``story-gate branches on world events from the real map script`` () =
     Assert.Contains("Text_GearIsImpressive", defaultTexts)
     Assert.Contains("Text_YourMonIsAdorable", gatedTexts)
 
+[<Fact>]
+let ``dump title screen frames for visual inspection`` () =
+    let content = PokeGold.Game.Data.Content()
+    let fb = PokeGold.Game.Core.Framebuffer()
+    let title = PokeGold.Game.Scenes.TitleScene(content, fun () -> PokeGold.Game.Scenes.Transition.Stay) :> PokeGold.Game.Scenes.Scene
+    let dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pokegold-title")
+    System.IO.Directory.CreateDirectory(dir) |> ignore
+    for target in [0; 10; 20; 30; 40; 50] do
+        title.Update(PokeGold.Game.Core.Buttons.none) |> ignore
+        title.Render(fb)
+        let path = System.IO.Path.Combine(dir, $"f{target:D3}.png")
+        PokeGold.Game.Core.Png.writeFile path 160 144 fb.Pixels
+    // Advance between frames
+    for _ in 1..9 do title.Update(PokeGold.Game.Core.Buttons.none) |> ignore
+    title.Render(fb)
+    PokeGold.Game.Core.Png.writeFile (System.IO.Path.Combine(dir, "f060.png")) 160 144 fb.Pixels
+    System.Console.WriteLine($"Title frames saved to: {dir}")
+    Assert.True(System.IO.Directory.GetFiles(dir, "*.png").Length > 0)
+
 // T0.1: PartyMon with moves converts to BattleMon with moves
 [<Fact>]
 let ``T0.1 PartyMon with seeded moves converts to BattleMon with moves`` () =

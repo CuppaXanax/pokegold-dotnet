@@ -14,7 +14,19 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
     let textPal = TextRenderer.palette
 
     // Load tile sheets (NOT pre-composed images — raw tile data)
-    let hoohTiles = Image.loadTiles "gfx/title/hooh_gold.png"
+    let interleave8x16SpriteTiles tilesWide (tiles: Tile[]) =
+        let pairStride = tilesWide * 2
+
+        Array.init tiles.Length (fun vramId ->
+            let pairBase = (vramId / pairStride) * pairStride
+            let withinPair = vramId % pairStride
+            let sourceId = pairBase + (withinPair % 2) * tilesWide + withinPair / 2
+            tiles.[sourceId])
+
+    // The build runs tools/gfx --interleave for this PNG before placing it in
+    // VRAM, so OAM tile IDs address vertical 8×16 pairs rather than PNG row-major
+    // cells.
+    let hoohTiles = Image.loadTiles "gfx/title/hooh_gold.png" |> interleave8x16SpriteTiles 11
     let logoTopTiles = Image.loadTiles "gfx/title/logo_top_gold.png"
     let logoBotTiles = Image.loadTiles "gfx/title/logo_bottom_gold.png"
 
