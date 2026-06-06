@@ -73,7 +73,7 @@ module PartyMon =
         let moveDatas =
             mon.Moves
             |> List.choose (fun (moveId, _pp) ->
-                Moves.all |> Map.tryFind (string moveId))
+                Moves.tryByIndex moveId)
             |> List.truncate 4
         let bm = BattleMon.ofSpecies species mon.Level moveDatas
         { bm with Hp = min mon.Hp bm.MaxHp }

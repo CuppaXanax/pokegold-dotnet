@@ -124,7 +124,7 @@ let ``T0.2 battle between two real mons resolves`` () =
 // T0.5: EXP gain
 [<Fact>]
 let ``T0.5 EXP gain levels up a low-level mon`` () =
-    let exp = Experience.expGained 64 20 false
+    let exp = Experience.expGained 64 30 false  // 64*30/7 = 274 EXP; MedFast L5→L6 needs 216
     let lvl, _ = Experience.levelAfterExp 0 5 0 exp
     Assert.True(lvl > 5, $"should level up, got {lvl}")
 
@@ -143,7 +143,7 @@ let ``T0.10 Bulbasaur evolves to Ivysaur at L16`` () =
     | Some "IVYSAUR" -> ()
     | other -> Assert.Fail($"expected IVYSAUR, got {other}")
 
-// Verify all 8 Johto gym maps have their trainer labels
+// Verify all 8 Johto gym maps have battle-related labels
 [<Fact>]
 let ``T1 all Johto gym trainer labels exist`` () =
     let gyms = [
@@ -151,10 +151,13 @@ let ``T1 all Johto gym trainer labels exist`` () =
         "CianwoodGym"; "OlivineGym"; "MahoganyGym"; "BlackthornGym1F" ]
     for mapId in gyms do
         let prog = mapProgram mapId
-        let hasTrainer = prog.Labels |> Map.toSeq |> Seq.exists (fun (k, _) -> k.StartsWith "Trainer")
-        Assert.True(hasTrainer, $"{mapId} should have a Trainer label")
+        // Gym leaders use either the trainer macro (Trainer* label) or direct scripts
+        // with loadtrainer commands. Check that the gym has at least one loadtrainer.
+        let hasLoadtrainer = prog.Commands |> Array.exists (fun c ->
+            match c with Loadtrainer _ -> true | _ -> false)
+        Assert.True(hasLoadtrainer, $"{mapId} should have a loadtrainer command")
 
-// Verify all 8 Kanto gym maps exist and have trainer labels
+// Verify all 8 Kanto gym maps have battle-related labels
 [<Fact>]
 let ``T1 all Kanto gym trainer labels exist`` () =
     let gyms = [
@@ -162,8 +165,9 @@ let ``T1 all Kanto gym trainer labels exist`` () =
         "FuchsiaGym"; "SaffronGym"; "SeafoamGym"; "ViridianGym" ]
     for mapId in gyms do
         let prog = mapProgram mapId
-        let hasTrainer = prog.Labels |> Map.toSeq |> Seq.exists (fun (k, _) -> k.StartsWith "Trainer")
-        Assert.True(hasTrainer, $"{mapId} should have a Trainer label")
+        let hasLoadtrainer = prog.Commands |> Array.exists (fun c ->
+            match c with Loadtrainer _ -> true | _ -> false)
+        Assert.True(hasLoadtrainer, $"{mapId} should have a loadtrainer command")
 
 // Verify Elm's Lab has givepoke labels
 [<Fact>]
