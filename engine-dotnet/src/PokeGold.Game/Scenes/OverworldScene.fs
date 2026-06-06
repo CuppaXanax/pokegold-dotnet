@@ -11,6 +11,28 @@ open PokeGold.Game.Player
 open PokeGold.Game.Render
 open PokeGold.Game.Save
 
+module TrainerSight =
+    let private isInSightCone (npc: NpcObject) (px: int) (py: int) : bool =
+        let dx = px - npc.CellX
+        let dy = py - npc.CellY
+        let sight = npc.Event.Sight
+
+        if sight <= 0 then
+            false
+        else
+            match npc.Facing with
+            | Down -> dx = 0 && dy > 0 && dy <= sight
+            | Up -> dx = 0 && dy < 0 && -dy <= sight
+            | Left -> dy = 0 && dx < 0 && -dx <= sight
+            | Right -> dy = 0 && dx > 0 && dx <= sight
+
+    let checkTrainerSight (npcs: NpcObject[]) (px: int) (py: int) (world: World) : int option =
+        npcs
+        |> Array.tryFindIndex (fun npc ->
+            npc.Event.Type = "OBJECTTYPE_TRAINER"
+            && MapEvents.objectVisible world npc.Event
+            && isInSightCone npc px py)
+
 /// The walk-around-the-map scene. Owns the mutable overworld state plus the
 /// running-script bookkeeping that turns NPC/sign interactions and coord triggers
 /// into real GSC scripts: it drives the pure [`Script`] VM, enacting each
@@ -70,6 +92,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         match OverworldScene.musicFor mapId with
         | Some path -> sound.PlayMusic path
         | None -> ()
+
+    member private this.RunSceneScript(mapId: string) : Transition =
+        let sceneIdx = World.getScene mapId world
+        let sceneLabel = MapEvents.sceneAt sceneIdx state.Events
+
+        if sceneLabel <> "" && state.Script.Labels.ContainsKey sceneLabel then
+            this.Drive(Script.start sceneLabel world state.Script mapId)
+        else
+            Stay
 
     /// Resolve a text label to its M5 token string. Map-local text wins; std-script
     /// text (nurse prompts, bookshelves, signs) is the fallback; an unknown label
@@ -275,9 +306,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | Some ns ->
                     state <- ns
                     firedCoords <- Set.empty
-                | None -> ()
+                    let resumed = this.Drive(Script.resume None world vm)
 
-                this.Drive(Script.resume None world vm)
+                    match resumed with
+                    | Stay -> this.RunSceneScript ns.MapId
+                    | _ -> resumed
+                | None ->
+                    this.Drive(Script.resume None world vm)
 
     /// Begin an `applymovement`: resolve the symbolic actor to a live NPC and look up
     /// its baked movement script. Returns `true` if a run was started (the scene then
@@ -286,12 +321,51 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private _.TryStartMovement(vm: ScriptVm, objSym: string, label: string) : bool =
         let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
 
-        match OverworldState.objectIndexOf state.MapId objSym, OverworldState.movementScript state.MapId label with
-        | Some i, Some cmds when i >= 0 && i < state.Npcs.Length ->
-            let run = MovementRunner.start walkable cmds state.Npcs.[i]
-            runningMove <- Some(vm, i, run)
-            true
-        | _ -> false
+        if objSym = "PLAYER" then
+            match OverworldState.movementScript state.MapId label with
+            | Some cmds ->
+                let playerNpc : NpcObject =
+                    { Event =
+                        { X = state.Player.CellX
+                          Y = state.Player.CellY
+                          Sprite = ""
+                          Movement = ""
+                          RadiusX = 0
+                          RadiusY = 0
+                          Hour1 = 0
+                          Hour2 = 0
+                          Palette = ""
+                          Type = ""
+                          Sight = 0
+                          Script = ""
+                          EventFlag = None }
+                      Kind = StandStill
+                      HomeX = state.Player.CellX
+                      HomeY = state.Player.CellY
+                      RadiusX = 0
+                      RadiusY = 0
+                      CellX = state.Player.CellX
+                      CellY = state.Player.CellY
+                      SrcX = state.Player.SrcX
+                      SrcY = state.Player.SrcY
+                      Facing = state.Player.Facing
+                      Motion = NpcStanding
+                      Progress = 0
+                      AnimFrame = state.Player.AnimFrame
+                      Sleep = 0
+                      Seed = 0u }
+
+                let run = MovementRunner.start walkable cmds playerNpc
+                runningMove <- Some(vm, -1, run)
+                true
+            | None -> false
+        else
+            match OverworldState.objectIndexOf state.MapId objSym, OverworldState.movementScript state.MapId label with
+            | Some i, Some cmds when i >= 0 && i < state.Npcs.Length ->
+                let run = MovementRunner.start walkable cmds state.Npcs.[i]
+                runningMove <- Some(vm, i, run)
+                true
+            | _ -> false
 
     /// Load the Azalea Town overworld scene through the shared asset cache.
     static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
@@ -313,12 +387,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             |> World.setFlag "ENGINE_FLYPOINT_CHERRYGROVE"
             |> World.setFlag "ENGINE_FLYPOINT_NEWBARK"
         ow.Restore(debugWorld, DebugSeed.seed PlayerStateOps.initial)
+        ow.RunSceneScript ow.DebugState.MapId |> ignore
         ow
 
     /// Restore an overworld scene from a save (position, world flags, and player state).
     static member OfSave(content: Content, sound: ISoundBoard, save: SaveData) : OverworldScene =
         let scene = OverworldScene(content, sound, SaveData.apply content save)
         scene.Restore(SaveData.worldOf save, SaveData.playerOf save)
+        scene.RunSceneScript scene.DebugState.MapId |> ignore
         scene
 
     /// Snapshot this scene's persistable state (position, world flags, player state).
@@ -407,12 +483,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
                 let run' = MovementRunner.step walkable run
 
-                let npcs = Array.copy state.Npcs
+                if i = -1 then
+                    let playerMotion =
+                        match run'.Npc.Motion with
+                        | NpcWalking -> Walking
+                        | NpcStanding -> Standing
 
-                if i < npcs.Length then
-                    npcs.[i] <- run'.Npc
-
-                state <- { state with Npcs = npcs }
+                    state <-
+                        { state with
+                            Player =
+                                { state.Player with
+                                    CellX = run'.Npc.CellX
+                                    CellY = run'.Npc.CellY
+                                    Facing = run'.Npc.Facing
+                                    Motion = playerMotion
+                                    SrcX = run'.Npc.SrcX
+                                    SrcY = run'.Npc.SrcY
+                                    Progress = run'.Npc.Progress
+                                    AnimFrame = run'.Npc.AnimFrame } }
+                else
+                    let npcs = Array.copy state.Npcs
+                    if i < npcs.Length then
+                        npcs.[i] <- run'.Npc
+                    state <- { state with Npcs = npcs }
 
                 if run'.Done then
                     runningMove <- None
@@ -526,6 +619,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stagedLossText <- ""
                         lastBattleOutcome <- None
                         Some (if won then 1 else 0)
+                    | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
                     | _ -> None
 
                 this.Drive(Script.resume value world vm)
@@ -641,30 +735,40 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         match encounterTransition with
                         | Push _ -> encounterTransition
                         | _ ->
-                            // Stepping onto a warp tile sends the player to its paired
-                            // warp on the destination map (a no-op until that map is
-                            // wired up). Otherwise a coord trigger may fire.
-                            match MapEvents.warpAt (fst after) (snd after) state.Events with
-                            | Some w ->
-                                match OverworldState.tryWarp content w.DestMap w.DestWarp with
-                                | Some dest ->
-                                    state <- dest
-                                    this.PlayMapMusic dest.MapId
-                                    firedCoords <- Set.empty
-                                    Stay
-                                | None -> Stay
-                            | None ->
-                                let currentScene =
-                                    MapEvents.sceneAt (World.getScene state.MapId world) state.Events
+                            match TrainerSight.checkTrainerSight state.Npcs (fst after) (snd after) world with
+                            | Some npcIdx ->
+                                let npc = state.Npcs.[npcIdx]
 
-                                match Triggers.coordToFire currentScene firedCoords state.Events (fst after) (snd after) with
-                                | Some c when state.Script.Labels.ContainsKey c.Script ->
-                                    firedCoords <- Set.add after firedCoords
-                                    this.Drive(Script.start c.Script world state.Script state.MapId)
-                                | Some _ ->
-                                    firedCoords <- Set.add after firedCoords
+                                if state.Script.Labels.ContainsKey npc.Event.Script then
+                                    sound.PlaySfx "Sfx_Menu"
+                                    this.Drive(Script.start npc.Event.Script world state.Script state.MapId)
+                                else
                                     Stay
-                                | None -> Stay
+                            | None ->
+                                // Stepping onto a warp tile sends the player to its paired
+                                // warp on the destination map (a no-op until that map is
+                                // wired up). Otherwise a coord trigger may fire.
+                                match MapEvents.warpAt (fst after) (snd after) state.Events with
+                                | Some w ->
+                                    match OverworldState.tryWarp content w.DestMap w.DestWarp with
+                                    | Some dest ->
+                                        state <- dest
+                                        this.PlayMapMusic dest.MapId
+                                        firedCoords <- Set.empty
+                                        Stay
+                                    | None -> Stay
+                                | None ->
+                                    let currentScene =
+                                        MapEvents.sceneAt (World.getScene state.MapId world) state.Events
+
+                                    match Triggers.coordToFire currentScene firedCoords state.Events (fst after) (snd after) with
+                                    | Some c when state.Script.Labels.ContainsKey c.Script ->
+                                        firedCoords <- Set.add after firedCoords
+                                        this.Drive(Script.start c.Script world state.Script state.MapId)
+                                    | Some _ ->
+                                        firedCoords <- Set.add after firedCoords
+                                        Stay
+                                    | None -> Stay
 
         member this.Render(fb: Framebuffer) =
             OverworldRenderer.draw fb state

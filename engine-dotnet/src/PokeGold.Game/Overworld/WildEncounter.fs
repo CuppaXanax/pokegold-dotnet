@@ -105,10 +105,16 @@ module WildEncounter =
         if not (isEncounterTile collId) then
             None
         else
+            // Map IDs are like "Route29" but encounter tables use constants like "ROUTE_29"
+            let mapConst =
+                MapsData.byName mapName
+                |> Option.map (fun m -> m.Meta.Const)
+                |> Option.defaultValue mapName
+
             let fallbackTable = if collId = CollWater then fallbackWaterTable else fallbackGrassTable
             let fallbackRate = if collId = CollWater then waterRate else grassRate
 
-            match WildEncounters.forMap mapName with
+            match WildEncounters.forMap mapConst with
             | Some table when collId = CollWater && table.WaterRate > 0 ->
                 let encounterRoll = rng.Next(256)
 

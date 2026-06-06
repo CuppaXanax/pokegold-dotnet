@@ -222,6 +222,20 @@ let ``applymovementlasttalked maps to LAST_TALKED`` () =
     )
 
 [<Fact>]
+let ``sdefer parsed as sjump runs the deferred label`` () =
+    let prog =
+        parse
+            "CB:\n\n\n\
+             \tsdefer .Target\n\
+             \tendcallback\n\
+             .Target:\n\
+             \tjumptext TargetText\n"
+
+    match Script.start "CB" World.empty prog "" with
+    | { Outcome = Suspended(_, ShowText("TargetText", _)) } -> ()
+    | other -> Assert.Fail($"expected TargetText, got {other}")
+
+[<Fact>]
 let ``halloffame sets EVENT_BEAT_ELITE_FOUR`` () =
     let prog = parse "HoF:\n\thalloffame\n\tend\n"
 
@@ -240,7 +254,7 @@ let ``real Kanto quest scripts still parse through their current opcode coverage
         ScriptProgram.blockAt "PowerPlantGuardPhoneScript" powerPlant)
 
     Assert.Contains(
-        Unsupported("sdefer", [ "CeruleanGymGruntRunsOutScript" ]),
+        Sjump "CeruleanGymGruntRunsOutScript",
         ScriptProgram.blockAt "CeruleanGymGruntRunsOutScene" ceruleanGym)
 
     Assert.Contains(
