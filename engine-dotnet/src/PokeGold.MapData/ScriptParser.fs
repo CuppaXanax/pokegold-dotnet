@@ -115,6 +115,7 @@ module ScriptParser =
         | "yesorno" -> Some Yesorno
         // battle
         | "loadwildmon" -> Some(Loadwildmon(arg 0, i 1))
+        | "trade" -> Some(Unsupported("trade", args))
         | "givepoke" ->
             let item = if args.Length > 2 then Some(arg 2) else None
             Some(Givepoke(arg 0, i 1, item))

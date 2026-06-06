@@ -311,6 +311,7 @@ module Script =
                     run world (endLike vm)
                 | "givemoney"
                 | "takemoney" -> run world next
+                | "trade" -> run world next
                 | _ -> run world next
 
     /// Start a script at `label` over `world`, running until it suspends or ends.

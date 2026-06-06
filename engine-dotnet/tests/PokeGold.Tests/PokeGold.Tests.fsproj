@@ -44,9 +44,11 @@
     <Compile Include="MartTests.fs" />
     <Compile Include="EvosAttacksTests.fs" />
     <Compile Include="EvolutionTests.fs" />
+    <Compile Include="BreedingTests.fs" />
     <Compile Include="MoveLearnTests.fs" />
     <Compile Include="StorageSaveTests.fs" />
     <Compile Include="StorageOpsTests.fs" />
+    <Compile Include="ApricornTests.fs" />
     <Compile Include="PCBoxTests.fs" />
     <Compile Include="PcItemTests.fs" />
     <Compile Include="PlayerPCTests.fs" />

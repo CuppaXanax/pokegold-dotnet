@@ -2,6 +2,7 @@ module PokeGold.Tests.ScriptTests
 
 open Xunit
 open PokeGold.Game.Core
+open PokeGold.Game.Data
 open PokeGold.Game.Text
 open PokeGold.Game.Overworld.Script
 
@@ -179,6 +180,19 @@ let ``jump targets resolve to the labelled command index`` () =
     Assert.Equal(End, prog.Commands.[prog.Labels.["S.Tail"]])
 
 [<Fact>]
+let ``trade parses as an unsupported opcode`` () =
+    let prog =
+        parse
+            "S:\n\
+             \ttrade NPC_TRADE_KIM\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Unsupported("trade", [ "NPC_TRADE_KIM" ]); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
 let ``unmodelled opcodes become Unsupported but keep parsing`` () =
     let prog =
         parse
@@ -232,6 +246,23 @@ let ``real Kanto quest scripts still parse through their current opcode coverage
     Assert.Contains(
         Unsupported("showemote", [ "EMOTE_SHOCK"; "CERULEANGYM_ROCKET"; "15" ]),
         ScriptProgram.blockAt "CeruleanGymGruntRunsOutScript" ceruleanGym)
+
+[<Fact>]
+let ``legendary event flags can be set`` () =
+    let flags =
+        [ "EVENT_RELEASED_THE_BEASTS"
+          "EVENT_GOT_RED_GYARADOS"
+          "EVENT_BATTLED_LUGIA"
+          "EVENT_BATTLED_HO_OH"
+          "EVENT_BATTLED_CELEBI" ]
+
+    for flag in flags do
+        let world = World.setEvent flag World.empty
+        Assert.True(World.hasEvent flag world, $"{flag} should be settable")
+
+[<Fact>]
+let ``NPC trades table has entries`` () =
+    Assert.True(NpcTrades.trades.Length > 0)
 
 [<Fact>]
 let ``S.S. Aqua is gated by EVENT_BEAT_ELITE_FOUR`` () =

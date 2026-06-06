@@ -6,10 +6,18 @@ type GameOptions =
       BoxBorder: int   // 0-7, frame style
       Sound: int }     // 0=mono, 1=stereo
 
+type DayCareState =
+    { Mon1: PartyMon option
+      Mon2: PartyMon option
+      EggSteps: int
+      HasEgg: bool }
+
 /// The full persistent player state.
 type PersistentPlayerState =
     { Name: string
       Money: int
+      MomSavings: int
+      Coins: int
       Party: Party
       Bag: Bag
       DexSeen: Set<int>
@@ -18,7 +26,8 @@ type PersistentPlayerState =
       Options: GameOptions
       Pc: PcStorage
       RepelSteps: int
-      PhoneContacts: Set<string> }
+      PhoneContacts: Set<string>
+      DayCare: DayCareState }
 
 /// Public alias for the persistent player state record.
 type PlayerState = PersistentPlayerState
@@ -41,6 +50,8 @@ module PlayerStateOps =
     let initial =
         { Name = "PLAYER"
           Money = 3000
+          MomSavings = 0
+          Coins = 0
           Party = []
           Bag = Bag.empty
           DexSeen = Set.empty
@@ -49,7 +60,8 @@ module PlayerStateOps =
           Options = defaultOptions
           Pc = Storage.empty
           RepelSteps = 0
-          PhoneContacts = Set.empty }
+          PhoneContacts = Set.empty
+          DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false } }
 
 module Repel =
 

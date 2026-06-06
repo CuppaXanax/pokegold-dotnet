@@ -57,6 +57,7 @@
     <Compile Include="Data\Items.fs" />
     <Compile Include="Data\Trainers.fs" />
     <Compile Include="Data\WildEncounters.fs" />
+    <Compile Include="Data\NpcTrades.fs" />
     <Compile Include="Data\Dex.fs" />
     <!-- Overworld: immutable state + pure systems (movement, camera, anim). -->
     <Compile Include="Overworld\Player.fs" />
@@ -99,6 +100,7 @@
     <Compile Include="Battle\Experience.fs" />
     <!-- Player: persistent party, bag, dex state. -->
     <Compile Include="Player\PartyMon.fs" />
+    <Compile Include="Player\Breeding.fs" />
     <Compile Include="Player\Evolution.fs" />
     <Compile Include="Player\MoveLearn.fs" />
     <Compile Include="Overworld\FieldMoves.fs" />
@@ -108,6 +110,7 @@
     <Compile Include="Player\Mart.fs" />
     <Compile Include="Player\Storage.fs" />
     <Compile Include="Player\Player.fs" />
+    <Compile Include="Player\Apricorns.fs" />
     <Compile Include="Overworld\WildEncounter.fs" />
     <Compile Include="Player\BoxOps.fs" />
     <Compile Include="Player\PcItemOps.fs" />

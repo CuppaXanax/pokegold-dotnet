@@ -72,6 +72,14 @@ let ``PartyMon MaxHp matches BattleMon for same species+level`` () =
 // --- SaveData v3 round-trip tests -----------------------------------------------
 
 [<Fact>]
+let ``Mom savings defaults to 0`` () =
+    Assert.Equal(0, PlayerStateOps.initial.MomSavings)
+
+[<Fact>]
+let ``Coins defaults to 0`` () =
+    Assert.Equal(0, PlayerStateOps.initial.Coins)
+
+[<Fact>]
 let ``PhoneContacts starts empty`` () =
     Assert.True(PlayerStateOps.initial.PhoneContacts.IsEmpty)
 

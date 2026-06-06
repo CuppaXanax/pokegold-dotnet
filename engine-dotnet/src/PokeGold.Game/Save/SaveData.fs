@@ -65,15 +65,28 @@ type PocketSave = { Items: ItemSave[]; Balls: ItemSave[]; KeyItems: ItemSave[]; 
 type GameOptionsSave = { TextSpeed: int; BoxBorder: int; Sound: int }
 
 [<CLIMutable>]
+type DayCareSave =
+    { Mon1: PartyMonSave option
+      Mon2: PartyMonSave option
+      EggSteps: int
+      HasEgg: bool }
+
+[<CLIMutable>]
 type PlayerSave =
-    { Name: string; Money: int
+    { Name: string
+      Money: int
+      MomSavings: int
+      Coins: int
       Party: PartyMonSave[]
       PocketedBag: PocketSave
-      DexSeen: int[]; DexOwn: int[]
-      Badges: int; Options: GameOptionsSave
+      DexSeen: int[]
+      DexOwn: int[]
+      Badges: int
+      Options: GameOptionsSave
       Pc: PcStorageSave
       RepelSteps: int
-      PhoneContacts: string[] }
+      PhoneContacts: string[]
+      DayCare: DayCareSave }
 
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
@@ -91,7 +104,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 4
+    let CurrentVersion = 5
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -193,6 +206,21 @@ module SaveData =
         if box s = null then PlayerStateOps.defaultOptions
         else { TextSpeed = s.TextSpeed; BoxBorder = s.BoxBorder; Sound = s.Sound }
 
+    let private dayCareToSave (d: DayCareState) : DayCareSave =
+        { Mon1 = d.Mon1 |> Option.map partyMonToSave
+          Mon2 = d.Mon2 |> Option.map partyMonToSave
+          EggSteps = d.EggSteps
+          HasEgg = d.HasEgg }
+
+    let private dayCareOfSave (s: DayCareSave) : DayCareState =
+        if box s = null then
+            { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false }
+        else
+            { Mon1 = s.Mon1 |> Option.map partyMonOfSave
+              Mon2 = s.Mon2 |> Option.map partyMonOfSave
+              EggSteps = s.EggSteps
+              HasEgg = s.HasEgg }
+
     // PcStorage conversions
     let private mailToSave (m: Mail) : MailSave =
         { Author = m.Author; Body = m.Body; Species = m.Species }
@@ -230,14 +258,20 @@ module SaveData =
               Mailbox = nullToEmpty s.Mailbox |> Array.map mailOfSave |> Array.toList }
 
     let private playerToSave (p: PlayerState) : PlayerSave =
-        { Name = p.Name; Money = p.Money
+        { Name = p.Name
+          Money = p.Money
+          MomSavings = p.MomSavings
+          Coins = p.Coins
           Party = p.Party |> List.map partyMonToSave |> List.toArray
           PocketedBag = bagToSave p.Bag
-          DexSeen = p.DexSeen |> Set.toArray; DexOwn = p.DexOwn |> Set.toArray
-          Badges = p.Badges; Options = optionsToSave p.Options
+          DexSeen = p.DexSeen |> Set.toArray
+          DexOwn = p.DexOwn |> Set.toArray
+          Badges = p.Badges
+          Options = optionsToSave p.Options
           Pc = pcToSave p.Pc
           RepelSteps = p.RepelSteps
-          PhoneContacts = p.PhoneContacts |> Set.toArray }
+          PhoneContacts = p.PhoneContacts |> Set.toArray
+          DayCare = dayCareToSave p.DayCare }
 
     /// The PlayerState a save restores. For v1/v2 saves (no Player block),
     /// migrates the flat Bag to a pocketed Bag; party/dex/money start empty/zero.
@@ -252,6 +286,8 @@ module SaveData =
             let ps = save.Player
             { Name = nullToEmptyStr ps.Name
               Money = ps.Money
+              MomSavings = ps.MomSavings
+              Coins = ps.Coins
               Party = nullToEmpty ps.Party |> Array.map partyMonOfSave |> Array.toList
               Bag = bagOfSave ps.PocketedBag
               DexSeen = nullToEmpty ps.DexSeen |> Set.ofArray
@@ -260,7 +296,8 @@ module SaveData =
               Options = optionsOfSave ps.Options
               Pc = pcOfSave ps.Pc
               RepelSteps = ps.RepelSteps
-              PhoneContacts = nullToEmpty ps.PhoneContacts |> Set.ofArray }
+              PhoneContacts = nullToEmpty ps.PhoneContacts |> Set.ofArray
+              DayCare = dayCareOfSave ps.DayCare }
 
     /// Snapshot a live overworld plus its script world, bag, and player state into a save.
     let captureWith (s: OverworldState) (world: World) (player: PlayerState) : SaveData =

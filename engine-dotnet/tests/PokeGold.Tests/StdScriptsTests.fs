@@ -196,6 +196,11 @@ let ``Azalea nurse heal restores a fainted party`` () =
 // ---- Real-map acceptance: Mart clerk opens the shop ------------------------
 
 [<Fact>]
+let ``Ruins of Alph puzzle flags can be set`` () =
+    let world = World.setEvent "EVENT_SOLVED_KABUTO_PUZZLE" World.empty
+    Assert.True(World.hasEvent "EVENT_SOLVED_KABUTO_PUZZLE" world)
+
+[<Fact>]
 let ``Azalea mart clerk script reaches OpenMart`` () =
     let reached =
         driveUntil

@@ -116,6 +116,8 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
           Player =
             { Name = "RED"
               Money = 12345
+              MomSavings = 0
+              Coins = 0
               Party = [||]
               PocketedBag = { Items = [||]; Balls = [||]; KeyItems = [||]; TmHm = [||] }
               DexSeen = [| 1; 4; 7 |]
@@ -124,7 +126,8 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
               Options = { TextSpeed = 3; BoxBorder = 1; Sound = 0 }
               Pc = Unchecked.defaultof<_>
               RepelSteps = 0
-              PhoneContacts = [| "PHONE_ELM" |] } }
+              PhoneContacts = [| "PHONE_ELM" |]
+              DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false } } }
 
     let json = SaveFile.serialize save
 
