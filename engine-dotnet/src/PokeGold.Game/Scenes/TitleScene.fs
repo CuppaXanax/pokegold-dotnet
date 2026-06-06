@@ -7,26 +7,29 @@ open PokeGold.Game.Ui
 
 /// The title screen shown before the overworld starts.
 /// Renders the real Ho-Oh sprite and Pokemon Gold logo from the disassembly
-/// assets, with a blinking "PRESS START" prompt.
+/// assets using the logo.tilemap for correct tile arrangement.
 type TitleScene(content: Content, onStart: unit -> Transition) =
     let mutable frame = 0
     let input = EdgeDetector()
     let textPal = TextRenderer.palette
 
-    // Load title assets as tile arrays
+    // Load tile sheets (NOT pre-composed images — raw tile data)
     let hoohTiles = Image.loadTiles "gfx/title/hooh_gold.png"
     let logoTopTiles = Image.loadTiles "gfx/title/logo_top_gold.png"
     let logoBotTiles = Image.loadTiles "gfx/title/logo_bottom_gold.png"
 
-    // Ho-Oh palette: gold/brown/dark from the title_fg.pal (palette 1)
+    // Load the tilemap that arranges logo tiles on screen (20 tiles wide × 18 rows)
+    let tilemap = Assets.readBytes "gfx/title/logo.tilemap"
+
+    // Ho-Oh palette: gold tones from title_fg.pal palette 1
     let hoohPal =
         Palette.ofColors
-            [ Palette.rgb555 31 31 31   // lightest (white)
-              Palette.rgb555 31 31 0    // gold
-              Palette.rgb555 26 22 0    // dark gold
-              Palette.rgb555 0 0 0 ]    // black
+            [ Palette.rgb555 31 31 31   // 0: transparent (skipped in sprite draw)
+              Palette.rgb555 31 31 0    // 1: gold
+              Palette.rgb555 26 22 0    // 2: dark gold
+              Palette.rgb555 0 0 0 ]    // 3: black
 
-    // Logo palette: blue sky background tones from title_bg_gold.pal
+    // Logo palette from title_bg_gold.pal
     let logoPal =
         Palette.ofColors
             [ Palette.rgb555 31 31 31   // white
@@ -34,25 +37,20 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
               Palette.rgb555 15 20 31   // mid blue
               Palette.rgb555 0 0 0 ]    // black
 
-    // Background color: the blue sky from the title
     let bgColor = Palette.rgb555 15 20 31
 
-    // Layout constants (160x144 screen)
-    // Logo top: 160x24 at y=0
-    // Ho-Oh: 88x64 centered at y=24
-    // Logo bottom: 160x48 at y=88
-    // "PRESS START" text at row 17 (y=136)
-    let logoTopY = 0
-    let hoohX = (160 - 88) / 2  // centered = 36
-    let hoohY = 24
-    let logoBotY = 88
+    // Ho-Oh dimensions: 88px wide = 11 tiles, centered on 160px screen
+    let hoohTilesWide = 11
+    let hoohX = (160 - 88) / 2  // 36
+    let hoohY = 40              // positioned below logo top rows
 
-    /// Draw a tile array as a grid with given tiles-wide, at pixel (ox, oy).
-    let drawTileGrid (fb: Framebuffer) (pal: Palette) (tiles: Tile[]) (tilesWide: int) (ox: int) (oy: int) =
-        for i in 0..tiles.Length - 1 do
-            let tx = (i % tilesWide) * 8
-            let ty = (i / tilesWide) * 8
-            Graphics.drawTile fb pal (ox + tx) (oy + ty) tiles.[i]
+    /// Resolve a tilemap ID to a tile from the appropriate sheet.
+    /// IDs 0-79: logo_bottom tiles; 80: blank; 128-187: logo_top tiles
+    let resolveTile (id: int) : Tile option =
+        if id = 80 then None  // blank
+        elif id >= 128 && id - 128 < logoTopTiles.Length then Some logoTopTiles.[id - 128]
+        elif id >= 0 && id < logoBotTiles.Length then Some logoBotTiles.[id]
+        else None
 
     [<Literal>]
     let BlinkFrames = 30
@@ -70,14 +68,28 @@ type TitleScene(content: Content, onStart: unit -> Transition) =
                 for x in 0..Display.Width - 1 do
                     fb.SetPixel(x, y, bgColor.R, bgColor.G, bgColor.B, bgColor.A)
 
-            // Logo top (160px wide = 20 tiles)
-            drawTileGrid fb logoPal logoTopTiles 20 0 logoTopY
+            // Draw Ho-Oh as a sprite (index 0 = transparent) FIRST (behind logo)
+            for i in 0..hoohTiles.Length - 1 do
+                let tx = (i % hoohTilesWide) * 8
+                let ty = (i / hoohTilesWide) * 8
+                let tile = hoohTiles.[i]
+                for row in 0..7 do
+                    for col in 0..7 do
+                        let idx = int tile.Pixels.[row * 8 + col]
+                        if idx > 0 && idx < hoohPal.Colors.Length then
+                            let c = hoohPal.Colors.[idx]
+                            fb.SetPixel(hoohX + tx + col, hoohY + ty + row, c.R, c.G, c.B, c.A)
 
-            // Ho-Oh sprite (88px wide = 11 tiles), centered
-            drawTileGrid fb hoohPal hoohTiles 11 hoohX hoohY
-
-            // Logo bottom (160px wide = 20 tiles)
-            drawTileGrid fb logoPal logoBotTiles 20 0 logoBotY
+            // Draw the logo using the tilemap (20 tiles wide, 18 rows visible)
+            let rows = min 18 (tilemap.Length / 20)
+            for r in 0..rows - 1 do
+                for c in 0..19 do
+                    let idx = r * 20 + c
+                    if idx < tilemap.Length then
+                        let tileId = int tilemap.[idx]
+                        match resolveTile tileId with
+                        | Some tile -> Graphics.drawTile fb logoPal (c * 8) (r * 8) tile
+                        | None -> ()  // blank tile — sky shows through
 
             // Blinking "PRESS START"
             let blink = frame % (BlinkFrames * 2) < BlinkFrames
