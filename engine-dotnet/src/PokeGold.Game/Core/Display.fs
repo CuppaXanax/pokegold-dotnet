@@ -47,3 +47,18 @@ type Framebuffer() =
             pixels.[i + 1] <- g
             pixels.[i + 2] <- b
             pixels.[i + 3] <- a
+
+    /// Blend a color over the current pixel using the supplied alpha.
+    member _.BlendPixel(x: int, y: int, r: byte, g: byte, b: byte, a: byte) =
+        if x >= 0 && x < Display.Width && y >= 0 && y < Display.Height then
+            let i = (y * Display.Width + x) * 4
+            let alpha = int a
+            let inv = 255 - alpha
+            let outR = byte ((int pixels.[i] * inv + int r * alpha) / 255)
+            let outG = byte ((int pixels.[i + 1] * inv + int g * alpha) / 255)
+            let outB = byte ((int pixels.[i + 2] * inv + int b * alpha) / 255)
+            let outA = byte ((int pixels.[i + 3] * inv + int a * alpha) / 255)
+            pixels.[i] <- outR
+            pixels.[i + 1] <- outG
+            pixels.[i + 2] <- outB
+            pixels.[i + 3] <- outA

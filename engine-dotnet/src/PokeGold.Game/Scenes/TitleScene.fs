@@ -6,7 +6,7 @@ open PokeGold.Game.Render
 open PokeGold.Game.Ui
 
 /// The title screen shown before the overworld starts.
-type TitleScene(content: Content, overworld: Scene) =
+type TitleScene(content: Content, onStart: unit -> Transition) =
     let mutable frame = 0
     let input = EdgeDetector()
     let palette = TextRenderer.palette
@@ -26,7 +26,7 @@ type TitleScene(content: Content, overworld: Scene) =
             frame <- frame + 1
 
             if edges.A || edges.Start then
-                Replace(overworld)
+                onStart()
             else
                 Stay
 

@@ -35,52 +35,43 @@ let ``except with an empty mask is identity`` () =
 /// The active (top) scene type, read through the debug command bridge.
 let private topScene (g: Game) = g.RunDebugCommand "scene"
 
-let private startOverworld () =
+let private startMainMenu () =
     let g = Game()
     g.Tick({ Buttons.none with Start = true })
     g.Tick(Buttons.none)
     g
 
 [<Fact>]
-let ``holding Start keeps the start menu open instead of flickering`` () =
-    let g = startOverworld ()
+let ``holding Start keeps the main menu open instead of flickering`` () =
+    let g = startMainMenu ()
     let start = { Buttons.none with Start = true }
-    Assert.Equal("OverworldScene", topScene g)
 
-    g.Tick(start)                                    // rising edge opens the menu
-    Assert.Equal("StartMenuScene", topScene g)
+    Assert.Equal("MainMenuScene", topScene g)
 
-    g.Tick(start)                                    // Start STILL held → masked
-    Assert.Equal("StartMenuScene", topScene g)       // must not close (the flicker)
+    g.Tick(start)                                    // Start still held → masked
+    Assert.Equal("MainMenuScene", topScene g)
 
     g.Tick(start)                                    // and again while held
-    Assert.Equal("StartMenuScene", topScene g)
+    Assert.Equal("MainMenuScene", topScene g)
 
 [<Fact>]
-let ``releasing then re-pressing Start closes the start menu`` () =
-    let g = startOverworld ()
+let ``releasing then re-pressing Start keeps the main menu open`` () =
+    let g = startMainMenu ()
     let start = { Buttons.none with Start = true }
 
-    g.Tick(start)                                    // open
-    Assert.Equal("StartMenuScene", topScene g)
-    g.Tick(Buttons.none)                             // release (mask clears)
-    Assert.Equal("StartMenuScene", topScene g)
-    g.Tick(start)                                    // fresh press closes
-    Assert.Equal("OverworldScene", topScene g)
+    Assert.Equal("MainMenuScene", topScene g)
+    g.Tick(Buttons.none)                             // release input
+    Assert.Equal("MainMenuScene", topScene g)
+    g.Tick(start)                                    // fresh press does not close the menu
+    Assert.Equal("MainMenuScene", topScene g)
 
 [<Fact>]
-let ``the A that opens a submenu does not bleed into it`` () =
-    // Open the start menu, then press A on the default entry (POKéDEX) to push a
-    // child scene. Holding A across the transition must not act inside the child:
-    // the systemic input mask hides the carried-over A until it's released.
-    let g = startOverworld ()
-    g.Tick({ Buttons.none with Start = true })       // open start menu
-    g.Tick(Buttons.none)                             // release Start
-    Assert.Equal("StartMenuScene", topScene g)
+let ``the A that opens the naming screen does not bleed into it`` () =
+    let g = startMainMenu ()
 
-    g.Tick({ Buttons.none with A = true })           // A opens POKéDEX child
+    g.Tick({ Buttons.none with A = true })           // A opens the naming screen
     let child = topScene g
-    Assert.True(child <> "StartMenuScene")           // a child scene is now on top
+    Assert.True(child <> "MainMenuScene")           // a child scene is now on top
 
     g.Tick({ Buttons.none with A = true })           // A still held → masked
     Assert.Equal(child, topScene g)                  // child stays open, no bleed

@@ -17,6 +17,8 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
     let mutable box : TextBoxState option = None
     let mutable cursor = 0
     let mutable prev = Buttons.none
+    let mutable animFrames = 0
+    let mutable currentAnim = NoAnim
 
     /// Build the demo encounter: the player's CYNDAQUIL vs a wild PIDGEY.
     static member StartDemo(content: Content) : BattleScene =
@@ -31,57 +33,73 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
             let edge (now: bool) (was: bool) = now && not was
             let startedWithBox = box.IsSome
 
-            // Advance the active message box.
-            match box with
-            | Some b ->
-                let b2 = TextBox.tick buttons b
-                box <- (if b2.Done then None else Some b2)
-            | None -> ()
+            if animFrames > 0 then
+                animFrames <- animFrames - 1
+                prev <- buttons
+                Stay
+            else
+                // Advance the active message box.
+                match box with
+                | Some b ->
+                    let b2 = TextBox.tick buttons b
+                    box <- (if b2.Done then None else Some b2)
+                | None -> ()
 
-            let result =
-                if box.IsSome then
-                    Stay
-                else
-                    match queue with
-                    | msg :: rest ->
-                        // Start the next queued message.
-                        queue <- rest
-                        box <- Some(TextBox.ofString (BattleScene.wrap msg))
+                let result =
+                    if box.IsSome then
                         Stay
-                    | [] ->
-                        if Battle.isOver state then
-                            onBattleEnd state
-                            Pop
-                        elif startedWithBox then
-                            // Don't read the dismiss press as a menu action this frame.
+                    else
+                        match queue with
+                        | msg :: rest ->
+                            // Start the next queued message.
+                            queue <- rest
+                            box <- Some(TextBox.ofString (BattleScene.wrap msg))
                             Stay
-                        else
-                            let moves = state.Player.Moves
+                        | [] ->
+                            if Battle.isOver state then
+                                onBattleEnd state
+                                Pop
+                            elif startedWithBox then
+                                // Don't read the dismiss press as a menu action this frame.
+                                Stay
+                            else
+                                let moves = state.Player.Moves
 
-                            if BattleMon.mustStruggle state.Player then
-                                // All PP exhausted — auto-Struggle (pass index 0, ignored).
-                                state <- Battle.chooseMove 0 state
-                                queue <- state.Messages
-                            elif edge buttons.Down prev.Down then
-                                cursor <- min (moves.Length - 1) (cursor + 1)
-                            elif edge buttons.Up prev.Up then
-                                cursor <- max 0 (cursor - 1)
-                            elif edge buttons.A prev.A then
-                                if BattleMon.canUseMove cursor state.Player then
-                                    state <- Battle.chooseMove cursor state
+                                if BattleMon.mustStruggle state.Player then
+                                    let move = moves |> List.tryHead |> Option.defaultValue (Moves.byName "STRUGGLE")
+                                    state <- Battle.chooseMove 0 state
                                     queue <- state.Messages
-                                // else: 0 PP — do nothing (move blocked)
-                            elif edge buttons.B prev.B then
-                                state <- Battle.run state
-                                queue <- state.Messages
+                                    currentAnim <- BattleAnim.effectForMove move
+                                    animFrames <- BattleAnim.duration currentAnim
+                                elif edge buttons.Down prev.Down then
+                                    cursor <- min (moves.Length - 1) (cursor + 1)
+                                elif edge buttons.Up prev.Up then
+                                    cursor <- max 0 (cursor - 1)
+                                elif edge buttons.A prev.A then
+                                    if BattleMon.canUseMove cursor state.Player then
+                                        let move = moves.[cursor]
+                                        state <- Battle.chooseMove cursor state
+                                        queue <- state.Messages
+                                        currentAnim <- BattleAnim.effectForMove move
+                                        animFrames <- BattleAnim.duration currentAnim
+                                    // else: 0 PP — do nothing (move blocked)
+                                elif edge buttons.B prev.B then
+                                    state <- Battle.run state
+                                    queue <- state.Messages
 
-                            Stay
+                                Stay
 
-            prev <- buttons
-            result
+                prev <- buttons
+                result
 
         member _.Render(fb: Framebuffer) =
             BattleRenderer.drawField fb font state
+
+            if animFrames > 0 then
+                let r, g, b, a = BattleAnim.tintColor currentAnim
+                for y in 0 .. Display.Height - 1 do
+                    for x in 0 .. Display.Width - 1 do
+                        fb.BlendPixel(x, y, r, g, b, a)
 
             match box with
             | Some b -> TextRenderer.draw fb font b

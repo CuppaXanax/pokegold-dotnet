@@ -146,6 +146,8 @@
     <Compile Include="Scenes\PokegearScene.fs" />
     <Compile Include="Scenes\OptionsScene.fs" />
     <Compile Include="Scenes\SaveMenuScene.fs" />
+    <Compile Include="Scenes\MainMenuScene.fs" />
+    <Compile Include="Scenes\NamingScene.fs" />
     <Compile Include="Scenes\TitleScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Debug command pipe (T1): inspect/poke a running instance. -->

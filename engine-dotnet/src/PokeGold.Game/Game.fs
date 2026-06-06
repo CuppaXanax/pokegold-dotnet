@@ -4,6 +4,9 @@ open System.Collections.Generic
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Audio
+open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
 open PokeGold.Game.Save
 open PokeGold.Game.Scenes
 open PokeGold.Game.Debug
@@ -22,7 +25,27 @@ type Game() =
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
     let mutable overworld = OverworldScene.Load(content, audio)
-    let titleScene = TitleScene(content, overworld :> Scene)
+    let hasSave = SaveFile.tryRead() |> Option.isSome
+
+    let newGameScene (name: string) : OverworldScene =
+        let state = OverworldState.loadById content "NewBarkTown"
+        let ow = OverworldScene(content, audio, state)
+        ow.Restore(World.empty, { PlayerStateOps.initial with Name = name })
+        ow
+
+    let titleScene =
+        TitleScene(content, fun () ->
+            Replace(
+                MainMenuScene(
+                    content,
+                    audio,
+                    hasSave,
+                    (fun () -> Replace(NamingScene(content.Font, "ENTER NAME", fun name -> Replace(newGameScene name)))),
+                    (fun () ->
+                        match SaveFile.tryRead() with
+                        | Some save -> Replace(OverworldScene.OfSave(content, audio, save))
+                        | None -> Stay),
+                    (fun () -> Push(OptionsScene(content, PlayerStateOps.initial, fun _ -> ()))))))
     /// The debug command bridge. Background clients (the named pipe) submit
     /// commands here; they're drained on the game thread each Tick via `Pump`.
     let debug = DebugChannel()
@@ -47,6 +70,10 @@ type Game() =
         overworld <- ow
         scenes.Clear()
         scenes.Push(ow :> Scene)
+
+    /// Start a fresh adventure with a clean world and player state.
+    member this.NewGame(playerName: string) =
+        this.ResetTo(newGameScene playerName)
 
     /// The framebuffer the host should present after each Tick.
     member _.Framebuffer = framebuffer
