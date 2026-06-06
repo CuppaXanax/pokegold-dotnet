@@ -142,6 +142,8 @@ module ScriptParser =
         // mart
         | "pokemart" -> Some(Pokemart(arg 0, arg 1))
         // map & warp
+        | "halloffame" -> Some(Unsupported(mn, args))
+        | "credits" -> Some(Unsupported(mn, args))
         | "callback" -> Some(Unsupported(mn, args))
         | "warp" -> Some(Warp(arg 0, i 1, i 2))
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))

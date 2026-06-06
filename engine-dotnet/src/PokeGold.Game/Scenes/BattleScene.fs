@@ -10,9 +10,10 @@ open PokeGold.Game.Battle
 /// typewriter box (word-wrapped, each message waiting for a button), then shows
 /// the move menu. Selecting a move resolves a full turn and enqueues its
 /// messages; the scene pops when the battle ends.
-type BattleScene(font: Font, initial: BattleState) =
+type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> unit) =
     let mutable state = initial
     let mutable queue : string list = initial.Messages
+    let onBattleEnd = defaultArg onBattleEnd (fun _ -> ())
     let mutable box : TextBoxState option = None
     let mutable cursor = 0
     let mutable prev = Buttons.none
@@ -48,7 +49,9 @@ type BattleScene(font: Font, initial: BattleState) =
                         box <- Some(TextBox.ofString (BattleScene.wrap msg))
                         Stay
                     | [] ->
-                        if Battle.isOver state then Pop
+                        if Battle.isOver state then
+                            onBattleEnd state
+                            Pop
                         elif startedWithBox then
                             // Don't read the dismiss press as a menu action this frame.
                             Stay

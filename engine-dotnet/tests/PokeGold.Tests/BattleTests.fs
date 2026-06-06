@@ -299,6 +299,23 @@ let ``secondary poison-on-hit only applies when the effect-chance roll succeeds`
     Assert.Equal(Poison, applied.Foe.Status)
 
 [<Fact>]
+let ``team battle continues after enemy lead faints`` () =
+    let p = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ Moves.byName "EMBER" ]
+    let e1 = BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ]
+    let e2 = BattleMon.ofSpecies (Species.byName "RATTATA") 5 [ Moves.byName "TACKLE" ]
+    let state = Battle.createTeam [ p ] [ e1; e2 ] 0u
+    let after = Battle.chooseMove 0 state
+    Assert.True(after.Outcome.IsNone || after.Enemy.Species.Name <> "PIDGEY")
+
+[<Fact>]
+let ``team battle ends when all enemies faint`` () =
+    let p = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 99 [ Moves.byName "EMBER" ]
+    let e1 = { BattleMon.ofSpecies (Species.byName "PIDGEY") 2 [ Moves.byName "TACKLE" ] with Hp = 1 }
+    let state = Battle.createTeam [ p ] [ e1 ] 0u
+    let after = Battle.chooseMove 0 state
+    Assert.Equal(Some Win, after.Outcome)
+
+[<Fact>]
 let ``secondary poison-on-hit does not apply when the effect chance fails`` () =
     let move = { move "POISON_HIT" "EFFECT_POISON_HIT" 0 (ty "NORMAL") with EffectChance = 0 }
     let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ move ] }

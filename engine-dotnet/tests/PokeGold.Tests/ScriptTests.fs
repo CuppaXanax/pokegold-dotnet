@@ -208,6 +208,15 @@ let ``applymovementlasttalked maps to LAST_TALKED`` () =
     )
 
 [<Fact>]
+let ``halloffame sets EVENT_BEAT_ELITE_FOUR`` () =
+    let prog = parse "HoF:\n\thalloffame\n\tend\n"
+
+    match Script.start "HoF" World.empty prog "" with
+    | { World = w; Outcome = Suspended(_, HallOfFame) } ->
+        Assert.True(World.hasEvent "EVENT_BEAT_ELITE_FOUR" w)
+    | other -> Assert.Fail($"expected HallOfFame effect, got {other}")
+
+[<Fact>]
 let ``checktime sets script var to 1 (DAY)`` () =
     let prog =
         parse

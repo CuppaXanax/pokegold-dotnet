@@ -73,6 +73,9 @@ type ScriptEffect =
     /// (Bill's PC / Player's PC / LOG OFF). Resume with None when the player
     /// logs off. M12.5 will wire this to the real Pokémon Center map scripts.
     | OpenPc
+    /// The Hall of Fame sequence: set the champion flag and show the congratulation
+    /// text sequence before the script ends.
+    | HallOfFame
 
 /// The suspended state of a running script: where execution is paused and the
 /// call/return stack and scratch var that survive across a `resume`. Opaque to
@@ -303,6 +306,11 @@ module Script =
                     run world { next with ScriptVar = World.getVar args.[0] world }
                 | "writemem" when args.Length >= 1 ->
                     run (World.setVar args.[0] vm.ScriptVar world) next
+                | "halloffame" ->
+                    let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
+                    suspend (endLike vm) w HallOfFame
+                | "credits" ->
+                    run world (endLike vm)
                 | "givemoney"
                 | "takemoney" -> run world next
                 | _ -> run world next
