@@ -27,10 +27,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         |> World.setEvent "EVENT_GOT_A_POKEMON_FROM_ELM"
         |> World.setEvent "EVENT_GAVE_MYSTERY_EGG_TO_ELM"
         |> World.setEvent "EVENT_GOT_POKEDEX"
-        // Azalea: Team Rocket cleared, Slowpoke Well done
+        // Azalea: Team Rocket cleared, Slowpoke Well done, Kurt gone
         |> World.setEvent "EVENT_CLEARED_SLOWPOKE_WELL"
         |> World.setEvent "EVENT_AZALEA_TOWN_SLOWPOKETAIL_ROCKET"
         |> World.setEvent "EVENT_SLOWPOKE_WELL_ROCKETS"
+        |> World.setEvent "EVENT_SLOWPOKE_WELL_KURT"
         // Gym badges earned so far (Falkner + Bugsy)
         |> World.setFlag "ENGINE_ZEPHYRBADGE"
         |> World.setFlag "ENGINE_HIVEBADGE"
@@ -152,7 +153,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         let enemyTeam =
             match stagedTrainer with
             | Some(group, id) ->
-                match Trainers.lookup group (int id) with
+                match Trainers.lookupByName group id with
                 | Some trainer ->
                     trainer.Party
                     |> List.map (fun tm ->
@@ -454,7 +455,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     | None ->
                                         match stagedTrainer with
                                         | Some(group, id) ->
-                                            match Trainers.lookup group (int id) with
+                                            match Trainers.lookupByName group id with
                                             | Some trainer ->
                                                 let leadMon = trainer.Party |> List.tryHead
                                                 let baseExp =
@@ -503,7 +504,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     let reward =
                                         match stagedTrainer with
                                         | Some(group, id) ->
-                                            match Trainers.lookup group (int id) with
+                                            match Trainers.lookupByName group id with
                                             | Some trainer ->
                                                 let lastMonLevel =
                                                     trainer.Party

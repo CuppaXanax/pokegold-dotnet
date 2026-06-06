@@ -71,8 +71,8 @@ module ScriptParser =
 
         match mn with
         // control flow
-        | "scall" -> Some(Scall(lbl 0))
-        | "sjump" -> Some(Sjump(lbl 0))
+        | "scall" | "farscall" -> Some(Scall(lbl 0))
+        | "sjump" | "farsjump" -> Some(Sjump(lbl 0))
         | "jumpstd" -> Some(Jumpstd(arg 0))
         | "callstd" -> Some(Callstd(arg 0))
         | "iffalse" -> Some(Iffalse(lbl 0))
