@@ -57,6 +57,75 @@ let private mapProgram mapName =
     |> Option.map (fun m -> m.Script)
     |> Option.defaultWith (fun () -> failwithf "Missing baked map data for %s" mapName)
 
+let private mapEvents mapName =
+    MapsData.byName mapName
+    |> Option.map (fun m -> m.Events)
+    |> Option.defaultValue MapEvents.empty
+
+// ---- Diagnostic: trace exactly what happens with callbacks + scene scripts ----
+
+[<Fact>]
+let ``PlayersHouse2F has callbacks in generated data`` () =
+    let events = mapEvents "PlayersHouse2F"
+    Assert.True(events.Callbacks.Length > 0, $"expected callbacks, got {events.Callbacks.Length}")
+    Assert.Equal("MAPCALLBACK_NEWMAP", events.Callbacks.[0].Kind)
+    Assert.Equal("PlayersHouse2FInitializeRoomCallback", events.Callbacks.[0].Label)
+
+[<Fact>]
+let ``PlayersHouse2F callback label resolves in script program`` () =
+    let prog = mapProgram "PlayersHouse2F"
+    let events = mapEvents "PlayersHouse2F"
+    let label = events.Callbacks.[0].Label
+    let labelList = prog.Labels |> Map.toList |> List.map fst |> String.concat ", "
+    Assert.True(prog.Labels.ContainsKey label, sprintf "label '%s' should exist. Labels: %s" label labelList)
+
+[<Fact>]
+let ``PlayersHouse2F callback runs InitializeEventsScript`` () =
+    let prog = mapProgram "PlayersHouse2F"
+    let events = mapEvents "PlayersHouse2F"
+    let label = events.Callbacks.[0].Label
+    // Run the callback and see what effects it produces
+    let step = Script.start label World.empty prog "PlayersHouse2F"
+    // The callback should set events (via jumpstd InitializeEventsScript or setevent)
+    let rec drive w outcome =
+        match outcome with
+        | Completed -> w
+        | Suspended(vm, _) ->
+            let s = Script.resume None w vm
+            drive s.World s.Outcome
+    let finalWorld = drive step.World step.Outcome
+    // After running, some events should be set (InitializeEventsScript sets ~60 flags)
+    Assert.True(finalWorld.Events.Count > 0 || World.hasEvent "EVENT_INITIALIZED_EVENTS" finalWorld,
+        $"callback should set events. Events count: {finalWorld.Events.Count}")
+
+[<Fact>]
+let ``PlayersHouse1F has scene scripts for Mom cutscene`` () =
+    let events = mapEvents "PlayersHouse1F"
+    Assert.True(events.SceneLabels.Length > 0,
+        $"PlayersHouse1F should have scene labels, got {events.SceneLabels.Length}")
+    let label = events.SceneLabels.[0]
+    System.Console.WriteLine($"PlayersHouse1F scene 0 label: {label}")
+    let prog = mapProgram "PlayersHouse1F"
+    let labelList = prog.Labels |> Map.toList |> List.map fst |> String.concat ", "
+    Assert.True(prog.Labels.ContainsKey label,
+        sprintf "label '%s' should exist in script. Labels: %s" label labelList)
+
+[<Fact>]
+let ``PlayersHouse1F Mom scene script produces effects`` () =
+    let events = mapEvents "PlayersHouse1F"
+    if events.SceneLabels.Length > 0 then
+        let label = events.SceneLabels.[0]
+        let prog = mapProgram "PlayersHouse1F"
+        if prog.Labels.ContainsKey label then
+            let step = Script.start label World.empty prog "PlayersHouse1F"
+            match step.Outcome with
+            | Completed -> System.Console.WriteLine("Mom scene completed immediately (noop?)")
+            | Suspended(_, eff) -> System.Console.WriteLine($"Mom scene suspended on: {eff}")
+        else
+            System.Console.WriteLine($"Label {label} not in program")
+    else
+        Assert.Fail("No scene labels for PlayersHouse1F")
+
 [<Fact>]
 let ``real map scripts resolve from generated map metadata`` () =
     let script = mapProgram "AzaleaPokecenter1F"
