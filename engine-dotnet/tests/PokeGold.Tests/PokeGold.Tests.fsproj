@@ -51,6 +51,8 @@
     <Compile Include="PcItemTests.fs" />
     <Compile Include="PlayerPCTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
+    <Compile Include="TimeOfDayTests.fs" />
+    <Compile Include="KantoDataTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Overworld.Script
 
+open PokeGold.Game.Core
 open PokeGold.Game.Data
 
 /// Something the script needs the outside world to do before it can continue. The
@@ -284,10 +285,7 @@ module Script =
             | Unsupported(name, args) ->
                 match name with
                 | "checktime" ->
-                    if args.Length > 0 then
-                        run world { next with ScriptVar = 0 }
-                    else
-                        run world { next with ScriptVar = 1 }
+                    run world { next with ScriptVar = TimeOfDay.toScriptVar (TimeOfDay.current()) }
                 | "checkcellnum" -> run world { next with ScriptVar = 0 }
                 | "checkphonecall" -> run world { next with ScriptVar = 0 }
                 | "checkjustbattled" -> run world { next with ScriptVar = 0 }

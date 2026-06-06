@@ -217,19 +217,22 @@ let ``halloffame sets EVENT_BEAT_ELITE_FOUR`` () =
     | other -> Assert.Fail($"expected HallOfFame effect, got {other}")
 
 [<Fact>]
-let ``checktime sets script var to 1 (DAY)`` () =
+let ``checktime sets script var to the current time-of-day`` () =
+    let expected = TimeOfDay.toScriptVar (TimeOfDay.current())
     let prog =
         parse
-            "S:\n\
-             \tchecktime\n\
-             \tifequal 1, .Ok\n\
-             \tend\n\
-             .Ok:\n\
-             \tjumptext OkText\n"
+            (sprintf
+                "S:\n\
+                 \tchecktime\n\
+                 \tifequal %d, .Ok\n\
+                 \tend\n\
+                 .Ok:\n\
+                 \tjumptext OkText\n"
+                expected)
 
     match Script.start "S" World.empty prog "" with
     | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
-    | other -> Assert.Fail($"expected OkText after checktime DAY, got {other}")
+    | other -> Assert.Fail($"expected OkText after checktime, got {other}")
 
 [<Fact>]
 let ``text and event-table directives never emit commands`` () =

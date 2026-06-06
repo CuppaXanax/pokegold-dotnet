@@ -19,6 +19,7 @@
     <Compile Include="Core\Direction.fs" />
     <Compile Include="Core\Buttons.fs" />
     <Compile Include="Core\Charmap.fs" />
+    <Compile Include="Core\TimeOfDay.fs" />
     <!-- Ui: pure state machines and geometry helpers (menus, HP bar, windowing). -->
     <Compile Include="Ui\MenuInput.fs" />
     <Compile Include="Ui\MenuList.fs" />

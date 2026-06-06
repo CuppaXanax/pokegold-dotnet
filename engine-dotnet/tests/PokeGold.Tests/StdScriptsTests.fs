@@ -141,19 +141,13 @@ let private collectTexts (step0: ScriptStep) : string list =
     loop 100 [] step0
 
 [<Fact>]
-let ``nurse jumps straight to the heal prompt, not through every time-of-day line`` () =
-    // `checktime` is unmodelled, so wScriptVar stays 0 and all three `iftrue`
-    // branches fall through to `sjump .ok`. That jump must resolve (it targets a
-    // colon-less local label) so the morning/day/night greetings are skipped — a
-    // regression guard for the parser fix that lets `.ok` be found. With the bug,
-    // execution fell through into every branch and recited all four texts.
+let ``nurse script reaches the current time-of-day greeting and heal prompt`` () =
     let texts =
         collectTexts (Script.start "AzaleaPokecenter1FNurseScript" World.empty nurseProgram "")
 
-    Assert.DoesNotContain("NurseMornText", texts)
-    Assert.DoesNotContain("NurseDayText", texts)
-    Assert.DoesNotContain("NurseNiteText", texts)
     Assert.Contains("NurseAskHealText", texts)
+    Assert.Contains(texts, fun text ->
+        text = "NurseMornText" || text = "NurseDayText" || text = "NurseNiteText")
 
 [<Fact>]
 let ``Azalea nurse script reaches HealParty via jumpstd`` () =

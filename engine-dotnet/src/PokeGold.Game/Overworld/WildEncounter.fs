@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Overworld
 
+open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Player
 open PokeGold.Game.Battle
@@ -42,25 +43,18 @@ module WildEncounter =
     type WildEntry = { Level: int; Species: string }
 
     let private currentGrassTable (table: WildEncounterTable) : WildSlot list =
-        let hour = System.DateTime.Now.Hour
-
-        if hour >= 5 && hour < 12 then
-            table.GrassMorn
-        elif hour >= 12 && hour < 18 then
-            table.GrassDay
-        else
-            table.GrassNite
+        match TimeOfDay.current() with
+        | Morn -> table.GrassMorn
+        | Day -> table.GrassDay
+        | Nite -> table.GrassNite
 
     let private currentGrassRate (table: WildEncounterTable) : int =
         let morn, day, nite = table.GrassRate
-        let hour = System.DateTime.Now.Hour
 
-        if hour >= 5 && hour < 12 then
-            morn
-        elif hour >= 12 && hour < 18 then
-            day
-        else
-            nite
+        match TimeOfDay.current() with
+        | Morn -> morn
+        | Day -> day
+        | Nite -> nite
 
     let private currentWaterTable (table: WildEncounterTable) : WildSlot list =
         table.Water
