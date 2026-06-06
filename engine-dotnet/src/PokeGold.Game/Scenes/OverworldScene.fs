@@ -776,7 +776,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                         state <- dest
                                         this.PlayMapMusic dest.MapId
                                         firedCoords <- Set.empty
-                                        Stay
+                                        this.RunMapCallbacks dest.MapId
+                                        this.RunSceneScript dest.MapId
                                     | None -> Stay
                                 | None ->
                                     let currentScene =

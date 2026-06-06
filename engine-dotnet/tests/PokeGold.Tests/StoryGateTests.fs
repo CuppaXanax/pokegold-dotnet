@@ -127,6 +127,20 @@ let ``PlayersHouse1F Mom scene script produces effects`` () =
         Assert.Fail("No scene labels for PlayersHouse1F")
 
 [<Fact>]
+let ``warp tile path runs callbacks and scene scripts on destination`` () =
+    // Verify that PlayersHouse1F's warp destination events include callbacks + scene labels
+    let events1F = mapEvents "PlayersHouse1F"
+    System.Console.WriteLine($"PlayersHouse1F callbacks: {events1F.Callbacks.Length}")
+    for cb in events1F.Callbacks do
+        System.Console.WriteLine($"  callback {cb.Kind} -> {cb.Label}")
+    System.Console.WriteLine($"PlayersHouse1F scene labels: {events1F.SceneLabels.Length}")
+    for sl in events1F.SceneLabels do
+        System.Console.WriteLine($"  scene label: {sl}")
+    // The key assertion: scene 0 should be the Mom script
+    Assert.True(events1F.SceneLabels.Length > 0, "1F must have scene labels")
+    Assert.Equal("PlayersHouse1FMeetMomScene", events1F.SceneLabels.[0])
+
+[<Fact>]
 let ``real map scripts resolve from generated map metadata`` () =
     let script = mapProgram "AzaleaPokecenter1F"
 
