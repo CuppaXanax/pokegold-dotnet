@@ -275,8 +275,37 @@ module Script =
                 suspend next world (OpenMart(martType, items))
 
             // ---- Deferred opcodes ------------------------------------------
-            // Outside the M9 slice: skip so the rest of the script still runs.
-            | Unsupported _ -> run world next
+            // Outside the M9 slice: a few of these are still required to set the
+            // script var or write back to world state for the control-flow scripts
+            // that depend on them.
+            | Unsupported(name, args) ->
+                match name with
+                | "checktime" ->
+                    if args.Length > 0 then
+                        run world { next with ScriptVar = 0 }
+                    else
+                        run world { next with ScriptVar = 1 }
+                | "checkcellnum" -> run world { next with ScriptVar = 0 }
+                | "checkphonecall" -> run world { next with ScriptVar = 0 }
+                | "checkjustbattled" -> run world { next with ScriptVar = 0 }
+                | "askforphonenumber" -> run world { next with ScriptVar = 2 }
+                | "checkmoney" -> run world { next with ScriptVar = 1 }
+                | "checkcoins" -> run world { next with ScriptVar = 1 }
+                | "loadvar" when args.Length >= 2 ->
+                    let varName = args.[0]
+                    let value = try int args.[1] with _ -> 0
+                    run (World.setVar varName value world) next
+                | "loadmem" when args.Length >= 2 ->
+                    let addr = args.[0]
+                    let value = try int args.[1] with _ -> 0
+                    run (World.setVar addr value world) next
+                | "readmem" when args.Length >= 1 ->
+                    run world { next with ScriptVar = World.getVar args.[0] world }
+                | "writemem" when args.Length >= 1 ->
+                    run (World.setVar args.[0] vm.ScriptVar world) next
+                | "givemoney"
+                | "takemoney" -> run world next
+                | _ -> run world next
 
     /// Start a script at `label` over `world`, running until it suspends or ends.
     /// An unknown label completes immediately (nothing to run).

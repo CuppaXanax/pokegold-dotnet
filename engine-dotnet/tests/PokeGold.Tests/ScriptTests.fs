@@ -156,6 +156,34 @@ let ``unmodelled opcodes become Unsupported but keep parsing`` () =
     )
 
 [<Fact>]
+let ``applymovementlasttalked maps to LAST_TALKED`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tapplymovementlasttalked Movement\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Applymovement("LAST_TALKED", "Movement"); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``checktime sets script var to 1 (DAY)`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tchecktime\n\
+             \tifequal 1, .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
+
+    match Script.start "S" World.empty prog "" with
+    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+    | other -> Assert.Fail($"expected OkText after checktime DAY, got {other}")
+
+[<Fact>]
 let ``text and event-table directives never emit commands`` () =
     // A label in front of text/data points at the next real command (here none).
     let prog =

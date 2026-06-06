@@ -126,6 +126,7 @@ module ScriptParser =
         | "setlasttalked" -> Some(Setlasttalked(arg 0))
         // movement & objects
         | "applymovement" -> Some(Applymovement(arg 0, arg 1))
+        | "applymovementlasttalked" -> Some(Applymovement("LAST_TALKED", arg 0))
         | "faceplayer" -> Some Faceplayer
         | "faceobject" -> Some(Faceobject(arg 0, arg 1))
         | "disappear" -> Some(Disappear(arg 0))
