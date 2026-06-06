@@ -62,7 +62,10 @@ type MapEvents =
       Coords: CoordEvent[]
       Bgs: BgEvent[]
       Objects: ObjectEvent[]
-      Scenes: string[] }
+      /// Scene constant names in table order (for coord event matching).
+      Scenes: string[]
+      /// Scene script labels in table order (for running scene scripts on map entry).
+      SceneLabels: string[] }
 
 /// Parses a map `.asm`'s `def_*_events` tables into [`MapEvents`](#). Reads the
 /// disassembly source directly (like [`ScriptParser`](ScriptParser.fs)); operands
@@ -118,6 +121,7 @@ module MapEventParser =
         let bgs = ResizeArray<BgEvent>()
         let objects = ResizeArray<ObjectEvent>()
         let scenes = ResizeArray<string>()
+        let sceneLabels = ResizeArray<string>()
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
@@ -128,7 +132,9 @@ module MapEventParser =
                 let i n = intArg (arg n)
 
                 match mn with
-                | "scene_script" -> scenes.Add(arg 1)
+                | "scene_script" ->
+                    sceneLabels.Add(arg 0)  // script label
+                    scenes.Add(arg 1)       // SCENE_* constant
                 | "warp_event" ->
                     warps.Add
                         { X = i 0
@@ -168,4 +174,5 @@ module MapEventParser =
           Coords = coords.ToArray()
           Bgs = bgs.ToArray()
           Objects = objects.ToArray()
-          Scenes = scenes.ToArray() }
+          Scenes = scenes.ToArray()
+          SceneLabels = sceneLabels.ToArray() }

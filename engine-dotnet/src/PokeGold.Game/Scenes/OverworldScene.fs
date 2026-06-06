@@ -95,7 +95,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     member private this.RunSceneScript(mapId: string) : Transition =
         let sceneIdx = World.getScene mapId world
-        let sceneLabel = MapEvents.sceneAt sceneIdx state.Events
+        let sceneLabel = MapEvents.sceneLabelAt sceneIdx state.Events
 
         if sceneLabel <> "" && state.Script.Labels.ContainsKey sceneLabel then
             this.Drive(Script.start sceneLabel world state.Script mapId)
@@ -106,12 +106,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// text (nurse prompts, bookshelves, signs) is the fallback; an unknown label
     /// shows the label itself.
     member private _.ResolveText(label: string) : string =
-        match Map.tryFind label state.Text with
-        | Some s -> s
-        | None ->
-            match Map.tryFind label StdScriptsData.text with
+        let raw =
+            match Map.tryFind label state.Text with
             | Some s -> s
-            | None -> label + "<DONE>"
+            | None ->
+                match Map.tryFind label StdScriptsData.text with
+                | Some s -> s
+                | None -> label + "<DONE>"
+        // Substitute player/rival name placeholders
+        raw.Replace("<PLAYER>", player.Name)
+           .Replace("<RIVAL>", "SILVER")
+           .Replace("<MOM>", "MOM")
 
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =

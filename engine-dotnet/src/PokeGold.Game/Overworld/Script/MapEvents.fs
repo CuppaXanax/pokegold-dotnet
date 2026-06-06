@@ -13,15 +13,22 @@ module MapEvents =
           Coords = [||]
           Bgs = [||]
           Objects = [||]
-          Scenes = [||] }
+          Scenes = [||]
+          SceneLabels = [||] }
 
     /// The scene the map starts in: the first entry of its scene table (mirroring
     /// `wCurMapSceneID` defaulting to 0), or `""` if the map has no scenes.
     let defaultScene (events: MapEvents) : string =
         if events.Scenes.Length > 0 then events.Scenes.[0] else ""
 
-    /// The scene name for a world scene id, falling back to the map's default scene
-    /// when the id is out of range.
+    /// The scene script LABEL for a world scene id. Used by the integration layer
+    /// to run the correct scene script on map entry.
+    let sceneLabelAt (sceneId: int) (events: MapEvents) : string =
+        if sceneId >= 0 && sceneId < events.SceneLabels.Length then
+            events.SceneLabels.[sceneId]
+        else ""
+
+    /// The scene CONSTANT NAME for a world scene id, for coord event matching.
     let sceneAt (sceneId: int) (events: MapEvents) : string =
         if sceneId >= 0 && sceneId < events.Scenes.Length then
             events.Scenes.[sceneId]
