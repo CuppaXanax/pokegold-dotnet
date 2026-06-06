@@ -57,6 +57,11 @@ type ObjectEvent =
 /// scene names in table order (`def_scene_scripts` / `scene_script label, SCENE_*`);
 /// the map starts in `Scenes.[0]` and a coord trigger fires only while its scene
 /// is the active one.
+/// A map callback entry from `def_callbacks / callback MAPCALLBACK_*, label`.
+type MapCallback =
+    { Kind: string
+      Label: string }
+
 type MapEvents =
     { Warps: WarpEvent[]
       Coords: CoordEvent[]
@@ -65,7 +70,9 @@ type MapEvents =
       /// Scene constant names in table order (for coord event matching).
       Scenes: string[]
       /// Scene script labels in table order (for running scene scripts on map entry).
-      SceneLabels: string[] }
+      SceneLabels: string[]
+      /// Map callbacks that run on map entry/reload.
+      Callbacks: MapCallback[] }
 
 /// Parses a map `.asm`'s `def_*_events` tables into [`MapEvents`](#). Reads the
 /// disassembly source directly (like [`ScriptParser`](ScriptParser.fs)); operands
@@ -122,6 +129,7 @@ module MapEventParser =
         let objects = ResizeArray<ObjectEvent>()
         let scenes = ResizeArray<string>()
         let sceneLabels = ResizeArray<string>()
+        let callbacks = ResizeArray<MapCallback>()
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
@@ -133,8 +141,10 @@ module MapEventParser =
 
                 match mn with
                 | "scene_script" ->
-                    sceneLabels.Add(arg 0)  // script label
-                    scenes.Add(arg 1)       // SCENE_* constant
+                    sceneLabels.Add(arg 0)
+                    scenes.Add(arg 1)
+                | "callback" ->
+                    callbacks.Add({ Kind = arg 0; Label = arg 1 })
                 | "warp_event" ->
                     warps.Add
                         { X = i 0
@@ -175,4 +185,5 @@ module MapEventParser =
           Bgs = bgs.ToArray()
           Objects = objects.ToArray()
           Scenes = scenes.ToArray()
-          SceneLabels = sceneLabels.ToArray() }
+          SceneLabels = sceneLabels.ToArray()
+          Callbacks = callbacks.ToArray() }

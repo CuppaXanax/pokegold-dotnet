@@ -146,12 +146,16 @@ module EmitMaps =
     let private arr (render: 'a -> string) (xs: 'a[]) : string =
         xs |> Array.map render |> String.concat "; "
 
+    let private callback (c: MapCallback) : string =
+        sprintf "{ Kind = %s; Label = %s }" (str c.Kind) (str c.Label)
+
     let private mapEvents (e: MapEvents) : string =
         sprintf
-            "{ Warps = [| %s |]; Coords = [| %s |]; Bgs = [| %s |]; Objects = [| %s |]; Scenes = [| %s |]; SceneLabels = [| %s |] }"
+            "{ Warps = [| %s |]; Coords = [| %s |]; Bgs = [| %s |]; Objects = [| %s |]; Scenes = [| %s |]; SceneLabels = [| %s |]; Callbacks = [| %s |] }"
             (arr warp e.Warps) (arr coord e.Coords) (arr bg e.Bgs) (arr objectEvent e.Objects)
             (e.Scenes |> Array.map str |> String.concat "; ")
             (e.SceneLabels |> Array.map str |> String.concat "; ")
+            (arr callback e.Callbacks)
 
     let private connection (c: Connection) : string =
         sprintf "{ Direction = %s; Map = %s; MapConst = %s; Offset = %d }" (str c.Direction) (str c.Map) (str c.MapConst) c.Offset

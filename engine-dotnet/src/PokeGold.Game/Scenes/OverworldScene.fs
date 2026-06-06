@@ -102,6 +102,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         else
             Stay
 
+    /// Run map callbacks of the given kind (MAPCALLBACK_NEWMAP, MAPCALLBACK_TILES, etc.)
+    /// These fire on map entry/reload to initialize flypoints, decorations, events.
+    member private this.RunMapCallbacks(mapId: string) =
+        for cb in state.Events.Callbacks do
+            if state.Script.Labels.ContainsKey cb.Label then
+                let step = Script.start cb.Label world state.Script mapId
+                // Drive callback to completion (callbacks should be quick/pure)
+                let rec drive (s: ScriptStep) =
+                    world <- s.World
+                    match s.Outcome with
+                    | Completed -> ()
+                    | Suspended(vm, _) -> drive (Script.resume None world vm)
+                drive step
+
     /// Resolve a text label to its M5 token string. Map-local text wins; std-script
     /// text (nurse prompts, bookshelves, signs) is the fallback; an unknown label
     /// shows the label itself.
@@ -314,7 +328,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     let resumed = this.Drive(Script.resume None world vm)
 
                     match resumed with
-                    | Stay -> this.RunSceneScript ns.MapId
+                    | Stay ->
+                        this.RunMapCallbacks ns.MapId
+                        this.RunSceneScript ns.MapId
                     | _ -> resumed
                 | None ->
                     this.Drive(Script.resume None world vm)
@@ -403,10 +419,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Snapshot this scene's persistable state (position, world flags, player state).
     member _.Capture() : SaveData = SaveData.captureWith state world player
 
-    /// Seed the script world and player state, then run the map's scene script.
+    /// Seed the script world and player state, then run callbacks and scene script.
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        this.RunMapCallbacks state.MapId
         this.RunSceneScript state.MapId |> ignore
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------

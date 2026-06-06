@@ -14,7 +14,8 @@ module MapEvents =
           Bgs = [||]
           Objects = [||]
           Scenes = [||]
-          SceneLabels = [||] }
+          SceneLabels = [||]
+          Callbacks = [||] }
 
     /// The scene the map starts in: the first entry of its scene table (mirroring
     /// `wCurMapSceneID` defaulting to 0), or `""` if the map has no scenes.

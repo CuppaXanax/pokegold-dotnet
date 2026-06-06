@@ -30,7 +30,7 @@ module MapParsers =
                       let asm = File.ReadAllText path
                       MapEventParser.parseText asm, ScriptParser.parseText asm, MapText.parseText asm
                   else
-                      { Warps = [||]; Coords = [||]; Bgs = [||]; Objects = [||]; Scenes = [||]; SceneLabels = [||] },
+                      { Warps = [||]; Coords = [||]; Bgs = [||]; Objects = [||]; Scenes = [||]; SceneLabels = [||]; Callbacks = [||] },
                       { Commands = [||]; Labels = Map.empty },
                       Map.empty
 
