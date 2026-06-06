@@ -30,6 +30,9 @@ let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
 
+/// True when this item is a TM/HM that can teach a move.
+let isTmHm (itemId: string) : bool = TmHm.moveForItem itemId |> Option.isSome
+
 /// True when this item is a repel item.
 let isRepel (itemName: string) : bool = repelItems.ContainsKey itemName
 
@@ -81,3 +84,17 @@ let applyRepel (itemName: string) (player: PlayerState) : PlayerState option =
         let newBag = Bag.remove itemName 1 player.Bag
         Some { player with Bag = newBag; RepelSteps = steps }
     | None -> None
+
+/// Apply a TM/HM item to a party slot.
+/// Returns None if the move cannot be taught or the mon already knows it.
+let applyTmHm (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerState option =
+    match TmHm.moveForItem itemId with
+    | None -> None
+    | Some moveName ->
+        let mon = List.item slotIdx player.Party
+        match TmHm.teach moveName mon with
+        | None -> None
+        | Some taughtMon ->
+            let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then taughtMon else m)
+            let newBag = Bag.remove itemId 1 player.Bag
+            Some { player with Party = newParty; Bag = newBag }

@@ -2614,3 +2614,31 @@ let ``battle anim maps fire move to FireBurst`` () =
 let ``battle anim maps status move to StatusEffect`` () =
     let move = Moves.byName "GROWL"
     Assert.Equal(StatusEffect, BattleAnim.effectForMove move)
+
+// --- Battle switching and running ---
+
+[<Fact>]
+let ``running from wild battle sets Ran outcome`` () =
+    let p = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 10 [ Moves.byName "TACKLE" ]
+    let e = BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ]
+    let state = Battle.create p e 0u
+    let after = Battle.run state
+    Assert.Equal(Some Ran, after.Outcome)
+
+[<Fact>]
+let ``switching changes the active player mon`` () =
+    let p1 = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 10 [ Moves.byName "TACKLE" ]
+    let p2 = BattleMon.ofSpecies (Species.byName "TOTODILE") 10 [ Moves.byName "SCRATCH" ]
+    let e = BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ]
+    let state = Battle.createTeam [ p1; p2 ] [ e ] 0u
+    let after = Battle.switchMon 1 state
+    Assert.Equal("TOTODILE", after.Player.Species.Name)
+
+[<Fact>]
+let ``cannot switch to fainted mon`` () =
+    let p1 = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 10 [ Moves.byName "TACKLE" ]
+    let p2 = { BattleMon.ofSpecies (Species.byName "TOTODILE") 10 [ Moves.byName "SCRATCH" ] with Hp = 0 }
+    let e = BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ]
+    let state = Battle.createTeam [ p1; p2 ] [ e ] 0u
+    let after = Battle.switchMon 1 state
+    Assert.Equal("CYNDAQUIL", after.Player.Species.Name)

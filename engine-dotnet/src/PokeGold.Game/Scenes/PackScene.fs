@@ -278,6 +278,18 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                         | None ->
                                             // Mon already at full HP — don't consume. Pop back to Pack.
                                             Pop) :> Scene)
+                        elif PackUseGive.isTmHm id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyTmHm id slotIdx currentPlayer with
+                                        | Some newPlayer ->
+                                            currentPlayer <- newPlayer
+                                            rebuildMenus newPlayer.Bag
+                                            onChange newPlayer
+                                            Pop
+                                        | None ->
+                                            Pop) :> Scene)
                         else
                             // Deferred: status cures, revives, vitamins, evo stones,
                             // elixirs/PP restores, TMs/HMs, key-item field effects, etc.

@@ -39,9 +39,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         |> World.setFlag "ENGINE_FLYPOINT_VIOLET"
         |> World.setFlag "ENGINE_FLYPOINT_CHERRYGROVE"
         |> World.setFlag "ENGINE_FLYPOINT_NEWBARK"
-    /// The map's active scene name (gates coord triggers). Scene *progression* is
-    /// deeper than M9, so this stays at the map's default; rival coords stay off.
-    let activeScene = MapEvents.defaultScene initial.Events
     /// Coord triggers already fired this visit (fire-once).
     let mutable firedCoords: Set<int * int> = Set.empty
     /// The player's full persistent state (party, bag, dex, money, etc.).
@@ -558,13 +555,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     let fx, fy = Triggers.facedCell state.Player.CellX state.Player.CellY state.Player.Facing
                     let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy
 
-                    if collId = FieldMoves.CollCutTree && FieldMoves.canUse "CUT" world player.Party then
-                        printfn "HM tile detected: CUT at (%d, %d)" fx fy
-                        Stay
-                    elif collId = FieldMoves.CollSurf && FieldMoves.canUse "SURF" world player.Party then
-                        printfn "HM tile detected: SURF at (%d, %d)" fx fy
-                        Stay
-                    else
+                    match collId with
+                    | id when id = FieldMoves.CollCutTree ->
+                        match FieldMoves.tryCut id world player.Party with
+                        | FieldMoves.Used _ ->
+                            printfn "HM tile detected: CUT at (%d, %d)" fx fy
+                            Stay
+                        | FieldMoves.NotUsable _ ->
+                            Stay
+                    | id when id = FieldMoves.CollSurf ->
+                        match FieldMoves.trySurf id world player.Party with
+                        | FieldMoves.Used _ ->
+                            printfn "HM tile detected: SURF at (%d, %d)" fx fy
+                            Stay
+                        | FieldMoves.NotUsable _ ->
+                            Stay
+                    | id when id = FieldMoves.CollStrengthBoulder && FieldMoves.canUse "STRENGTH" world player.Party ->
+                        match FieldMoves.tryStrength id world player.Party with
+                        | FieldMoves.Used _ ->
+                            printfn "HM tile detected: STRENGTH at (%d, %d)" fx fy
+                            Stay
+                        | FieldMoves.NotUsable _ ->
+                            Stay
+                    | _ ->
                         // Talk to / read whatever the player faces. Objects are resolved
                         // over the *live* NPC set (a wandering NPC is talked to where it
                         // now stands), filtered to those currently present.
@@ -641,7 +654,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     Stay
                                 | None -> Stay
                             | None ->
-                                match Triggers.coordToFire activeScene firedCoords state.Events (fst after) (snd after) with
+                                let currentScene =
+                                    MapEvents.sceneAt (World.getScene state.MapId world) state.Events
+
+                                match Triggers.coordToFire currentScene firedCoords state.Events (fst after) (snd after) with
                                 | Some c when state.Script.Labels.ContainsKey c.Script ->
                                     firedCoords <- Set.add after firedCoords
                                     this.Drive(Script.start c.Script world state.Script state.MapId)

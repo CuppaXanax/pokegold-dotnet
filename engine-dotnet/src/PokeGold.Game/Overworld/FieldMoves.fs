@@ -7,6 +7,11 @@ open PokeGold.Game.Data
 /// lookup tables the menu/overworld will query.
 module FieldMoves =
 
+    /// Result of attempting to use a field move.
+    type FieldMoveResult =
+        | Used of message: string
+        | NotUsable of reason: string
+
     /// Collision IDs for HM-interactable tiles.
     [<Literal>]
     let CollCutTree = 0x12uy
@@ -54,3 +59,30 @@ module FieldMoves =
                     |> Option.exists (fun md -> md.Name = moveName)))
 
         hasBadge && hasMove
+
+    let tryCut (collId: byte) (world: PokeGold.Game.Overworld.Script.World) (party: PokeGold.Game.Player.Party) : FieldMoveResult =
+        if collId <> CollCutTree then
+            NotUsable "Not a cuttable tree"
+        elif not (canUse "CUT" world party) then
+            if not (PokeGold.Game.Overworld.Script.World.hasFlag "ENGINE_HIVEBADGE" world) then
+                NotUsable "Need the HIVEBADGE"
+            else
+                NotUsable "No Pokémon knows CUT"
+        else
+            Used "Used CUT!"
+
+    let trySurf (collId: byte) (world: PokeGold.Game.Overworld.Script.World) (party: PokeGold.Game.Player.Party) : FieldMoveResult =
+        if collId <> CollSurf then
+            NotUsable "Not water"
+        elif not (canUse "SURF" world party) then
+            NotUsable "Cannot use SURF"
+        else
+            Used "Used SURF!"
+
+    let tryStrength (collId: byte) (world: PokeGold.Game.Overworld.Script.World) (party: PokeGold.Game.Player.Party) : FieldMoveResult =
+        if collId <> CollStrengthBoulder then
+            NotUsable "Not a boulder"
+        elif not (canUse "STRENGTH" world party) then
+            NotUsable "Cannot use STRENGTH"
+        else
+            Used "STRENGTH can be used!"

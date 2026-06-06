@@ -763,6 +763,19 @@ let ``coordToFire gates on the active scene and fires once`` () =
     )
     Assert.Equal(None, Triggers.coordToFire scene (Set.singleton (5, 10)) ev 5 10)
 
+[<Fact>]
+let ``coord events fire when the world scene matches`` () =
+    let ev = AsmLoad.events "maps/AzaleaTown.asm"
+    let world = World.empty |> World.setScene "AzaleaTown" 1
+
+    let currentScene = MapEvents.sceneAt (World.getScene "AzaleaTown" world) ev
+
+    Assert.Equal("SCENE_AZALEATOWN_RIVAL_BATTLE", currentScene)
+    Assert.Equal(
+        Some "AzaleaTownRivalBattleScene1",
+        Triggers.coordToFire currentScene Set.empty ev 5 10 |> Option.map (fun c -> c.Script)
+    )
+
 
 // M9.6 — coverage sweep. The script engine must survive the WHOLE game: every
 // real map parses without throwing, and any opcode outside the M9 slice degrades

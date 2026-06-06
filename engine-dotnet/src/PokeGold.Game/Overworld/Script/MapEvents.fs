@@ -20,6 +20,14 @@ module MapEvents =
     let defaultScene (events: MapEvents) : string =
         if events.Scenes.Length > 0 then events.Scenes.[0] else ""
 
+    /// The scene name for a world scene id, falling back to the map's default scene
+    /// when the id is out of range.
+    let sceneAt (sceneId: int) (events: MapEvents) : string =
+        if sceneId >= 0 && sceneId < events.Scenes.Length then
+            events.Scenes.[sceneId]
+        else
+            defaultScene events
+
     /// Is this object currently present, given the world's event flags? An object
     /// with no `EventFlag` is always present; otherwise it is hidden while its
     /// flag is set (GSC semantics: `EVENT_*` means "hidden when set").

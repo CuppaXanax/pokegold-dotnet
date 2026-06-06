@@ -34,6 +34,21 @@ let ``canUse CUT requires HIVEBADGE`` () =
     Assert.False(FieldMoves.canUse "CUT" worldWithBadge [])
 
 [<Fact>]
+let ``Cut succeeds on cut tree with badge and move`` () =
+    let world = World.setFlag "ENGINE_HIVEBADGE" World.empty
+    let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "CUT" [] }
+
+    match FieldMoves.tryCut 0x12uy world [ mon ] with
+    | FieldMoves.Used _ -> ()
+    | FieldMoves.NotUsable reason -> Assert.Fail(reason)
+
+[<Fact>]
+let ``Cut fails without badge`` () =
+    match FieldMoves.tryCut 0x12uy World.empty [] with
+    | FieldMoves.NotUsable _ -> ()
+    | FieldMoves.Used _ -> Assert.Fail("should fail without badge")
+
+[<Fact>]
 let ``Repel.blocks suppresses weak encounters when lead mon is strong enough`` () =
     let lead = PartyMon.create 155 10
     let player = { PlayerStateOps.initial with Party = [ lead ]; RepelSteps = 50 }

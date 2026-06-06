@@ -841,3 +841,24 @@ module Battle =
             { s with
                 Messages = [ "Got away safely!" ]
                 Outcome = Some Ran }
+
+    /// Switch the active player mon to a different team member by index.
+    /// The switched-in mon inherits no volatile status (fresh entry).
+    let switchMon (teamIndex: int) (s: BattleState) : BattleState =
+        if isOver s then s
+        elif teamIndex < 0 || teamIndex >= s.PlayerTeam.Length then s
+        else
+            let target = s.PlayerTeam.[teamIndex]
+            if BattleMon.isFainted target then s
+            elif target = s.Player then s
+            else
+                // Swap active mon with the target in the team list
+                let team =
+                    s.PlayerTeam |> List.mapi (fun i m ->
+                        if i = 0 then target
+                        elif m = target then s.Player
+                        else m)
+                { s with
+                    Player = target
+                    PlayerTeam = team
+                    Messages = s.Messages @ [ $"Come back, {s.Player.Species.Name}!"; $"Go, {target.Species.Name}!" ] }
