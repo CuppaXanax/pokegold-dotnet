@@ -27,10 +27,21 @@ type Game() =
     let mutable overworld = OverworldScene.Load(content, audio)
     let hasSave = SaveFile.tryRead() |> Option.isSome
 
+    /// Run the std-script InitializeEventsScript to set the ~60 event flags GSC
+    /// expects at new-game time (hides cops, Rockets, rivals in wrong positions).
+    let initializeNewGameWorld () : World =
+        let stdProg = StdScriptsData.program
+        let rec drive (step: ScriptStep) =
+            match step.Outcome with
+            | Completed -> step.World
+            | Suspended(vm, _) -> drive (Script.resume None step.World vm)
+        drive (Script.start "InitializeEventsScript" World.empty stdProg "")
+
     let newGameScene (name: string) : OverworldScene =
-        let state = OverworldState.loadById content "NewBarkTown"
+        let world = initializeNewGameWorld ()
+        let state = OverworldState.loadById content "PlayersHouse2F"
         let ow = OverworldScene(content, audio, state)
-        ow.Restore(World.empty, { PlayerStateOps.initial with Name = name })
+        ow.Restore(world, { PlayerStateOps.initial with Name = name })
         ow
 
     let titleScene =
