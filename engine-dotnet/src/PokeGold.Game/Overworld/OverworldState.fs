@@ -37,13 +37,15 @@ type OverworldState =
 
 module OverworldState =
 
-    // DMG-style 4-shade green palette for the map's tile indices 0..3.
+    // Real GBC day palette from `gfx/tilesets/bg_tiles.pal` for the map's tile
+    // indices 0..3; this is a much closer match to the original tile colors than
+    // the old hard-coded green DMG palette.
     let private mapPalette =
         Palette.ofColors
-            [ Palette.rgb555 30 31 26
-              Palette.rgb555 17 24 14
-              Palette.rgb555 6 13 10
-              Palette.rgb555 1 4 3 ]
+            [ Palette.rgb555 27 31 27
+              Palette.rgb555 21 21 21
+              Palette.rgb555 13 13 13
+              Palette.rgb555 7 7 7 ]
 
     // Sprite palette: index 0 is transparent (skipped at draw time); 1..3 are a
     // light→dark grayscale so the player reads clearly against the green map.

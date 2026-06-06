@@ -32,6 +32,29 @@ let ``parse reads pret .pal RGB lines and ignores comments`` () =
     Assert.Equal(Palette.rgb555 4 17 31, pal.Colors.[1])
 
 [<Fact>]
+let ``parsePalBank reads grouped palette banks from .pal text`` () =
+    let text =
+        "RGB 1, 2, 3\nRGB 4, 5, 6\nRGB 7, 8, 9\nRGB 10, 11, 12\n\n" +
+        "RGB 13, 14, 15\nRGB 16, 17, 18\nRGB 19, 20, 21\nRGB 22, 23, 24\n"
+
+    let banks = Palette.parsePalBank text
+
+    Assert.Equal(2, banks.Length)
+    Assert.Equal(4, banks.[0].Colors.Length)
+    Assert.Equal(Palette.rgb555 1 2 3, banks.[0].Colors.[0])
+    Assert.Equal(Palette.rgb555 10 11 12, banks.[0].Colors.[3])
+    Assert.Equal(Palette.rgb555 13 14 15, banks.[1].Colors.[0])
+    Assert.Equal(Palette.rgb555 22 23 24, banks.[1].Colors.[3])
+
+[<Fact>]
+let ``parsePalBank loads real bg_tiles palette data`` () =
+    let banks = Palette.parsePalBank (Assets.readText "gfx/tilesets/bg_tiles.pal")
+
+    Assert.True(banks.Length >= 8)
+    Assert.Equal(4, banks.[0].Colors.Length)
+    Assert.Equal(Palette.rgb555 27 31 27, banks.[8].Colors.[0])
+
+[<Fact>]
 let ``decode reads a 2bpp tile into the expected 8x8 index grid`` () =
     // Vertical bands: columns map to indices 0,0,1,1,2,2,3,3.
     // Each row: low bitplane 0x33, high bitplane 0x0F.

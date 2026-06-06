@@ -1,5 +1,7 @@
 namespace PokeGold.Game.Core
 
+open System.Text.RegularExpressions
+
 /// A single RGBA color, byte-per-channel, matching the framebuffer's R,G,B,A
 /// memory order.
 [<Struct>]
@@ -32,31 +34,81 @@ module Palette =
     /// Build a palette from a sequence of RGBA colors.
     let ofColors (colors: Rgba seq) : Palette = { Colors = Array.ofSeq colors }
 
+    let private stripComment (raw: string) : string =
+        let i = raw.IndexOf ';'
+        if i >= 0 then raw.Substring(0, i) else raw
+
+    let private parseRgbValues (line: string) : int[] =
+        let t = line.Trim()
+
+        if not (t.StartsWith("RGB", System.StringComparison.OrdinalIgnoreCase)) then
+            [||]
+        else
+            Regex.Matches(t, "\d+")
+            |> Seq.cast<Match>
+            |> Seq.map (fun m -> int m.Value)
+            |> Seq.toArray
+
     /// Parse a pret `.pal` text palette. Each color is a line `RGB r, g, b` with
     /// 0..31 channels; `;` begins a comment. Multiple colors accumulate in order.
     let parse (text: string) : Palette =
         let colors =
             text.Split([| '\n'; '\r' |], System.StringSplitOptions.RemoveEmptyEntries)
-            |> Array.choose (fun raw ->
-                let line =
-                    let i = raw.IndexOf ';'
-                    if i >= 0 then raw.Substring(0, i) else raw
+            |> Array.collect (fun raw ->
+                let line = stripComment raw
+                let nums = parseRgbValues line
 
-                let t = line.Trim()
-
-                if t.StartsWith("RGB", System.StringComparison.OrdinalIgnoreCase) then
-                    let nums =
-                        t.Substring(3).Split(
-                            [| ','; ' '; '\t' |],
-                            System.StringSplitOptions.RemoveEmptyEntries
-                        )
-                        |> Array.map (fun s -> int (s.Trim()))
-
-                    if nums.Length >= 3 then Some(rgb555 nums.[0] nums.[1] nums.[2]) else None
+                if nums.Length >= 3 then
+                    nums
+                    |> Array.chunkBySize 3
+                    |> Array.choose (fun triplet ->
+                        if triplet.Length = 3 then
+                            Some(rgb555 triplet.[0] triplet.[1] triplet.[2])
+                        else
+                            None)
                 else
-                    None)
+                    [||])
 
         { Colors = colors }
+
+    /// Parse a `.pal` text file into an array of CGB palette banks.
+    /// Each bank is a group of 4 RGB colors; the repo's `.pal` assets usually
+    /// write 4 colors on each `RGB ...` line, but this also accepts the older
+    /// 4-line-per-palette format described in the disassembly notes.
+    let parsePalBank (text: string) : Palette[] =
+        let mutable palettes = ResizeArray<Palette>()
+        let mutable current = ResizeArray<Rgba>()
+
+        for raw in text.Split([| '\n'; '\r' |], System.StringSplitOptions.None) do
+            let line = stripComment raw
+
+            if System.String.IsNullOrWhiteSpace line then
+                if current.Count > 0 then
+                    palettes.Add({ Colors = current.ToArray() })
+                    current.Clear()
+            else
+                let nums = parseRgbValues line
+
+                if nums.Length >= 3 then
+                    let colors =
+                        nums
+                        |> Array.chunkBySize 3
+                        |> Array.choose (fun triplet ->
+                            if triplet.Length = 3 then
+                                Some(rgb555 triplet.[0] triplet.[1] triplet.[2])
+                            else
+                                None)
+
+                    for color in colors do
+                        current.Add color
+                        if current.Count = 4 then
+                            palettes.Add({ Colors = current.ToArray() })
+                            current.Clear()
+
+        if current.Count > 0 then
+            palettes.Add({ Colors = current.ToArray() })
+
+        palettes.ToArray()
 
     /// Parse a repo-relative `.pal` file.
     let load (relative: string) : Palette = parse (Assets.readText relative)
