@@ -37,7 +37,7 @@ type HostGame() as this =
         graphics.SynchronizeWithVerticalRetrace <- true
 
     override _.Initialize() =
-        this.Window.Title <- "PokéGold - engine-dotnet (F#)"
+        this.Window.Title <- "PokéGold .NET"
         this.Window.AllowUserResizing <- true
         base.Initialize()
 

@@ -9,9 +9,9 @@ open Microsoft.Xna.Framework
 /// Android activity that hosts the MonoGame game loop. Locks to landscape,
 /// hides the system bars for a full-screen experience, and keeps the screen on.
 [<Activity(
-    Label = "PokéGold",
+    Label = "PokéGold .NET",
     MainLauncher = true,
-    Icon = "@android:drawable/sym_def_app_icon",
+    Icon = "@mipmap/icon",
     AlwaysRetainTaskState = true,
     LaunchMode = LaunchMode.SingleInstance,
     ScreenOrientation = ScreenOrientation.SensorLandscape,
