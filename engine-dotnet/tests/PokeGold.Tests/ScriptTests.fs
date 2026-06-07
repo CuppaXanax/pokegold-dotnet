@@ -757,17 +757,24 @@ let ``trainer macro second talk shows the badge dialog and sets the badge flag``
     | other -> Assert.Fail($"expected initial FacePlayer, got {other}")
 
 [<Fact>]
-let ``unsupported opcodes are skipped so the script keeps running`` () =
+let ``supported timed formerly-unsupported opcodes suspend then keep running`` () =
     let prog =
         ScriptParser.parseText
             "S:\n\
              \tspecial Special_Foo\n\
              \twritetext Shown\n\
              \tpause 30\n\
+             \tshowemote EMOTE_SHOCK, PLAYER, 15\n\
+             \tmoveobject PLAYER, 5, 6\n\
              \tend\n"
 
     let _, effects = driveSilent World.empty "S" prog
-    Assert.Equal<ScriptEffect list>([ ShowText("Shown", false) ], effects)
+    Assert.Equal<ScriptEffect list>(
+        [ ShowText("Shown", false)
+          Pause 30
+          Pause 15
+          MoveObject("PLAYER", 5, 6) ],
+        effects)
 
 [<Fact>]
 let ``the real Gramps script runs the right branch for each flag state`` () =

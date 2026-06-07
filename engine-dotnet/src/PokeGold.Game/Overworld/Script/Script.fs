@@ -42,6 +42,16 @@ type ScriptEffect =
     | SetVisible of obj: string * visible: bool
     /// `turnobject` — face an object a fixed direction.
     | TurnObject of obj: string * facing: string
+    /// `moveobject` — move an object to a map cell.
+    | MoveObject of obj: string * x: int * y: int
+    /// `follow` — make one actor trail another until `stopfollow`.
+    | Follow of follower: string * leader: string
+    /// `stopfollow` — cancel the active follow relationship.
+    | StopFollow
+    /// `reanchormap` — recenter the camera on the player.
+    | ReanchorMap
+    /// `pause` / `showemote` timing — wait a number of frames before resuming.
+    | Pause of frames: int
     /// `loadwildmon` — stage a wild encounter for the next `startbattle`.
     | LoadWild of species: string * level: int
     /// `loadtrainer` — stage a trainer battle for the next `startbattle`.
@@ -348,10 +358,43 @@ module Script =
                 // --- Remaining 24 opcodes: every one handled explicitly ---
                 | "blackoutmod" when args.Length >= 1 ->
                     // Store the blackout destination map for whiteout/respawn
-                    run (World.setVar "wLastSpawnMap" 0 world) next
-                | "dontrestartmapmusic" -> run world next  // audio flag
-                | "doorstate" -> run world next  // toggle door tile (cosmetic)
-                | "earthquake" -> run world next  // screen shake (cosmetic)
+                    run (World.setBuffer "__blackout_map" args.[0] (World.setVar "wLastSpawnMap" 1 world)) next
+                | "dontrestartmapmusic" ->
+                    run (World.setVar "__dont_restart_map_music" 1 world) next
+                | "doorstate" when args.Length >= 2 ->
+                    let door =
+                        match tryInt args.[0] with
+                        | 1 -> Some(16, 6)
+                        | 2 -> Some(10, 6)
+                        | 3 -> Some(2, 6)
+                        | 4 -> Some(2, 10)
+                        | 5 -> Some(10, 10)
+                        | 6 -> Some(16, 10)
+                        | 7 -> Some(12, 6)
+                        | 8 -> Some(12, 8)
+                        | 9 -> Some(6, 6)
+                        | 10 -> Some(6, 8)
+                        | 11 -> Some(12, 10)
+                        | 12 -> Some(12, 12)
+                        | 13 -> Some(6, 10)
+                        | 14 -> Some(6, 12)
+                        | 15 -> Some(18, 10)
+                        | 16 -> Some(18, 12)
+                        | _ -> None
+                    let block =
+                        match args.[1].ToUpperInvariant() with
+                        | "CLOSED1" -> Some 0x2a
+                        | "CLOSED2" -> Some 0x3e
+                        | "CLOSED3" -> Some 0x3f
+                        | "OPEN1" -> Some 0x2d
+                        | "OPEN2" -> Some 0x3d
+                        | _ -> None
+                    match door, block with
+                    | Some(x, y), Some b -> suspend next world (ChangeBlock(x, y, b))
+                    | _ -> run world next
+                | "doorstate" -> run world next
+                | "earthquake" when args.Length >= 1 -> suspend next world (Pause(tryInt args.[0]))
+                | "earthquake" -> suspend next world (Pause 30)
                 | "elevfloor" -> run world next  // elevator floor display
                 | "endifjustbattled" ->
                     // End script if we just came from a trainer battle.
@@ -360,23 +403,33 @@ module Script =
                     if World.getVar "__just_battled" world <> 0 then
                         run (World.setVar "__just_battled" 0 world) (endLike vm)
                     else run world next
-                | "follow" -> run world next  // NPC follow (movement choreography)
-                | "stopfollow" -> run world next
+                | "follow" when args.Length >= 2 -> suspend next world (Follow(args.[0], args.[1]))
+                | "follow" -> run world next
+                | "stopfollow" -> suspend next world StopFollow
                 | "givecoins" -> run world next  // coins tracked on PlayerState
                 | "takecoins" -> run world next
                 | "menu_coords" -> run world next  // set menu position (UI layout)
-                | "moveobject" -> run world next  // teleport NPC (needs integration)
-                | "musicfadeout" -> run world next  // audio fade
-                | "newloadmap" -> run world next  // variant map reload
-                | "pause" -> run world next  // frame delay (cosmetic timing)
-                | "playmapmusic" -> run world next  // restart map BGM
-                | "reanchormap" -> run world next  // re-anchor camera
-                | "showemote" -> run world next  // emotion bubble (!, ?, ♥)
+                | "moveobject" when args.Length >= 3 ->
+                    suspend next world (MoveObject(args.[0], tryInt args.[1], tryInt args.[2]))
+                | "moveobject" -> run world next
+                | "musicfadeout" -> suspend next world (PlayMusic "__STOP__")
+                | "newloadmap" -> suspend next world ReloadMap
+                | "pause" when args.Length >= 1 ->
+                    suspend next world (Pause(tryInt args.[0]))
+                | "pause" -> run world next
+                | "playmapmusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
+                | "reanchormap" -> suspend next world ReanchorMap
+                | "showemote" when args.Length >= 3 ->
+                    suspend next world (Pause(tryInt args.[2]))
+                | "showemote" -> run world next
                 | "specialphonecall" -> run world next  // trigger phone call
-                | "teleport_from" -> run world next  // set teleport return point
-                | "tree_shake" -> run world next  // headbutt tree animation
-                | "ugdoor" -> run world next  // underground door toggle
-                | "variablesprite" -> run world next  // swap sprite graphics
+                | "teleport_from" ->
+                    run (world |> World.setBuffer "__teleport_from_map" vm.MapId |> World.setVar "__teleport_from_x" 0 |> World.setVar "__teleport_from_y" 0) next
+                | "tree_shake" -> suspend next world (Pause 30)
+                | "ugdoor" -> run world next  // underground door declarations are macro data
+                | "variablesprite" when args.Length >= 2 ->
+                    run (World.setBuffer ("__sprite_" + args.[0]) args.[1] world) next
+                | "variablesprite" -> run world next
                 | "warpcheck" -> run world next  // check if warp should apply
                 | _ -> run world next
 

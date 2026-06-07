@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Scenes
 
+open System
 open System.Collections.Generic
 open PokeGold.Game.Core
 open PokeGold.Game.Data
@@ -56,11 +57,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable stagedLossText: string = ""
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// The live NPC most recently selected by an A-press or `setlasttalked`.
+    let mutable lastTalkedNpcIndex: int option = None
     /// A script suspended on an `applymovement`: the VM to resume, the moved object's
     /// index in `state.Npcs`, and the live movement run. Ticked each frame until done.
     let mutable runningMove: (ScriptVm * int * MovementRunner.Run) option = None
     /// The most recent yes/no choice, written by the YesNoScene callback.
     let mutable yesNoResult = 0
+    /// A script suspended by `pause` / timed cosmetic effects.
+    let mutable pauseFrames = 0
+    let mutable pauseVm: ScriptVm option = None
+    /// Active `follow follower, leader` relationship. Actor index -1 is the player;
+    /// non-negative indices address `state.Npcs`.
+    let mutable followPair: (int * int) option = None
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -69,6 +78,159 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
+
+    let directionToward (fromX: int) (fromY: int) (toX: int) (toY: int) : Direction =
+        let dx = toX - fromX
+        let dy = toY - fromY
+
+        if abs dx > abs dy then
+            if dx > 0 then Right else Left
+        else if dy > 0 then
+            Down
+        else
+            Up
+
+    let deltaOf (dir: Direction) : int * int =
+        match dir with
+        | Down -> 0, 1
+        | Up -> 0, -1
+        | Left -> -1, 0
+        | Right -> 1, 0
+
+    let parseDirection (facing: string) : Direction option =
+        match facing.Trim().ToUpperInvariant() with
+        | "DOWN"
+        | "OW_DOWN"
+        | "0" -> Some Down
+        | "UP"
+        | "OW_UP"
+        | "1"
+        | "4" -> Some Up
+        | "LEFT"
+        | "OW_LEFT"
+        | "2"
+        | "8" -> Some Left
+        | "RIGHT"
+        | "OW_RIGHT"
+        | "3"
+        | "12" -> Some Right
+        | _ -> None
+
+    let npcIndexOfSymbol (objSym: string) : int option =
+        match objSym.Trim().ToUpperInvariant() with
+        | "LAST_TALKED"
+        | "-2" -> lastTalkedNpcIndex
+        | "PLAYER"
+        | "0"
+        | "-1" -> None
+        | _ ->
+            match Int32.TryParse objSym with
+            | true, n when n > 0 -> Some(n - 1)
+            | _ -> OverworldState.objectIndexOf state.MapId objSym
+
+    let actorIndexOfSymbol (objSym: string) : int option =
+        match objSym.Trim().ToUpperInvariant() with
+        | "PLAYER"
+        | "0"
+        | "-1" -> Some -1
+        | _ -> npcIndexOfSymbol objSym
+
+    let tryActorCell (objSym: string) : (bool * int * int * int) option =
+        match objSym.Trim().ToUpperInvariant() with
+        | "PLAYER"
+        | "0" -> Some(true, -1, state.Player.CellX, state.Player.CellY)
+        | _ ->
+            match npcIndexOfSymbol objSym with
+            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                let npc = state.Npcs.[idx]
+                Some(false, idx, npc.CellX, npc.CellY)
+            | _ -> None
+
+    let actorCellByIndex (idx: int) : (int * int) option =
+        if idx = -1 then
+            Some(state.Player.CellX, state.Player.CellY)
+        elif idx >= 0 && idx < state.Npcs.Length then
+            let n = state.Npcs.[idx]
+            Some(n.CellX, n.CellY)
+        else
+            None
+
+    let actorMovingByIndex (idx: int) : bool =
+        if idx = -1 then
+            state.Player.Moving
+        elif idx >= 0 && idx < state.Npcs.Length then
+            state.Npcs.[idx].Moving
+        else
+            false
+
+    let setFollowerStep (idx: int) (targetX: int) (targetY: int) =
+        match actorCellByIndex idx with
+        | Some(cx, cy) when not (actorMovingByIndex idx) && (cx <> targetX || cy <> targetY) ->
+            let dir = directionToward cx cy targetX targetY
+            let dx, dy = deltaOf dir
+            let tx, ty =
+                if abs (targetX - cx) + abs (targetY - cy) = 1 then
+                    targetX, targetY
+                else
+                    cx + dx, cy + dy
+
+            if idx = -1 then
+                let player =
+                    { state.Player with
+                        Facing = dir
+                        SrcX = cx
+                        SrcY = cy
+                        CellX = tx
+                        CellY = ty
+                        Motion = Walking
+                        Progress = 0
+                        Bumped = false }
+                let camX, camY = Camera.followExt state.Map state.Neighbors player
+                state <-
+                    { state with
+                        Player = player
+                        CamX = camX
+                        CamY = camY }
+            elif idx >= 0 && idx < state.Npcs.Length then
+                let npcs = Array.copy state.Npcs
+                let npc = npcs.[idx]
+                npcs.[idx] <-
+                    { npc with
+                        Facing = dir
+                        SrcX = cx
+                        SrcY = cy
+                        CellX = tx
+                        CellY = ty
+                        Motion = NpcWalking
+                        Progress = 0 }
+                state <- { state with Npcs = npcs }
+        | _ -> ()
+
+    let advanceFollowMotion (idx: int) =
+        if idx = -1 && state.Player.Moving then
+            let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+            let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors
+            let player = Movement.stepWith walkable collId Buttons.none state.Player
+            let camX, camY = Camera.followExt state.Map state.Neighbors player
+            state <- { state with Player = player; CamX = camX; CamY = camY }
+        elif idx >= 0 && idx < state.Npcs.Length && state.Npcs.[idx].Moving then
+            let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+            let npcs = Array.copy state.Npcs
+            npcs.[idx] <- ObjectStep.step walkable (fun _ _ -> false) npcs.[idx]
+            state <- { state with Npcs = npcs }
+
+    let setNpcFacing (idx: int) (facing: Direction) =
+        if idx >= 0 && idx < state.Npcs.Length then
+            let npc = state.Npcs.[idx]
+            let npcs = Array.copy state.Npcs
+            npcs.[idx] <- { npc with Facing = facing }
+            state <- { state with Npcs = npcs }
+
+    let setActorFacing (isPlayer: bool, idx: int, _x: int, _y: int) (facing: Direction) =
+        if isPlayer then
+            state <- { state with Player = { state.Player with Facing = facing } }
+        else
+            setNpcFacing idx facing
 
     /// Start this map's background music as soon as the scene exists.
     do
@@ -309,19 +471,115 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | OpenPc ->
                 pending <- Some(vm, effect)
                 Push(PcMenuScene(content, player, fun p -> player <- p) :> Scene)
-            // ----- effects out of M9.4 scope: no-op, resume -----
-            | SetLastTalked _
-            | FacePlayer
-            | FaceObject _
-            | TurnObject _
-            | ReloadMap
-            | ChangeBlock(_, _, _) ->
-                // TODO: Apply block overlay to map collision/visual data.
-                // For now, just acknowledge and continue so scripts don't break.
+            | SetLastTalked obj ->
+                lastTalkedNpcIndex <- npcIndexOfSymbol obj
                 this.Drive(Script.resume None world vm)
-            | PlayMusic _
-            | PlaySound _
-            | ScriptEffect.Cry _
+            | FacePlayer ->
+                match lastTalkedNpcIndex with
+                | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                    let npc = state.Npcs.[idx]
+                    setNpcFacing idx (directionToward npc.CellX npc.CellY state.Player.CellX state.Player.CellY)
+                | _ -> ()
+
+                this.Drive(Script.resume None world vm)
+            | FaceObject(a, b) ->
+                match tryActorCell a, tryActorCell b with
+                | Some actor, Some(_, _, bx, by) ->
+                    let _, _, ax, ay = actor
+                    setActorFacing actor (directionToward ax ay bx by)
+                | _ -> ()
+
+                this.Drive(Script.resume None world vm)
+            | TurnObject(obj, facing) ->
+                match tryActorCell obj, parseDirection facing with
+                | Some actor, Some dir -> setActorFacing actor dir
+                | _ -> ()
+
+                this.Drive(Script.resume None world vm)
+            | MoveObject(objSym, x, y) ->
+                match npcIndexOfSymbol objSym with
+                | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                    let npcs = Array.copy state.Npcs
+                    let npc = npcs.[idx]
+                    npcs.[idx] <-
+                        { npc with
+                            HomeX = x
+                            HomeY = y
+                            CellX = x
+                            CellY = y
+                            SrcX = x
+                            SrcY = y
+                            Motion = NpcStanding
+                            Progress = 0 }
+                    state <- { state with Npcs = npcs }
+                | _ -> ()
+
+                this.Drive(Script.resume None world vm)
+            | Follow(follower, leader) ->
+                match actorIndexOfSymbol follower, actorIndexOfSymbol leader with
+                | Some f, Some l when f <> l -> followPair <- Some(f, l)
+                | _ -> ()
+
+                this.Drive(Script.resume None world vm)
+            | StopFollow ->
+                followPair <- None
+                this.Drive(Script.resume None world vm)
+            | ReanchorMap ->
+                let camX, camY = Camera.follow state.Map state.Player
+                state <- { state with CamX = camX; CamY = camY }
+                this.Drive(Script.resume None world vm)
+            | Pause frames ->
+                if frames <= 0 then
+                    this.Drive(Script.resume None world vm)
+                else
+                    pauseFrames <- frames
+                    pauseVm <- Some vm
+                    Stay
+            | ReloadMap ->
+                let p = state.Player
+                state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
+                if World.getVar "__dont_restart_map_music" world = 0 then
+                    this.PlayMapMusic state.MapId
+                this.Drive(Script.resume None world vm)
+            | ChangeBlock(x, y, blockId) ->
+                if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
+                    let blocks = Array.copy state.Map.BlockIds
+                    blocks.[y * state.Map.Width + x] <- byte blockId
+                    state <- { state with Map = { state.Map with BlockIds = blocks } }
+
+                this.Drive(Script.resume None world vm)
+            | PlayMusic song ->
+                match song with
+                | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
+                | "__STOP__" -> sound.StopMusic()
+                | _ ->
+                    match Map.tryFind song MusicData.byId with
+                    | Some path -> sound.PlayMusic path
+                    | None -> ()
+
+                this.Drive(Script.resume None world vm)
+            | PlaySound sfx ->
+                let sfxName =
+                    if SongsData.byName.ContainsKey sfx then
+                        Some sfx
+                    else
+                        let stem =
+                            if sfx.StartsWith("SFX_", StringComparison.OrdinalIgnoreCase) then
+                                sfx.Substring(4)
+                            else
+                                sfx
+                        let pascal =
+                            stem.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                            |> Array.map (fun p ->
+                                let lower = p.ToLowerInvariant()
+                                if lower.Length = 0 then lower else lower.Substring(0, 1).ToUpperInvariant() + lower.Substring(1))
+                            |> String.concat ""
+                        let candidate = "Sfx_" + pascal
+                        if SongsData.byName.ContainsKey candidate then Some candidate else None
+
+                sfxName |> Option.iter sound.PlaySfx
+                this.Drive(Script.resume None world vm)
+            | ScriptEffect.Cry _ -> this.Drive(Script.resume None world vm)
             | WaitSfx -> this.Drive(Script.resume None world vm)
             // ----- applymovement: animate the actor over frames, then resume -----
             | ApplyMovement(objSym, label) ->
@@ -537,6 +795,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         npcs.[i] <- run'.Npc
                     state <- { state with Npcs = npcs }
 
+                match followPair with
+                | Some(follower, leader) when leader = i && follower <> i ->
+                    advanceFollowMotion follower
+                    if run'.Npc.Moving then
+                        setFollowerStep follower run'.Npc.SrcX run'.Npc.SrcY
+                | Some(follower, _) when follower <> i ->
+                    advanceFollowMotion follower
+                | _ -> ()
+
                 if run'.Done then
                     runningMove <- None
                     this.Drive(Script.resume None world vm)
@@ -544,6 +811,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     runningMove <- Some(vm, i, run')
                     Stay
             | None ->
+
+            if pauseFrames > 0 then
+                pauseFrames <- pauseFrames - 1
+
+                if pauseFrames = 0 then
+                    match pauseVm with
+                    | Some vm ->
+                        pauseVm <- None
+                        this.Drive(Script.resume None world vm)
+                    | None -> Stay
+                else
+                    Stay
+            else
 
             match pending with
             // A pushed child scene popped — resume the suspended script with its result.
@@ -705,11 +985,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         // Talk to / read whatever the player faces. Objects are resolved
                         // over the *live* NPC set (a wandering NPC is talked to where it
                         // now stands), filtered to those currently present.
+                        let mutable talkedNpcCandidate: int option = None
+
                         let objectScriptAt fx fy =
                             state.Npcs
-                            |> Array.tryFind (fun n ->
+                            |> Array.tryFindIndex (fun n ->
                                 MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
-                            |> Option.map (fun n -> n.Event.Script)
+                            |> Option.map (fun i ->
+                                let script = state.Npcs.[i].Event.Script
+
+                                if script <> "" && script <> "ObjectEvent" then
+                                    talkedNpcCandidate <- Some i
+
+                                script)
 
                         // A counter/desk tile in front of the player: GSC reaches one tile
                         // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
@@ -719,13 +1007,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                         match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                         | Some label when state.Script.Labels.ContainsKey label ->
+                            lastTalkedNpcIndex <- talkedNpcCandidate
                             sound.PlaySfx "Sfx_Menu"
                             this.Drive(Script.start label world state.Script state.MapId)
                         | _ -> Stay
                 else
                     let before = state.Player.CellX, state.Player.CellY
+                    let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCellByIndex leader)
                     state <- OverworldState.tick (fun n -> MapEvents.objectVisible world n.Event) buttons state
                     let after = state.Player.CellX, state.Player.CellY
+
+                    match followPair, leaderBefore with
+                    | Some(follower, leader), Some(lx, ly) ->
+                        match actorCellByIndex leader with
+                        | Some now when now <> (lx, ly) -> setFollowerStep follower lx ly
+                        | _ -> ()
+                    | _ -> ()
 
                     // Overworld locomotion SFX (GSC plays these as the action begins):
                     // a ledge hop on its first frame, a wall bump on its rising edge.
@@ -808,7 +1105,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             // using each object's live, interpolated position and walk frame.
             for n in state.Npcs do
                 if MapEvents.objectVisible world n.Event then
-                    match this.SpriteFor n.Event.Sprite with
+                    let spriteName =
+                        World.getBuffer ("__sprite_" + n.Event.Sprite) world
+                        |> fun s -> if s = "" then n.Event.Sprite else s
+
+                    match this.SpriteFor spriteName with
                     | Some spr ->
                         let frame, flip = NpcObject.frameAndFlip n
                         let px, py = NpcObject.worldPixel n

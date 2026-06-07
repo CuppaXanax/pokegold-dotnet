@@ -178,6 +178,7 @@ module ScriptParser =
         | "showemote" -> Some(Unsupported("showemote", args))
         | "earthquake" -> Some(Unsupported("earthquake", args))
         | "doorstate" -> Some(Unsupported("doorstate", args))
+        | "ugdoor" -> Some(Unsupported("ugdoor", args))
         | "dontrestartmapmusic" -> Some(Unsupported("dontrestartmapmusic", args))
         | "playmapmusic" -> Some(Unsupported("playmapmusic", args))
         | "musicfadeout" -> Some(Unsupported("musicfadeout", args))
