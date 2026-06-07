@@ -1,6 +1,5 @@
 namespace PokeGold.Game.Overworld
 
-open System.IO
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld.Script
@@ -127,7 +126,7 @@ module OverworldState =
         let stem = tilesetStem meta
         Assets.exists $"maps/{meta.Blocks}.blk"
         && Assets.exists $"gfx/tilesets/{stem}.png"
-        && File.Exists(Assets.path $"data/tilesets/{stem}_collision.asm")
+        && CollisionData.tilesets.ContainsKey stem
 
     /// Asset spec for a map id: the loaders needed to (re)build it, derived from the
     /// baked metadata (dimensions, tileset). The player overworld sprite is fixed.
