@@ -11,6 +11,7 @@
     <EmbeddedResource Include="..\..\..\gfx\font\**\*.png" LinkBase="assets\gfx\font" />
     <EmbeddedResource Include="..\..\..\gfx\tilesets\**\*.png" LinkBase="assets\gfx\tilesets" />
     <EmbeddedResource Include="..\..\..\gfx\sprites\**\*.png" LinkBase="assets\gfx\sprites" />
+    <EmbeddedResource Include="..\..\..\gfx\title\**\*" LinkBase="assets\gfx\title" />
     <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
     <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
   </ItemGroup>
