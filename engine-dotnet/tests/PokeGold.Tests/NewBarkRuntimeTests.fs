@@ -107,3 +107,19 @@ let ``New Bark coord trigger waits until player finishes stepping onto tile`` ()
     driver.Hold(press "left", 15)
 
     Assert.True(driver.Trace |> List.exists (fun tick -> tick.Snapshot.TopScene = "TextBoxScene"))
+
+[<Fact>]
+let ``New Bark teacher does not block after starter scene is set by ROM constant`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("NewBarkTown", 2, 8, Some Left))
+    driver.Apply(SetScene("NEW_BARK_TOWN", 1))
+    Assert.Equal(1, (driver.Snapshot.Overworld |> Option.get).SceneId)
+
+    driver.Step Left
+
+    let ow = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    Assert.Equal("OverworldScene", driver.Snapshot.TopScene)
+    Assert.Equal(1, ow.Player.CellX)
+    Assert.False(driver.Trace |> List.exists (fun tick -> tick.Snapshot.TopScene = "TextBoxScene"))
+    assertTraceCore driver

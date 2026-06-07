@@ -644,6 +644,16 @@ let ``World flag set-check-clear round-trips`` () =
     Assert.Equal(42, World.getVar "VAR_X" (World.setVar "VAR_X" 42 w))
 
 [<Fact>]
+let ``World map scenes normalize ROM constants and runtime ids`` () =
+    let byConst = World.empty |> World.setScene "NEW_BARK_TOWN" 1
+    Assert.Equal(1, World.getScene "NEW_BARK_TOWN" byConst)
+    Assert.Equal(1, World.getScene "NewBarkTown" byConst)
+
+    let byRuntimeId = World.empty |> World.setScene "NewBarkTown" 1
+    Assert.Equal(1, World.getScene "NEW_BARK_TOWN" byRuntimeId)
+    Assert.Equal(1, World.getScene "NewBarkTown" byRuntimeId)
+
+[<Fact>]
 let ``checkevent then iftrue branches only when the flag is set`` () =
     let prog =
         ScriptParser.parseText

@@ -1,5 +1,7 @@
 namespace PokeGold.Game.Overworld.Script
 
+open PokeGold.Game.Data
+
 /// The persistent world state the overworld scripts read and mutate: the two flag
 /// bitsets (`EVENT_*` story/progress events and `ENGINE_*` badges/options), the
 /// script variables (`VAR_*`), and per-map "scene" ids (`setscene`/`setmapscene`).
@@ -72,13 +74,40 @@ module World =
 
     // ---- Map scene ids ------------------------------------------------------
 
+    let private sceneAliases =
+        lazy
+            (MapsData.all
+             |> Seq.collect (fun (KeyValue(name, map)) ->
+                 [ name, name
+                   map.Meta.Name, name
+                   map.Meta.Const, name ])
+             |> Map.ofSeq)
+
+    let private sceneKey (map: string) : string =
+        if map = "" then ""
+        else Map.tryFind map sceneAliases.Value |> Option.defaultValue map
+
+    let private sceneLookupKeys (map: string) : string list =
+        let key = sceneKey map
+
+        if key = "" then
+            [ "" ]
+        else
+            match MapsData.byName key with
+            | Some data ->
+                [ key; data.Meta.Name; data.Meta.Const; map ]
+                |> List.distinct
+            | None -> [ key; map ] |> List.distinct
+
     /// Read a map's scene id (absent ⇒ 0). Use `""` for the current map.
     let getScene (map: string) (w: World) : int =
-        Map.tryFind map w.Scenes |> Option.defaultValue 0
+        sceneLookupKeys map
+        |> List.tryPick (fun key -> Map.tryFind key w.Scenes)
+        |> Option.defaultValue 0
 
     /// Write a map's scene id. Use `""` for the current map.
     let setScene (map: string) (value: int) (w: World) : World =
-        { w with Scenes = Map.add map value w.Scenes }
+        { w with Scenes = Map.add (sceneKey map) value w.Scenes }
 
     /// Read a text buffer (absent ⇒ "").
     let getBuffer (name: string) (w: World) : string =
