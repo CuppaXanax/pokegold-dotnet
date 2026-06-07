@@ -26,6 +26,7 @@
     <Compile Include="Core\Graphics.fs" />
     <Compile Include="Core\Direction.fs" />
     <Compile Include="Core\Buttons.fs" />
+    <Compile Include="Core\HostEffect.fs" />
     <Compile Include="Core\Charmap.fs" />
     <Compile Include="Core\TimeOfDay.fs" />
     <!-- Ui: pure state machines and geometry helpers (menus, HP bar, windowing). -->

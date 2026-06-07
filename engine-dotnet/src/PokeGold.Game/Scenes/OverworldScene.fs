@@ -93,6 +93,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// prepares future map-load state and must not pop already-loaded actors.
     let mutable objectPresent: bool[] = [||]
 
+    let interpretHostEffect =
+        function
+        | HostEffect.PlayMusic path -> sound.PlayMusic path
+        | HostEffect.StopMusic -> sound.StopMusic()
+        | HostEffect.PlaySfx name -> sound.PlaySfx name
+        | HostEffect.PlayJingle path -> sound.PlayJingle path
+
     let directionToward (fromX: int) (fromY: int) (toX: int) (toY: int) : Direction =
         let dx = toX - fromX
         let dy = toY - fromY
@@ -232,7 +239,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Start this map's background music as soon as the scene exists.
     do
         match OverworldScene.musicFor initial.MapId with
-        | Some path -> sound.PlayMusic path
+        | Some path -> interpretHostEffect (HostEffect.PlayMusic path)
         | None -> ()
 
     /// The repo-relative music file for a map id: its baked `Meta.Music` song id
@@ -249,7 +256,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// restart it, while crossing into a differently-scored map does change it.
     member private _.PlayMapMusic(mapId: string) =
         match OverworldScene.musicFor mapId with
-        | Some path -> sound.PlayMusic path
+        | Some path -> interpretHostEffect (HostEffect.PlayMusic path)
         | None -> ()
 
     member private _.MoveObjectTo(objSym: string, x: int, y: int) =
@@ -272,10 +279,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private this.PlayScriptMusic(song: string) =
         match song with
         | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
-        | "__STOP__" -> sound.StopMusic()
+        | "__STOP__" -> interpretHostEffect HostEffect.StopMusic
         | _ ->
             match Map.tryFind song MusicData.byId with
-            | Some path -> sound.PlayMusic path
+            | Some path -> interpretHostEffect (HostEffect.PlayMusic path)
             | None -> ()
 
     member private _.ReloadCurrentMap() =
@@ -479,7 +486,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stop (Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene))
                     | StartBattle ->
                         pending <- Some(vm, effect)
-                        sound.PlaySfx "Sfx_Menu"
+                        interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                         stop (Push(this.BuildBattle() :> Scene))
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
@@ -539,7 +546,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | HealParty ->
                         player <- { player with Party = Heal.healParty player.Party }
                         match Map.tryFind "MUSIC_HEAL" MusicData.byId with
-                        | Some path -> sound.PlayJingle path
+                        | Some path -> interpretHostEffect (HostEffect.PlayJingle path)
                         | None -> ()
                         resume None vm
                     | SetLastTalked obj ->
@@ -614,7 +621,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 let candidate = "Sfx_" + pascal
                                 if SongsData.byName.ContainsKey candidate then Some candidate else None
 
-                        sfxName |> Option.iter sound.PlaySfx
+                        sfxName |> Option.iter (HostEffect.PlaySfx >> interpretHostEffect)
                         resume None vm
                     | ScriptEffect.Cry _ ->
                         resume None vm
@@ -1067,7 +1074,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                         | Some label when state.Script.Labels.ContainsKey label ->
                             lastTalkedActor <- talkedNpcCandidate
-                            sound.PlaySfx "Sfx_Menu"
+                            interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                             this.Drive(Script.start label world state.Script state.MapId)
                         | _ -> Stay
                 else
@@ -1087,9 +1094,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // a ledge hop on its first frame, a wall bump on its rising edge.
                     // Plain walking is silent.
                     if state.Player.Motion = Hopping && state.Player.Progress = 0 then
-                        sound.PlaySfx "Sfx_JumpOverLedge"
+                        interpretHostEffect (HostEffect.PlaySfx "Sfx_JumpOverLedge")
                     elif state.Player.Bumped then
-                        sound.PlaySfx "Sfx_Bump"
+                        interpretHostEffect (HostEffect.PlaySfx "Sfx_Bump")
 
                     // Walking off the current map into a connected neighbour swaps the
                     // active map once the step settles (player rebased to the same world
@@ -1122,7 +1129,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 let npc = state.Npcs.[npcIdx]
 
                                 if state.Script.Labels.ContainsKey npc.Event.Script then
-                                    sound.PlaySfx "Sfx_Menu"
+                                    interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                                     this.Drive(Script.start npc.Event.Script world state.Script state.MapId)
                                 else
                                     Stay
