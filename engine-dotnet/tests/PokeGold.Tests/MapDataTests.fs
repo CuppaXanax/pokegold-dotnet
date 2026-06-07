@@ -44,6 +44,30 @@ let ``NewBarkTown metadata and warps are baked correctly`` () =
     Assert.True(elmsLab.IsSome, "expected a warp to ELMS_LAB")
 
 [<Fact>]
+let ``critical New Bark story scenes are generated from symbolic constants`` () =
+    let elm =
+        match MapsData.byName "ElmsLab" with
+        | Some m -> m
+        | None -> failwith "ElmsLab missing from generated map data"
+
+    let mrPokemon =
+        match MapsData.byName "MrPokemonsHouse" with
+        | Some m -> m
+        | None -> failwith "MrPokemonsHouse missing from generated map data"
+
+    // After choosing a starter, Elm must move New Bark to the no-op scene. If
+    // SCENE_NEWBARKTOWN_NOOP is misparsed as 0, the teacher coord trigger keeps
+    // blocking the route west even though EVENT_GOT_A_POKEMON_FROM_ELM is set.
+    Assert.Contains(Setmapscene("NEW_BARK_TOWN", 1), elm.Script.Commands)
+
+    // Direction constants must also survive generation; RIGHT is 3 in GSC.
+    Assert.Contains(Ifequal(3, "ElmDirectionsScript"), elm.Script.Commands)
+
+    // Receiving the Mystery Egg at Mr. Pokemon's house arms the Elm lab officer
+    // scene for the return trip. This is another cross-map symbolic scene operand.
+    Assert.Contains(Setmapscene("ELMS_LAB", 3), mrPokemon.Script.Commands)
+
+[<Fact>]
 let ``every generated map has a non-empty const and matching name`` () =
     for kv in MapsData.all do
         Assert.Equal(kv.Key, kv.Value.Meta.Name)
@@ -137,4 +161,3 @@ let ``warping into the Azalea Pokemon Center and Mart succeeds`` () =
     match PokeGold.Game.Overworld.OverworldState.tryWarp content "AZALEA_MART" 2 with
     | Some s -> Assert.Equal("AzaleaMart", s.MapId)
     | None -> Assert.Fail "expected to warp into AzaleaMart"
-

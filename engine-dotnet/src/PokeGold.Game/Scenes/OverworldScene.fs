@@ -87,9 +87,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
-    /// Live object presence for this map visit. Event flags seed this on map load;
-    /// scripts that merely set/clear flags do not despawn already-loaded objects.
-    let mutable objectPresent: bool[] = [||]
+    /// Live-only visibility overrides for objects without an EVENT_* flag. Objects
+    /// with flags resolve directly from `world` every frame so `setevent` /
+    /// `clearevent` cannot desynchronize the sprite cache from script state.
+    let mutable objectPresenceOverrides: Map<int, bool> = Map.empty
 
     let directionToward (fromX: int) (fromY: int) (toX: int) (toY: int) : Direction =
         let dx = toX - fromX
@@ -110,10 +111,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Right -> 1, 0
 
     let resetObjectPresence () =
-        objectPresent <- state.Npcs |> Array.map (fun n -> MapEvents.objectVisible world n.Event)
+        objectPresenceOverrides <- Map.empty
 
     let isObjectPresent (idx: int) =
-        idx >= 0 && idx < objectPresent.Length && objectPresent.[idx]
+        idx >= 0
+        && idx < state.Npcs.Length
+        && (Map.tryFind idx objectPresenceOverrides
+            |> Option.defaultWith (fun () -> MapEvents.objectVisible world state.Npcs.[idx].Event))
 
     let parseDirection (facing: string) : Direction option =
         match facing.Trim().ToUpperInvariant() with
@@ -145,6 +149,32 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             match Int32.TryParse objSym with
             | true, n when n > 0 -> Some(n - 1)
             | _ -> OverworldState.objectIndexOf state.MapId objSym
+
+    let setObjectVisible (objSym: string) (visible: bool) =
+        let idxOpt = npcIndexOfSymbol objSym
+        let eventFlag =
+            match OverworldState.objectEventOf state.MapId objSym with
+            | Some o -> o.EventFlag
+            | None ->
+                idxOpt
+                |> Option.bind (fun idx ->
+                    if idx >= 0 && idx < state.Npcs.Length then
+                        state.Npcs.[idx].Event.EventFlag
+                    else
+                        None)
+
+        match eventFlag with
+        | Some flag ->
+            world <- (if visible then World.clearEvent flag world else World.setEvent flag world)
+
+            match idxOpt with
+            | Some idx -> objectPresenceOverrides <- Map.remove idx objectPresenceOverrides
+            | None -> ()
+        | None ->
+            match idxOpt with
+            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                objectPresenceOverrides <- Map.add idx visible objectPresenceOverrides
+            | _ -> ()
 
     let actorIndexOfSymbol (objSym: string) : int option =
         match objSym.Trim().ToUpperInvariant() with
@@ -282,18 +312,61 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         else
             Stay
 
+    member private this.ApplyCallbackEffect(effect: ScriptEffect) =
+        match effect with
+        | SetVisible(obj, visible) -> setObjectVisible obj visible
+        | MoveObject(objSym, x, y) ->
+            match npcIndexOfSymbol objSym with
+            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                let npcs = Array.copy state.Npcs
+                let npc = npcs.[idx]
+                npcs.[idx] <-
+                    { npc with
+                        HomeX = x
+                        HomeY = y
+                        CellX = x
+                        CellY = y
+                        SrcX = x
+                        SrcY = y
+                        Motion = NpcStanding
+                        Progress = 0 }
+                state <- { state with Npcs = npcs }
+            | _ -> ()
+        | ChangeBlock(x, y, blockId) ->
+            if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
+                let blocks = Array.copy state.Map.BlockIds
+                blocks.[y * state.Map.Width + x] <- byte blockId
+                state <- { state with Map = { state.Map with BlockIds = blocks } }
+        | ReanchorMap ->
+            let camX, camY = Camera.follow state.Map state.Player
+            state <- { state with CamX = camX; CamY = camY }
+        | PlayMusic "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
+        | PlayMusic "__STOP__" -> sound.StopMusic()
+        | PlayMusic song ->
+            match Map.tryFind song MusicData.byId with
+            | Some path -> sound.PlayMusic path
+            | None -> ()
+        | ReloadMap ->
+            let p = state.Player
+            state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
+            resetObjectPresence ()
+        | _ -> ()
+
     /// Run map callbacks of the given kind (MAPCALLBACK_NEWMAP, MAPCALLBACK_TILES, etc.)
     /// These fire on map entry/reload to initialize flypoints, decorations, events.
     member private this.RunMapCallbacks(mapId: string) =
         for cb in state.Events.Callbacks do
             if state.Script.Labels.ContainsKey cb.Label then
                 let step = Script.start cb.Label world state.Script mapId
-                // Drive callback to completion (callbacks should be quick/pure)
+                // Drive callbacks to completion without UI; stateful effects still
+                // have to apply or map objects/tiles drift from script flags.
                 let rec drive (s: ScriptStep) =
                     world <- s.World
                     match s.Outcome with
                     | Completed -> ()
-                    | Suspended(vm, _) -> drive (Script.resume None world vm)
+                    | Suspended(vm, effect) ->
+                        this.ApplyCallbackEffect effect
+                        drive (Script.resume None world vm)
                 drive step
 
     /// Resolve a text label to its M5 token string. Map-local text wins; std-script
@@ -463,18 +536,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | None ->
                     this.Drive(Script.resume (Some 0) world vm)
             | SetVisible(obj, visible) ->
-                match OverworldState.objectEventOf state.MapId obj with
-                | Some o ->
-                    match o.EventFlag with
-                    | Some flag ->
-                        world <- (if visible then World.clearEvent flag world else World.setEvent flag world)
-                    | None -> ()
-                | None -> ()
-
-                match OverworldState.objectIndexOf state.MapId obj with
-                | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
-                | _ -> ()
-
+                setObjectVisible obj visible
                 this.Drive(Script.resume None world vm)
             | HealParty ->
                 player <- { player with Party = Heal.healParty player.Party }
@@ -621,7 +683,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match resumed with
                     | Stay ->
                         this.RunMapCallbacks ns.MapId
-                        resetObjectPresence ()
                         this.RunSceneScript ns.MapId
                     | _ -> resumed
                 | None ->
@@ -715,8 +776,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
-        this.RunMapCallbacks state.MapId
         resetObjectPresence ()
+        this.RunMapCallbacks state.MapId
         this.RunSceneScript state.MapId |> ignore
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
@@ -1117,7 +1178,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                         this.PlayMapMusic dest.MapId
                                         firedCoords <- Set.empty
                                         this.RunMapCallbacks dest.MapId
-                                        resetObjectPresence ()
                                         this.RunSceneScript dest.MapId
                                     | None -> Stay
                                 | None ->

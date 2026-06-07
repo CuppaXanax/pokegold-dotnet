@@ -29,11 +29,56 @@ module ScriptParser =
         elif t.StartsWith "&" then Convert.ToInt32(t.Substring 1, 8)
         else Int32.Parse(t, CultureInfo.InvariantCulture)
 
-    /// Parse an integer operand, defaulting to 0 if it is symbolic (a constant we
-    /// don't resolve here). Numeric script operands (values, counts, coordinates)
-    /// are concrete in source, so this only falls back for genuinely odd input.
-    let private intArg (s: string) : int =
-        try parseInt s with _ -> 0
+    /// Small always-known constants used by script operands. Data generation passes
+    /// the full disassembly constant table; this keeps parser-only tests and tiny
+    /// snippets from regressing on the most common values.
+    let private builtInConstants : Map<string, int> =
+        Map.ofList
+            [ "FALSE", 0
+              "TRUE", 1
+              "DOWN", 0
+              "UP", 1
+              "LEFT", 2
+              "RIGHT", 3 ]
+
+    let private tryParseInt (s: string) : int option =
+        try Some(parseInt s) with _ -> None
+
+    /// Parse the simple constant expressions RGBDS scripts use in numeric operand
+    /// slots (`RIGHT`, `PARTY_LENGTH`, `NUM_POKEMON - 2 - 1`, etc.).
+    let private intArg (strict: bool) (constants: Map<string, int>) (s: string) : int =
+        let tokenValue token =
+            match tryParseInt token with
+            | Some value -> Some value
+            | None -> Map.tryFind token constants
+
+        let tokens =
+            s.Trim().Replace("+", " + ").Replace("-", " - ").Split([| ' '; '\t' |], StringSplitOptions.RemoveEmptyEntries)
+
+        let mutable sign = 1
+        let mutable value = 0
+        let mutable sawTerm = false
+        let mutable unresolved: string option = None
+
+        for token in tokens do
+            match token with
+            | "+" -> sign <- 1
+            | "-" -> sign <- -1
+            | _ ->
+                match tokenValue token with
+                | Some term ->
+                    value <- value + sign * term
+                    sawTerm <- true
+                    sign <- 1
+                | None ->
+                    if unresolved.IsNone then
+                        unresolved <- Some token
+
+        match unresolved with
+        | Some token when strict -> failwithf "Unresolved numeric script constant '%s' in operand '%s'" token s
+        | Some _ -> 0
+        | None when sawTerm -> value
+        | None -> 0
 
     /// Strip a trailing `; comment` and surrounding whitespace.
     let private stripComment (line: string) : string =
@@ -64,10 +109,10 @@ module ScriptParser =
     /// Translate one mnemonic + args into a command, with targets/labels already
     /// qualified by `g` (the current global label). Returns `None` for lines that
     /// don't emit a script command (text/data/event-table/header directives).
-    let private toCommand (g: string) (mn: string) (args: string list) : ScriptCommand option =
+    let private toCommand (strict: bool) (constants: Map<string, int>) (g: string) (mn: string) (args: string list) : ScriptCommand option =
         let arg n = List.tryItem n args |> Option.defaultValue ""
         let lbl n = qualify g (arg n)
-        let i n = intArg (arg n)
+        let i n = intArg strict constants (arg n)
 
         match mn with
         // control flow
@@ -226,7 +271,7 @@ module ScriptParser =
               "text_start"; "raw"; "ascii"; "sound"; "interpret_data"
               "object_const_def"; "const"; "const_def"; "const_skip"; "const_value"
               "map_def"; "map_attributes"; "map_header"; "connection"
-              "def_scene_scripts"; "scene_script"
+              "def_scene_scripts"; "scene_script"; "scene_const"
               "def_callbacks"
               "def_warp_events"; "warp_event"
               "def_coord_events"; "coord_event"
@@ -244,7 +289,7 @@ module ScriptParser =
         | LCommand of ScriptCommand
         | LSkip
 
-    let private classify (g: string) (body: string) : Line =
+    let private classify (strict: bool) (constants: Map<string, int>) (g: string) (body: string) : Line =
         // A label is a single token (no internal whitespace, no following mnemonic).
         let singleToken = not (body.Contains " ") && not (body.Contains "\t")
         // Map files write labels with a trailing ':'. RGBDS also allows a *local*
@@ -261,7 +306,7 @@ module ScriptParser =
         else
             let mn, args = splitLine body
 
-            match toCommand g mn args with
+            match toCommand strict constants g mn args with
             | Some cmd -> LCommand cmd
             | None ->
                 if nonScript.Contains mn || mn.EndsWith ":" then
@@ -271,81 +316,128 @@ module ScriptParser =
                     // script opcode we haven't covered yet (drives the M9.6 pass).
                     LCommand(Unsupported(mn, args))
 
-    /// Parse the text of a map `.asm` file into a `ScriptProgram`.
-    let parseText (text: string) : ScriptProgram =
-        let commands = ResizeArray<ScriptCommand>()
-        let labels = System.Collections.Generic.Dictionary<string, int>()
-        let mutable lastGlobal = ""
+    let private collectSceneConstants (text: string) : Map<string, int> =
+        let scenes = ResizeArray<string>()
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
 
             if body <> "" then
-                match classify lastGlobal body with
-                | LLabel name ->
-                    let qualified = qualify lastGlobal name
-                    if not (name.StartsWith ".") then lastGlobal <- name
-                    // First definition wins; ignore accidental duplicates.
-                    if not (labels.ContainsKey qualified) then
-                        labels.[qualified] <- commands.Count
-                | LCommand cmd ->
-                    // Expand the `trainer` macro (macros/scripts/maps.asm l.142-153) inline
-                    // rather than emitting an Unsupported no-op. The macro is pure data in
-                    // the disassembly; the engine's TalkToTrainerScript/AlreadyBeatenTrainer
-                    // scripts (engine/events/trainer_scripts.asm) drive the actual dialog
-                    // branching. We re-express the same branching as inline script commands
-                    // so the VM produces the correct first-encounter / already-beaten flow
-                    // without needing the `trainerflagaction`/`scripttalkafter` opcodes.
-                    //
-                    // Args: trainer GROUP, ID, FLAG, SEEN_TEXT, BEATEN_TEXT, LOSS_TEXT, AFTER_SCRIPT
-                    //
-                    // Expansion (equivalent of TalkToTrainerScript):
-                    //   faceplayer
-                    //   checkevent FLAG
-                    //   iftrue AFTER_SCRIPT   ;; already beaten → jump to after-battle script
-                    //   opentext
-                    //   writetext SEEN_TEXT
-                    //   waitbutton
-                    //   closetext
-                    //   loadtrainer GROUP, ID
-                    //   startbattle
-                    //   reloadmapafterbattle
-                    //   setevent FLAG
-                    //   end                   ;; first encounter ends here (never reaches AFTER_SCRIPT)
-                    //
-                    // The AFTER_SCRIPT label (e.g. `.Script`) follows the trainer data in the
-                    // source and typically starts with `endifjustbattled` (already a no-op in
-                    // the VM), so the "talk again" path sees the after-battle dialog while
-                    // the "just won" path ended above.
-                    match cmd with
-                    | Unsupported("trainer", args) when args.Length >= 7 ->
-                        let group = args.[0]
-                        let id = args.[1]
-                        let flag = args.[2]
-                        let seenText = args.[3]
-                        let afterLabel = qualify lastGlobal args.[6]
-                        commands.AddRange(
-                            [| Faceplayer
-                               Checkevent flag
-                               Iftrue afterLabel
-                               Opentext
-                               Writetext seenText
-                               Waitbutton
-                               Closetext
-                               Loadtrainer(group, id)
-                               Startbattle
-                               Reloadmapafterbattle
-                               Setevent flag
-                               End |])
-                    | Unsupported("itemball", args) when args.Length >= 1 ->
-                        let qty = if args.Length > 1 then intArg args.[1] else 1
-                        commands.AddRange([| Verbosegiveitem(args.[0], qty); End |])
-                    | Unsupported("hiddenitem", args) when args.Length >= 1 ->
-                        commands.AddRange([| Verbosegiveitem(args.[0], 1); End |])
-                    | Unsupported("fruittree", _) ->
-                        commands.AddRange([| Verbosegiveitem("BERRY", 1); End |])
-                    | _ -> commands.Add cmd
-                | LSkip -> ()
+                let mn, args = splitLine body
+
+                match mn with
+                | "scene_script" when args.Length > 1 && args.[1] <> "" -> scenes.Add args.[1]
+                | "scene_const" when args.Length > 0 && args.[0] <> "" -> scenes.Add args.[0]
+                | _ -> ()
+
+        scenes
+        |> Seq.mapi (fun i name -> name, i)
+        |> Seq.distinctBy fst
+        |> Map.ofSeq
+
+    let private constantsFor (extraConstants: Map<string, int>) (text: string) : Map<string, int> =
+        let addAll source target =
+            source |> Map.fold (fun acc key value -> Map.add key value acc) target
+
+        builtInConstants
+        |> addAll extraConstants
+        |> addAll (collectSceneConstants text)
+
+    let private parseTextInternal (strict: bool) (extraConstants: Map<string, int>) (text: string) : ScriptProgram =
+        let commands = ResizeArray<ScriptCommand>()
+        let labels = System.Collections.Generic.Dictionary<string, int>()
+        let mutable lastGlobal = ""
+        let constants = constantsFor extraConstants text
+
+        let mutable inMacro = false
+
+        for raw in text.Replace("\r\n", "\n").Split('\n') do
+            let body = stripComment raw
+
+            if body <> "" then
+                let mn, _ = splitLine body
+
+                if inMacro then
+                    if mn = "ENDM" then
+                        inMacro <- false
+                elif mn = "MACRO" then
+                    inMacro <- true
+                else
+                    match classify strict constants lastGlobal body with
+                    | LLabel name ->
+                        let qualified = qualify lastGlobal name
+                        if not (name.StartsWith ".") then lastGlobal <- name
+                        // First definition wins; ignore accidental duplicates.
+                        if not (labels.ContainsKey qualified) then
+                            labels.[qualified] <- commands.Count
+                    | LCommand cmd ->
+                        // Expand the `trainer` macro (macros/scripts/maps.asm l.142-153) inline
+                        // rather than emitting an Unsupported no-op. The macro is pure data in
+                        // the disassembly; the engine's TalkToTrainerScript/AlreadyBeatenTrainer
+                        // scripts (engine/events/trainer_scripts.asm) drive the actual dialog
+                        // branching. We re-express the same branching as inline script commands
+                        // so the VM produces the correct first-encounter / already-beaten flow
+                        // without needing the `trainerflagaction`/`scripttalkafter` opcodes.
+                        //
+                        // Args: trainer GROUP, ID, FLAG, SEEN_TEXT, BEATEN_TEXT, LOSS_TEXT, AFTER_SCRIPT
+                        //
+                        // Expansion (equivalent of TalkToTrainerScript):
+                        //   faceplayer
+                        //   checkevent FLAG
+                        //   iftrue AFTER_SCRIPT   ;; already beaten → jump to after-battle script
+                        //   opentext
+                        //   writetext SEEN_TEXT
+                        //   waitbutton
+                        //   closetext
+                        //   loadtrainer GROUP, ID
+                        //   startbattle
+                        //   reloadmapafterbattle
+                        //   setevent FLAG
+                        //   end                   ;; first encounter ends here (never reaches AFTER_SCRIPT)
+                        //
+                        // The AFTER_SCRIPT label (e.g. `.Script`) follows the trainer data in the
+                        // source and typically starts with `endifjustbattled` (already a no-op in
+                        // the VM), so the "talk again" path sees the after-battle dialog while
+                        // the "just won" path ended above.
+                        match cmd with
+                        | Unsupported("trainer", args) when args.Length >= 7 ->
+                            let group = args.[0]
+                            let id = args.[1]
+                            let flag = args.[2]
+                            let seenText = args.[3]
+                            let afterLabel = qualify lastGlobal args.[6]
+                            commands.AddRange(
+                                [| Faceplayer
+                                   Checkevent flag
+                                   Iftrue afterLabel
+                                   Opentext
+                                   Writetext seenText
+                                   Waitbutton
+                                   Closetext
+                                   Loadtrainer(group, id)
+                                   Startbattle
+                                   Reloadmapafterbattle
+                                   Setevent flag
+                                   End |])
+                        | Unsupported("itemball", args) when args.Length >= 1 ->
+                            let qty = if args.Length > 1 then intArg strict constants args.[1] else 1
+                            commands.AddRange([| Verbosegiveitem(args.[0], qty); End |])
+                        | Unsupported("hiddenitem", args) when args.Length >= 1 ->
+                            commands.AddRange([| Verbosegiveitem(args.[0], 1); End |])
+                        | Unsupported("fruittree", _) ->
+                            commands.AddRange([| Verbosegiveitem("BERRY", 1); End |])
+                        | _ -> commands.Add cmd
+                    | LSkip -> ()
 
         { Commands = commands.ToArray()
           Labels = labels |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq }
+
+    /// Parse a map `.asm` file with a build-time constant table. This is the path
+    /// DataGen uses; unresolved symbolic numeric operands are fatal so bad scenes
+    /// cannot be baked into generated source as `0`.
+    let parseTextWithConstants (constants: Map<string, int>) (text: string) : ScriptProgram =
+        parseTextInternal true constants text
+
+    /// Parse the text of a map `.asm` file into a `ScriptProgram`.
+    let parseText (text: string) : ScriptProgram =
+        parseTextInternal false Map.empty text

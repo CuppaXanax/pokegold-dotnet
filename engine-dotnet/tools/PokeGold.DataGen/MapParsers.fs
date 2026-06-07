@@ -18,6 +18,34 @@ module MapParsers =
             (Repo.readText "data/maps/attributes.asm")
             (Repo.readText "data/maps/blocks.asm")
 
+    let private addFirst (key: string) (value: int) (map: Map<string, int>) =
+        if Map.containsKey key map then map else Map.add key value map
+
+    let private mergeConstants (source: Map<string, int>) (target: Map<string, int>) =
+        source |> Map.fold (fun acc key value -> addFirst key value acc) target
+
+    let private constantsDirConstants () =
+        Directory.GetFiles(Repo.path "constants", "*.asm")
+        |> Array.map (fun path -> "constants/" + Path.GetFileName path)
+        |> Array.fold (fun acc relative -> mergeConstants (AsmConstants.load relative) acc) Map.empty
+
+    let private allSceneConstants () =
+        [ for meta in metas do
+              let path = Repo.path (sprintf "maps/%s.asm" meta.Name)
+
+              if File.Exists path then
+                  let events = MapEventParser.parseText (File.ReadAllText path)
+
+                  for i, scene in events.Scenes |> Seq.indexed do
+                      if scene <> "" then
+                          yield scene, i ]
+        |> List.fold (fun acc (scene, value) -> addFirst scene value acc) Map.empty
+
+    let private scriptConstants : Map<string, int> =
+        constantsDirConstants ()
+        |> mergeConstants (AsmConstants.load "data/mon_menu.asm")
+        |> mergeConstants (allSceneConstants ())
+
     /// Each map's full static record. A map whose `maps/<Name>.asm` is missing
     /// (should not happen for the real game) gets empty event/script/text tables
     /// rather than failing the whole generation.
@@ -28,7 +56,7 @@ module MapParsers =
               let events, script, text =
                   if File.Exists path then
                       let asm = File.ReadAllText path
-                      MapEventParser.parseText asm, ScriptParser.parseText asm, MapText.parseText asm
+                      MapEventParser.parseText asm, ScriptParser.parseTextWithConstants scriptConstants asm, MapText.parseText asm
                   else
                       { Warps = [||]; Coords = [||]; Bgs = [||]; Objects = [||]; Scenes = [||]; SceneLabels = [||]; Callbacks = [||] },
                       { Commands = [||]; Labels = Map.empty },
@@ -53,7 +81,7 @@ module MapParsers =
     /// `jumpstd`/`callstd` targets (PokecenterNurseScript, bookshelves, signs, …) —
     /// parsed into one program addressed by label.
     let stdScripts: ScriptProgram =
-        ScriptParser.parseText (Repo.readText "engine/events/std_scripts.asm")
+        ScriptParser.parseTextWithConstants scriptConstants (Repo.readText "engine/events/std_scripts.asm")
 
     /// The standard scripts' text (`data/text/std_text.asm`) resolved to M5 token
     /// strings, so std-script `writetext` labels render in-game.

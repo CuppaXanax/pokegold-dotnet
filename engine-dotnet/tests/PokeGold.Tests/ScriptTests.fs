@@ -52,6 +52,57 @@ let ``parses opcodes with their typed arguments`` () =
     )
 
 [<Fact>]
+let ``strict parser resolves symbolic numeric constants and scene ids`` () =
+    let constants =
+        Map.ofList
+            [ "PARTY_LENGTH", 6
+              "NUM_POKEMON", 251 ]
+
+    let prog =
+        ScriptParser.parseTextWithConstants
+            constants
+            "MapScripts:\n\
+             \tdef_scene_scripts\n\
+             \tscene_script Scene0, SCENE_TEST_START\n\
+             \tscene_script Scene1, SCENE_TEST_DONE\n\
+             \n\
+             S:\n\
+             \tsetscene SCENE_TEST_DONE\n\
+             \tifequal PARTY_LENGTH, .Full\n\
+             \tifgreater NUM_POKEMON - 2 - 1, .Done\n\
+             \tend\n\
+             .Full:\n\
+             \tend\n\
+             .Done:\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Setscene 1
+          Ifequal(6, "S.Full")
+          Ifgreater(248, "S.Done")
+          End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``strict parser skips macro definitions instead of parsing their bodies`` () =
+    let prog =
+        ScriptParser.parseTextWithConstants
+            (Map.ofList [ "TRUE", 1 ])
+            "MACRO doorstate\n\
+             \tchangeblock UGDOOR_\\1_YCOORD, UGDOOR_\\1_XCOORD, UNDERGROUND_DOOR_\\2\n\
+             ENDM\n\
+             \n\
+             S:\n\
+             \tsetval TRUE\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Setval 1; End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
 let ``giveitem and verbosegiveitem default quantity to one`` () =
     let prog =
         parse

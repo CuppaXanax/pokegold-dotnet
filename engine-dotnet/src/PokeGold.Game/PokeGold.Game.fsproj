@@ -196,6 +196,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <GameDataInput Include="$(RepoRoot)constants\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\type_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\map_constants.asm" />
@@ -213,6 +214,7 @@
     <GameDataInput Include="$(RepoRoot)data\items\names.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\descriptions.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\marts.asm" />
+    <GameDataInput Include="$(RepoRoot)data\mon_menu.asm" />
     <GameDataInput Include="$(RepoRoot)constants\mart_constants.asm" />
     <GameDataInput Include="$(RepoRoot)data\wild\johto_grass.asm" />
     <GameDataInput Include="$(RepoRoot)data\wild\kanto_grass.asm" />
