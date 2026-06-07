@@ -59,6 +59,38 @@ let ``restore runs map callbacks through the scheduler`` () =
     Assert.False(World.hasEvent "EVENT_FIRST_TIME_BANKING_WITH_MOM" scene.DebugWorld)
 
 [<Fact>]
+let ``direct event flags do not pop already loaded Mom objects`` () =
+    let content = Content()
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "PlayersHouse1F" 7 7 Up)
+
+    let initialWorld =
+        World.empty
+        |> World.setEvent "EVENT_INITIALIZED_EVENTS"
+        |> World.setEvent "EVENT_PLAYERS_HOUSE_MOM_2"
+        |> World.setScene "PlayersHouse1F" 1
+
+    scene.Restore(initialWorld, PlayerStateOps.initial)
+
+    let events = (MapsData.byName "PlayersHouse1F").Value.Events.Objects
+    let mom1 = events.[0]
+    let mornMom2 = events.[1]
+
+    Assert.True(scene.DebugVisible mom1)
+    Assert.False(scene.DebugVisible mornMom2)
+
+    scene.DebugSetEvent "EVENT_PLAYERS_HOUSE_MOM_1" true
+    scene.DebugSetEvent "EVENT_PLAYERS_HOUSE_MOM_2" false
+
+    Assert.True(scene.DebugVisible mom1)
+    Assert.False(scene.DebugVisible mornMom2)
+    Assert.True(World.hasEvent "EVENT_PLAYERS_HOUSE_MOM_1" scene.DebugWorld)
+    Assert.False(World.hasEvent "EVENT_PLAYERS_HOUSE_MOM_2" scene.DebugWorld)
+
+[<Fact>]
 let ``script warp runs destination entry scripts before queued continuation`` () =
     let content = Content()
     let baseState = OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down

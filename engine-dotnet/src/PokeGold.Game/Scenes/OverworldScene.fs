@@ -89,10 +89,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
-    /// Live-only visibility overrides for objects without an EVENT_* flag. Objects
-    /// with flags resolve directly from `world` every frame so `setevent` /
-    /// `clearevent` cannot desynchronize the sprite cache from script state.
-    let mutable objectPresenceOverrides: Map<int, bool> = Map.empty
+    /// Live object presence for this map visit. Event flags seed this on map load;
+    /// only `appear`/`disappear` update it live. Plain `setevent`/`clearevent`
+    /// prepares future map-load state and must not pop already-loaded actors.
+    let mutable objectPresent: bool[] = [||]
 
     let directionToward (fromX: int) (fromY: int) (toX: int) (toY: int) : Direction =
         let dx = toX - fromX
@@ -113,13 +113,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Right -> 1, 0
 
     let resetObjectPresence () =
-        objectPresenceOverrides <- Map.empty
+        objectPresent <- state.Npcs |> Array.map (fun n -> MapEvents.objectVisible world n.Event)
+
+    let syncFlaggedObjectPresenceFromWorld () =
+        if objectPresent.Length = state.Npcs.Length then
+            for i = 0 to state.Npcs.Length - 1 do
+                if state.Npcs.[i].Event.EventFlag.IsSome then
+                    objectPresent.[i] <- MapEvents.objectVisible world state.Npcs.[i].Event
 
     let isObjectPresent (idx: int) =
-        idx >= 0
-        && idx < state.Npcs.Length
-        && (Map.tryFind idx objectPresenceOverrides
-            |> Option.defaultWith (fun () -> MapEvents.objectVisible world state.Npcs.[idx].Event))
+        idx >= 0 && idx < objectPresent.Length && objectPresent.[idx]
 
     let parseDirection (facing: string) : Direction option =
         match facing.Trim().ToUpperInvariant() with
@@ -170,12 +173,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             world <- (if visible then World.clearEvent flag world else World.setEvent flag world)
 
             match idxOpt with
-            | Some idx -> objectPresenceOverrides <- Map.remove idx objectPresenceOverrides
+            | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
             | None -> ()
         | None ->
             match idxOpt with
-            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
-                objectPresenceOverrides <- Map.add idx visible objectPresenceOverrides
+            | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
             | _ -> ()
 
     let actorIndexOfSymbol (objSym: string) : int option =
@@ -372,6 +374,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             this.PlayMapMusic nextState.MapId
 
         this.RunMapCallbacks nextState.MapId
+        syncFlaggedObjectPresenceFromWorld ()
         this.RunSceneScript nextState.MapId
 
     member private this.ApplyCallbackEffect(effect: ScriptEffect) =
@@ -789,6 +792,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         scriptQueue.Clear()
         resetObjectPresence ()
         this.RunMapCallbacks state.MapId
+        syncFlaggedObjectPresenceFromWorld ()
         this.RunSceneScript state.MapId |> ignore
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
@@ -813,7 +817,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member _.DebugBag: Map<string, int> = Bag.toFlat player.Bag
 
     /// Whether an NPC object is currently present (event-flag gated).
-    member _.DebugVisible(o: ObjectEvent) : bool = MapEvents.objectVisible world o
+    member _.DebugVisible(o: ObjectEvent) : bool =
+        state.Npcs
+        |> Array.tryFindIndex (fun n -> n.Event = o)
+        |> Option.map isObjectPresent
+        |> Option.defaultWith (fun () -> MapEvents.objectVisible world o)
 
     /// Set or clear an `EVENT_*` story flag on the live world.
     member _.DebugSetEvent (flag: string) (value: bool) =
