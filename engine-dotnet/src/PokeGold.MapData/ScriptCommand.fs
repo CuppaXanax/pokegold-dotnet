@@ -159,7 +159,7 @@ type ScriptCommand =
     /// `turnobject $75 object, facing`.
     | Turnobject of obj: string * facing: string
     | Moveobject of obj: string * x: int * y: int
-    | Follow of follower: string * leader: string
+    | Follow of leader: string * follower: string
     | Stopfollow
     | Variablesprite of sprite: string * replacement: string
     | Writeobjectxy of obj: string

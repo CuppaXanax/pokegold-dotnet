@@ -11,6 +11,7 @@ open PokeGold.Game.Overworld.Script
 open PokeGold.Game.Player
 open PokeGold.Game.Render
 open PokeGold.Game.Save
+open PokeGold.Game.Debug
 
 module TrainerSight =
     let private isInSightCone (npc: NpcObject) (px: int) (py: int) : bool =
@@ -80,6 +81,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable pauseVm: ScriptVm option = None
     /// Active `follow follower, leader` relationship.
     let mutable followPair: (ActorId * ActorId) option = None
+    let mutable lastText: (string * string) option = None
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -349,19 +351,38 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// text (nurse prompts, bookshelves, signs) is the fallback; an unknown label
     /// shows the label itself.
     member private _.ResolveText(label: string) : string =
-        let raw =
+        let rawText label =
             match Map.tryFind label state.Text with
             | Some s -> s
             | None ->
                 match Map.tryFind label StdScriptsData.text with
                 | Some s -> s
                 | None -> label + "<DONE>"
+
+        let inlineText label =
+            match Map.tryFind label state.Text with
+            | Some s -> s
+            | None ->
+                match Map.tryFind label StdScriptsData.text with
+                | Some s -> s
+                | None -> label
+
+        let cleanInline (text: string) =
+            text.Replace("<DONE>", "").Replace("<PROMPT>", "").Replace("@", "")
+
+        let bufferValue name =
+            let value = World.getBuffer name world
+            if value = "" then ""
+            else cleanInline (inlineText value)
+
+        let raw = rawText label
+
         // Substitute player/rival name placeholders and named text buffers.
         let withBuffers (text: string) : string =
            [ 1..5 ]
            |> List.fold
                (fun (acc: string) (i: int) ->
-                   acc.Replace($"<STRING_BUFFER_{i}>", PokeGold.Game.Overworld.Script.World.getBuffer $"STRING_BUFFER_{i}" world))
+                   acc.Replace($"<STRING_BUFFER_{i}>", bufferValue $"STRING_BUFFER_{i}"))
                text
 
         raw.Replace("<PLAYER>", player.Name)
@@ -474,13 +495,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | ShowText(label, _faceFirst) ->
                         pending <- Some(vm, effect)
                         let speed = Options.textSpeedDelay player.Options.TextSpeed
-                        stop (Push(TextBoxScene.Of(content, this.ResolveText label, speed) :> Scene))
+                        let rendered = this.ResolveText label
+                        lastText <- Some(label, rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
                     | HallOfFame ->
                         world <- World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                         player <- { player with Party = Heal.healParty player.Party }
                         pending <- Some(vm, effect)
                         let speed = Options.textSpeedDelay player.Options.TextSpeed
-                        stop (Push(TextBoxScene.Of(content, "Congratulations! You are the new Champion!<DONE>", speed) :> Scene))
+                        let rendered = "Congratulations! You are the new Champion!<DONE>"
+                        lastText <- Some("HallOfFame", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
                     | AskYesNo ->
                         pending <- Some(vm, effect)
                         stop (Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene))
@@ -491,7 +516,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
                         pending <- Some(vm, effect)
-                        stop (Push(TextBoxScene.Of(content, item.Replace("_", " ") + "<DONE>") :> Scene))
+                        let rendered = item.Replace("_", " ") + "<DONE>"
+                        lastText <- Some("VerboseGiveItem", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
                     | OpenMart(_martType, items) ->
                         pending <- Some(vm, effect)
                         stop (Push(MartScene(content, player, _martType, items, fun p -> player <- p) :> Scene))
@@ -573,7 +600,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | MoveObject(objSym, x, y) ->
                         this.MoveObjectTo(objSym, x, y)
                         resume None vm
-                    | Follow(follower, leader) ->
+                    | Follow(leader, follower) ->
                         match actorOfSymbol follower, actorOfSymbol leader with
                         | Some f, Some l when f <> l -> followPair <- Some(f, l)
                         | _ -> ()
@@ -768,6 +795,50 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// The live bag (item constant → quantity) — for debug console.
     member _.DebugBag: Map<string, int> = Bag.toFlat player.Bag
 
+    /// Typed runtime snapshot for tests and tooling. This is the non-string API the
+    /// debug pipe can adapt from and the deterministic e2e harness can assert on.
+    member this.RuntimeSnapshot: RuntimeOverworldSnapshot =
+        let p = state.Player
+        let px, py = Player.worldPixel p
+
+        let actors =
+            state.Npcs
+            |> Array.mapi (fun i n ->
+                let nx, ny = NpcObject.worldPixel n
+                { Index = i
+                  Sprite = n.Event.Sprite
+                  CellX = n.CellX
+                  CellY = n.CellY
+                  PixelX = nx
+                  PixelY = ny
+                  Facing = n.Facing
+                  Motion = string n.Motion
+                  Visible = isObjectPresent i
+                  EventFlag = n.Event.EventFlag
+                  Script = n.Event.Script })
+            |> Array.toList
+
+        { MapId = state.MapId
+          Player =
+            { CellX = p.CellX
+              CellY = p.CellY
+              PixelX = px
+              PixelY = py
+              Facing = p.Facing
+              Motion = string p.Motion
+              Moving = p.Moving
+              Name = player.Name
+              PartyCount = player.Party.Length
+              Money = player.Money }
+          Actors = actors
+          LastTextLabel = lastText |> Option.map fst
+          LastRenderedText = lastText |> Option.map snd
+          EventCount = world.Events.Count
+          EngineFlagCount = world.EngineFlags.Count
+          Vars = world.Vars
+          SceneId = World.getScene state.MapId world
+          CanCapture = this.CanCapture }
+
     /// Whether an NPC object is currently present (event-flag gated).
     member _.DebugVisible(o: ObjectEvent) : bool =
         state.Npcs
@@ -781,6 +852,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     /// Write a `VAR_*` game variable on the live world.
     member _.DebugSetVar (var: string) (value: int) = world <- World.setVar var value world
+
+    /// Write a map scene id on the live world.
+    member _.DebugSetScene (mapId: string) (scene: int) = world <- World.setScene mapId scene world
 
     /// Teleport the player to a cell on the current map (no warp/load), settling
     /// any in-progress step and re-centering the camera.

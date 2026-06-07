@@ -3,6 +3,7 @@ module PokeGold.Tests.GameInputTests
 open Xunit
 open PokeGold.Game
 open PokeGold.Game.Core
+open PokeGold.Game.Debug
 
 // ── Buttons masking helpers (pure) ───────────────────────────────────────────
 
@@ -35,6 +36,11 @@ let ``except with an empty mask is identity`` () =
 /// The active (top) scene type, read through the debug command bridge.
 let private topScene (g: Game) = g.RunDebugCommand "scene"
 
+let private assertApplied =
+    function
+    | Applied -> ()
+    | Rejected reason -> failwith reason
+
 let private startMainMenu () =
     let g = Game()
     g.Tick({ Buttons.none with Start = true })
@@ -53,6 +59,35 @@ let ``debug Azalea boot is explicit`` () =
     Assert.Equal("ok: debug Azalea overworld loaded", g.RunDebugCommand "debug-azalea")
     Assert.Equal("OverworldScene", topScene g)
     Assert.Contains("map     AzaleaTown", g.RunDebugCommand "player")
+
+[<Fact>]
+let ``typed runtime snapshot starts at title without overworld`` () =
+    let g = Game()
+    let snap = g.Snapshot
+
+    Assert.Equal("TitleScene", snap.TopScene)
+    Assert.Equal<string list>([ "TitleScene" ], snap.SceneStack)
+    Assert.True(Option.isNone snap.Overworld)
+
+[<Fact>]
+let ``typed runtime control can boot and inspect debug Azalea`` () =
+    let g = Game()
+    g.ApplyControl LoadDebugAzalea |> assertApplied
+
+    let snap = g.Snapshot
+    let ow = snap.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld snapshot")
+
+    Assert.Equal("OverworldScene", snap.TopScene)
+    Assert.Equal("AzaleaTown", ow.MapId)
+    Assert.True(ow.Actors |> List.exists (fun actor -> actor.Visible))
+
+[<Fact>]
+let ``typed runtime input drives the real tick path`` () =
+    let g = Game()
+    g.ApplyControl(Press { Buttons.none with Start = true }) |> assertApplied
+    g.Tick Buttons.none
+
+    Assert.Equal("MainMenuScene", g.Snapshot.TopScene)
 
 [<Fact>]
 let ``holding Start keeps the main menu open instead of flickering`` () =

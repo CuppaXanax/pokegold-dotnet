@@ -98,7 +98,7 @@ module EmitMaps =
         | Appear o -> sprintf "Appear %s" (str o)
         | Turnobject (o, f) -> sprintf "Turnobject(%s, %s)" (str o) (str f)
         | Moveobject(o, x, y) -> sprintf "Moveobject(%s, %d, %d)" (str o) x y
-        | Follow(follower, leader) -> sprintf "Follow(%s, %s)" (str follower) (str leader)
+        | Follow(leader, follower) -> sprintf "Follow(%s, %s)" (str leader) (str follower)
         | Stopfollow -> "Stopfollow"
         | Variablesprite(sprite, replacement) -> sprintf "Variablesprite(%s, %s)" (str sprite) (str replacement)
         | Writeobjectxy o -> sprintf "Writeobjectxy %s" (str o)

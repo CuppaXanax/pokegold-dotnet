@@ -116,11 +116,81 @@ type Game() =
     /// pipe). Commands submitted here run on the game thread during `Tick`.
     member _.DebugChannel = debug
 
+    /// Typed runtime snapshot for deterministic tests and tools. The scene stack is
+    /// reported bottom-to-top, matching render order.
+    member _.Snapshot: RuntimeSnapshot =
+        let stack =
+            scenes.ToArray()
+            |> Array.rev
+            |> Array.map (fun scene -> scene.GetType().Name)
+            |> Array.toList
+
+        { Frame = frame
+          SceneStack = stack
+          TopScene = scenes.Peek().GetType().Name
+          Overworld = overworld |> Option.map (fun ow -> ow.RuntimeSnapshot) }
+
+    /// Apply a typed runtime control operation. String debug commands and tests
+    /// should route through this seam instead of mutating private queues/state.
+    member this.ApplyControl(command: RuntimeControl) : RuntimeControlResult =
+        match command with
+        | Press buttons ->
+            injected.Enqueue buttons
+            Applied
+        | Hold(buttons, frames) ->
+            if frames < 1 then
+                Rejected "frames must be >= 1"
+            else
+                for _ in 1 .. frames do
+                    injected.Enqueue buttons
+                Applied
+        | LoadDebugAzalea ->
+            let ow = OverworldScene.DebugLoadAzalea(content, audio)
+            this.ResetTo ow
+            Applied
+        | Teleport(x, y) ->
+            match overworld with
+            | Some ow ->
+                ow.DebugTeleport x y
+                Applied
+            | None -> Rejected "no overworld scene active"
+        | Warp(mapId, x, y, facing) ->
+            match overworld with
+            | Some ow ->
+                try
+                    let dir = defaultArg facing ow.DebugState.Player.Facing
+                    ow.DebugWarp mapId x y dir
+                    Applied
+                with ex ->
+                    Rejected ex.Message
+            | None -> Rejected "no overworld scene active"
+        | SetEvent(flag, value) ->
+            match overworld with
+            | Some ow ->
+                ow.DebugSetEvent flag value
+                Applied
+            | None -> Rejected "no overworld scene active"
+        | SetVar(name, value) ->
+            match overworld with
+            | Some ow ->
+                ow.DebugSetVar name value
+                Applied
+            | None -> Rejected "no overworld scene active"
+        | SetScene(mapId, scene) ->
+            match overworld with
+            | Some ow ->
+                ow.DebugSetScene mapId scene
+                Applied
+            | None -> Rejected "no overworld scene active"
+        | StartNewGame playerName ->
+            this.NewGame playerName
+            Applied
+
     /// Execute one debug command line against the live game and return its textual
     /// reply. Runs on the game thread (called from the channel's `Pump`), so it
     /// sees a coherent view of scene state and its mutations are frame-safe.
-    member _.RunDebugCommand(line: string) : string =
-        let top = scenes.Peek().GetType().Name
+    member this.RunDebugCommand(line: string) : string =
+        let top = this.Snapshot.TopScene
         let parts =
             line.Trim().Split([| ' '; '\t' |], System.StringSplitOptions.RemoveEmptyEntries)
 
@@ -157,14 +227,17 @@ type Game() =
                         | true, v -> max 1 v
                         | _ -> 1
                     else 1
-                for _ in 1 .. n do injected.Enqueue frame1
-                sprintf "ok: injected %s for %d frame(s)" parts.[1] n
+                let result =
+                    if parts.[0] = "press" then this.ApplyControl(Press frame1)
+                    else this.ApplyControl(Hold(frame1, n))
+
+                match result with
+                | Applied -> sprintf "ok: injected %s for %d frame(s)" parts.[1] n
+                | Rejected reason -> sprintf "error: %s" reason
         | "debug-azalea" | "dev-azalea" ->
-            let ow = OverworldScene.DebugLoadAzalea(content, audio)
-            scenes.Clear()
-            scenes.Push(ow :> Scene)
-            overworld <- Some ow
-            "ok: debug Azalea overworld loaded"
+            match this.ApplyControl LoadDebugAzalea with
+            | Applied -> "ok: debug Azalea overworld loaded"
+            | Rejected reason -> sprintf "error: %s" reason
         | "help" when overworld.IsNone ->
             DebugCommands.help + "\n  debug-azalea              explicit dev boot into Azalea seed"
         | _ ->

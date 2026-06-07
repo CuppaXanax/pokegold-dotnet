@@ -139,6 +139,7 @@
     <!-- Save: versioned JSON save model + on-disk persistence. -->
     <Compile Include="Save\SaveData.fs" />
     <Compile Include="Save\SaveFile.fs" />
+    <Compile Include="Debug\RuntimeApi.fs" />
     <!-- Render: draw typed state into the framebuffer. -->
     <Compile Include="Render\MapRenderer.fs" />
     <Compile Include="Render\SpriteRenderer.fs" />

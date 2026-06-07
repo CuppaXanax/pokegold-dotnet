@@ -947,6 +947,28 @@ let ``MapText resolves a real dialogue label to its token string`` () =
     )
 
 [<Fact>]
+let ``MapText preserves text_ram string buffers`` () =
+    let text = AsmLoad.text "data/text/std_text.asm"
+
+    Assert.Equal(
+        "<PLAYER> received<LINE>@<STRING_BUFFER_4>.<DONE>",
+        text.["ReceivedItemText"]
+    )
+
+[<Fact>]
+let ``MapText preserves db string labels for getstring`` () =
+    let text = AsmLoad.text "maps/PlayersHouse1F.asm"
+
+    Assert.Equal("#GEAR@", text.["PokegearName"])
+
+[<Fact>]
+let ``generated std text preserves item receive buffer`` () =
+    Assert.Equal(
+        "<PLAYER> received<LINE>@<STRING_BUFFER_4>.<DONE>",
+        StdScriptsData.text.["ReceivedItemText"]
+    )
+
+[<Fact>]
 let ``resolved dialogue round-trips through the M5 text engine`` () =
     // The Gramps text contains a `…` glyph; encoding it through the text box must
     // not throw and must produce a non-empty, terminated box.

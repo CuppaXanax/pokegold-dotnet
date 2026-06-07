@@ -171,9 +171,19 @@ let ``Mom cutscene keeps Mom1 as the live actor while staging future flags`` () 
     let mom1 = events.[0]
     let mornMom2 = events.[1]
     let mutable sawFutureFlags = false
+    let mutable sawPokegearReceipt = false
 
     for frame in 1 .. 2500 do
         tickStack stack frame
+
+        match overworld.RuntimeSnapshot.LastTextLabel, overworld.RuntimeSnapshot.LastRenderedText with
+        | Some "ReceivedItemText", Some text ->
+            Assert.Contains("#GEAR", text)
+            Assert.DoesNotContain("PokegearName", text)
+            Assert.DoesNotContain("STRING_BUFFER", text)
+            Assert.DoesNotContain("ItemText", text)
+            sawPokegearReceipt <- true
+        | _ -> ()
 
         if World.hasEvent "EVENT_PLAYERS_HOUSE_MOM_1" overworld.DebugWorld then
             sawFutureFlags <- true
@@ -183,6 +193,7 @@ let ``Mom cutscene keeps Mom1 as the live actor while staging future flags`` () 
             Assert.False(overworld.DebugVisible mornMom2, $"Mom2 appeared mid-cutscene at frame {frame}")
 
     Assert.True(sawFutureFlags, "Mom script should stage future visibility flags during the cutscene")
+    Assert.True(sawPokegearReceipt, "Mom script should render the Pokegear receipt text")
 
 [<Fact>]
 let ``Elm intro scene keeps Elm as a stable actor through player movement`` () =

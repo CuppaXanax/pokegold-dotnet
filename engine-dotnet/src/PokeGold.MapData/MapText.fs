@@ -26,6 +26,24 @@ module MapText =
         let j = s.LastIndexOf '"'
         if i >= 0 && j > i then s.Substring(i + 1, j - i - 1) else ""
 
+    let private argText (s: string) : string =
+        let i = s.IndexOfAny([| ' '; '\t' |])
+        if i < 0 then "" else s.Substring(i + 1).Trim()
+
+    let private ramToken (operand: string) : string =
+        let name = operand.Trim()
+
+        if name.StartsWith("wStringBuffer") then
+            let suffix = name.Substring("wStringBuffer".Length)
+            match System.Int32.TryParse suffix with
+            | true, n -> $"<STRING_BUFFER_{n}>"
+            | _ -> name
+        else
+            match name with
+            | "wPlayerName" -> "<PLAYER>"
+            | "wMonOrItemNameBuffer" -> "<STRING_BUFFER_4>"
+            | _ -> name.Replace("_", " ")
+
     /// Parse all text labels in a map `.asm` into a `label -> token string` map.
     let parseText (text: string) : Map<string, string> =
         let result = System.Collections.Generic.Dictionary<string, string>()
@@ -63,6 +81,9 @@ module MapText =
                     match mn with
                     | "done" -> flush "<DONE>"
                     | "prompt" -> flush "<PROMPT>"
+                    | "db" when current.IsSome && body.Contains "\"" ->
+                        flush (quoted body)
+                    | "text_ram" when current.IsSome -> sb.Append(ramToken (argText body)) |> ignore
                     | _ ->
                         match Map.tryFind mn leading with
                         | Some token when current.IsSome -> sb.Append(token).Append(quoted body) |> ignore

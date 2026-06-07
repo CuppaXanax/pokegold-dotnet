@@ -8,7 +8,12 @@
   <ItemGroup>
     <Compile Include="DisplayTests.fs" />
     <Compile Include="PngTests.fs" />
+    <Compile Include="GameDriver.fs" />
+    <Compile Include="RuntimeInvariants.fs" />
     <Compile Include="GameInputTests.fs" />
+    <Compile Include="RuntimeDriverTests.fs" />
+    <Compile Include="RuntimeInvariantTests.fs" />
+    <Compile Include="NewBarkRuntimeTests.fs" />
     <Compile Include="GraphicsTests.fs" />
     <Compile Include="AssetTests.fs" />
     <Compile Include="CollisionTests.fs" />
@@ -58,6 +63,7 @@
     <Compile Include="PCBoxTests.fs" />
     <Compile Include="PcItemTests.fs" />
     <Compile Include="PlayerPCTests.fs" />
+    <Compile Include="ConformanceLedgerTests.fs" />
     <Compile Include="CoverageSweepTests.fs" />
     <Compile Include="TimeOfDayTests.fs" />
     <Compile Include="KantoDataTests.fs" />
