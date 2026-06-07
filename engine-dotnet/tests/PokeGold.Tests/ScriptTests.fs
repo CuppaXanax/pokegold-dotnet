@@ -573,6 +573,24 @@ let private driveSilent world label prog =
     drive (fun _ -> None) world label prog
 
 [<Fact>]
+let ``map music specials emit host music effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial RestartMapMusic\n\
+             \tspecial FadeOutMusic\n\
+             \tspecial PlayMapMusic\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ ScriptEffect.PlayMusic "__MAP_DEFAULT__"
+          ScriptEffect.PlayMusic "__STOP__"
+          ScriptEffect.PlayMusic "__MAP_DEFAULT__" ],
+        effects)
+
+[<Fact>]
 let ``loadvar sets the world var and script var`` () =
     let prog =
         ScriptParser.parseText
@@ -589,7 +607,7 @@ let ``loadvar sets the world var and script var`` () =
     Assert.Equal(5, World.getVar "VAR_TEST" world)
 
 [<Fact>]
-let ``checkmoney and checkcoins always report enough funds`` () =
+let ``checkmoney and checkcoins suspend for runtime funds checks`` () =
     let prog =
         ScriptParser.parseText
             "S:\n\
@@ -601,8 +619,17 @@ let ``checkmoney and checkcoins always report enough funds`` () =
              \twritetext Ok\n\
              \tend\n"
 
-    let _, effects = driveSilent World.empty "S" prog
-    Assert.Equal<ScriptEffect list>([ ShowText("Ok", false) ], effects)
+    let _, effects =
+        drive
+            (function
+             | CheckMoney _
+             | CheckCoins _ -> Some 1
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>([ CheckMoney 100; CheckCoins 10; ShowText("Ok", false) ], effects)
 
 [<Fact>]
 let ``World flag set-check-clear round-trips`` () =
@@ -954,6 +981,14 @@ let ``MapText preserves text_ram string buffers`` () =
         "<PLAYER> received<LINE>@<STRING_BUFFER_4>.<DONE>",
         text.["ReceivedItemText"]
     )
+
+[<Fact>]
+let ``MapText preserves non-string-buffer text_ram operands`` () =
+    let text =
+        MapText.parseText
+            "BattleText:\n\ttext_ram wBattleMonNickname\n\ttext \" fainted!\"\n\tdone\n"
+
+    Assert.Equal("<RAM_wBattleMonNickname> fainted!<DONE>", text.["BattleText"])
 
 [<Fact>]
 let ``MapText preserves db string labels for getstring`` () =

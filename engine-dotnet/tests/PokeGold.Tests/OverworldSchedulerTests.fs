@@ -93,6 +93,30 @@ let ``restore runs map callbacks through the scheduler`` () =
     Assert.False(World.hasEvent "EVENT_FIRST_TIME_BANKING_WITH_MOM" scene.DebugWorld)
 
 [<Fact>]
+let ``money and coin script effects mutate player state`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "MoneyScene"
+            [| Checkmoney [ "YOUR_MONEY"; "3000" ]
+               Takemoney [ "YOUR_MONEY"; "500" ]
+               Givecoins(Some 50)
+               Checkcoins(Some 50)
+               Takecoins(Some 20)
+               End |]
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    Assert.Equal(2500, scene.DebugPlayer.Money)
+    Assert.Equal(30, scene.DebugPlayer.Coins)
+
+[<Fact>]
 let ``idle overworld can be captured but transient scripts cannot`` () =
     let content = Content()
     let idle = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down)
@@ -194,6 +218,21 @@ let ``Mom cutscene keeps Mom1 as the live actor while staging future flags`` () 
 
     Assert.True(sawFutureFlags, "Mom script should stage future visibility flags during the cutscene")
     Assert.True(sawPokegearReceipt, "Mom script should render the Pokegear receipt text")
+
+[<Fact>]
+let ``runtime text resolver substitutes named RAM buffers`` () =
+    let content = Content()
+    let state =
+        scriptedScene content "NewBarkTown" 5 5 Down "RamTextScene" [| Writetext "RamText"; End |]
+        |> fun s -> { s with Text = Map.ofList [ "RamText", "<RAM_wBattleMonNickname> fainted!<DONE>" ] }
+
+    let overworld = OverworldScene(content, SilentSound(), state)
+    let world = World.empty |> World.setBuffer "wBattleMonNickname" "CYNDAQUIL"
+
+    overworld.Restore(world, PlayerStateOps.initial)
+
+    Assert.Equal(Some "RamText", overworld.RuntimeSnapshot.LastTextLabel)
+    Assert.Equal(Some "CYNDAQUIL fainted!<DONE>", overworld.RuntimeSnapshot.LastRenderedText)
 
 [<Fact>]
 let ``Elm intro scene keeps Elm as a stable actor through player movement`` () =

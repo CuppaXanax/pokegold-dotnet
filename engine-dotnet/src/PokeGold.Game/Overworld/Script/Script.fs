@@ -26,6 +26,14 @@ type ScriptEffect =
     | TakeItem of item: string * qty: int
     /// `checkitem` — is the item in the bag? → resume value: 1 / 0.
     | CheckItem of item: string
+    /// Money/coin checks and mutations. Checks and take operations resume with
+    /// 1 on success and 0 on failure; give operations resume with no value.
+    | CheckMoney of amount: int
+    | GiveMoney of amount: int
+    | TakeMoney of amount: int
+    | CheckCoins of amount: int
+    | GiveCoins of amount: int
+    | TakeCoins of amount: int
     /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
     | GivePoke of species: string * level: int * item: string option
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
@@ -129,6 +137,17 @@ type ScriptStep = { World: World; Outcome: ScriptOutcome }
 /// `readvar` load it, and `iftrue`/`iffalse`/`if{,not}equal`/`ifgreater`/`ifless`
 /// compare it (`Script_iftrue` = "jump if `wScriptVar` ≠ 0", etc.).
 module Script =
+
+    let private intArg (args: string list) : int =
+        args
+        |> List.rev
+        |> List.tryPick (fun raw ->
+            let cleaned =
+                raw.Replace("$", "0x").Replace(",", "").Trim()
+            match System.Int32.TryParse cleaned with
+            | true, value -> Some value
+            | _ -> None)
+        |> Option.defaultValue 0
 
     /// Resolve a jump/call target label to a command index. Targets that don't
     /// resolve within this program are cross-file references (`farscall` into
@@ -278,11 +297,11 @@ module Script =
             | Warpfacing(facing, map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, Some facing))
 
             // ---- Special functions -----------------------------------------
-            // HealParty is enacted by the integration layer.
-            // PokemonCenterPC opens the PC dispatcher (M12.3).
-            // All other specials (HealMachineAnim, RestartMapMusic, etc.) are cosmetic and skipped.
             | Special "HealParty" -> suspend next world HealParty
             | Special "PokemonCenterPC" -> suspend next world OpenPc
+            | Special "RestartMapMusic"
+            | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
+            | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
             | Special _ -> run world next
 
             // ---- Mart -----------------------------------------------------
@@ -317,8 +336,8 @@ module Script =
             | Checkphonecall -> run world { next with ScriptVar = 0 }
             | Checkjustbattled -> run world { next with ScriptVar = 0 }
             | Askforphonenumber _ -> run world { next with ScriptVar = 2 }
-            | Checkmoney _ -> run world { next with ScriptVar = 1 }
-            | Checkcoins _ -> run world { next with ScriptVar = 1 }
+            | Checkmoney args -> suspend next world (CheckMoney(intArg args))
+            | Checkcoins amount -> suspend next world (CheckCoins(defaultArg amount 0))
             | Checkver -> run world { next with ScriptVar = 0 }
             | Random limit -> run world { next with ScriptVar = (vm.ScriptVar + 7) % (max 1 limit) }
             | Loadvar(varName, value) -> run (World.setVar varName value world) { next with ScriptVar = value }
@@ -347,8 +366,8 @@ module Script =
                 let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                 suspend (endLike vm) w HallOfFame
             | Credits -> run world (endLike vm)
-            | Givemoney _
-            | Takemoney _ -> run world next
+            | Givemoney args -> suspend next world (GiveMoney(intArg args))
+            | Takemoney args -> suspend next world (TakeMoney(intArg args))
             | Blackoutmod map ->
                 run (World.setBuffer "__blackout_map" map (World.setVar "wLastSpawnMap" 1 world)) next
             | Dontrestartmapmusic -> run (World.setVar "__dont_restart_map_music" 1 world) next
@@ -391,8 +410,8 @@ module Script =
                 else run world next
             | ScriptCommand.Follow(follower, leader) -> suspend next world (ScriptEffect.Follow(follower, leader))
             | Stopfollow -> suspend next world StopFollow
-            | Givecoins _
-            | Takecoins _ -> run world next
+            | Givecoins amount -> suspend next world (GiveCoins(defaultArg amount 0))
+            | Takecoins amount -> suspend next world (TakeCoins(defaultArg amount 0))
             | MenuCoords _ -> run world next
             | Moveobject(obj, x, y) -> suspend next world (MoveObject(obj, x, y))
             | Musicfadeout -> suspend next world (PlayMusic "__STOP__")

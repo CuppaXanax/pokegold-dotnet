@@ -38,3 +38,17 @@ let ``actor-player overlap invariant catches visible overlap`` () =
     let failures = noVisibleActorOverlapsPlayer snapshot'
 
     Assert.Single failures |> ignore
+
+[<Fact>]
+let ``rendered text invariant catches unresolved placeholders`` () =
+    let driver = GameDriver()
+    driver.Apply LoadDebugAzalea
+    let snapshot = driver.Snapshot
+    let ow = snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    let snapshot' =
+        { snapshot with
+            Overworld = Some { ow with LastRenderedText = Some "<PLAYER> got <STRING_BUFFER_4><DONE>" } }
+
+    let failures = noUnresolvedRenderedTextPlaceholders snapshot'
+
+    Assert.Equal(2, failures.Length)

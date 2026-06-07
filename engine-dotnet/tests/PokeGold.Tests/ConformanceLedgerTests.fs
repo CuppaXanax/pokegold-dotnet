@@ -65,6 +65,7 @@ module ConformanceLedger =
               "Checkevent"; "Clearevent"; "Setevent"; "Checkflag"; "Clearflag"; "Setflag"
               "Checkmapscene"; "Setmapscene"; "Checkscene"; "Setscene"
               "Giveitem"; "Takeitem"; "Checkitem"; "Verbosegiveitem"
+              "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
               "Opentext"; "Closetext"; "Writetext"; "Jumptext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton"; "Yesorno"
               "Loadwildmon"; "Givepoke"; "Checkpoke"; "Loadtrainer"; "Startbattle"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
@@ -74,11 +75,11 @@ module ConformanceLedger =
               "Checktime"; "Endifjustbattled"; "Gettrainername"; "Getitemname"; "Getmonname"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
 
           yield! many ScriptCommandCase StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback on normal story/menu paths."
-            [ "Loadmenu"; "Verticalmenu"; "Closewindow"; "TwoDMenu"; "Prompt"; "Catchtutorial"; "Checkmoney"; "Takemoney"; "Givemoney"; "TextRam"; "MenuCoords" ]
+            [ "Loadmenu"; "Verticalmenu"; "Closewindow"; "TwoDMenu"; "Prompt"; "Catchtutorial"; "TextRam"; "MenuCoords" ]
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
-              "Addcellnum"; "Checkcellnum"; "Checkphonecall"; "Checkjustbattled"; "Askforphonenumber"; "Checkcoins"; "Takecoins"; "Givecoins"
+              "Addcellnum"; "Checkcellnum"; "Checkphonecall"; "Checkjustbattled"; "Askforphonenumber"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Specialphonecall"; "Elevfloor" ]
 
           yield! many ScriptCommandCase StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated command is typed, but only cosmetic/timing behavior remains."
@@ -88,12 +89,12 @@ module ConformanceLedger =
             [ "Checkver"; "Unsupported" ]
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Explicitly handled by the script integration layer."
-            [ "HealParty"; "PokemonCenterPC" ]
+            [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic" ]
 
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
-            [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "FadeOutMusic"; "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
+            [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
               "HealMachineAnim"; "InitialClearDSTFlag"; "InitialSetDSTFlag"; "MapRadio"; "NameRival"; "OverworldTownMap"; "PlayersHousePC"
-              "PlayMapMusic"; "RestartMapMusic"; "SetDayOfWeek"; "TryQuickSave" ]
+              "SetDayOfWeek"; "TryQuickSave" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckFirstMonIsEgg"; "CheckForLuckyNumberWinners"

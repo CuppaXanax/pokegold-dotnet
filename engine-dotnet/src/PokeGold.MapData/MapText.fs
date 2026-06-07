@@ -42,7 +42,7 @@ module MapText =
             match name with
             | "wPlayerName" -> "<PLAYER>"
             | "wMonOrItemNameBuffer" -> "<STRING_BUFFER_4>"
-            | _ -> name.Replace("_", " ")
+            | _ -> $"<RAM_{name}>"
 
     /// Parse all text labels in a map `.asm` into a `label -> token string` map.
     let parseText (text: string) : Map<string, string> =

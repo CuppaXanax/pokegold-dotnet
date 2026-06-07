@@ -60,10 +60,21 @@ let noVisibleActorOverlapsVisibleActor: RuntimeInvariant =
 
                     [ fail "no-actor-actor-overlap" snapshot $"visible actors [{ids}] overlap at {x},{y}" ])
 
+let noUnresolvedRenderedTextPlaceholders: RuntimeInvariant =
+    fun snapshot ->
+        match snapshot.Overworld |> Option.bind (fun ow -> ow.LastRenderedText) with
+        | None -> []
+        | Some text ->
+            [ "STRING_BUFFER"; "<RAM_"; "ItemText"; "PokegearName"; "<PLAYER>"; "<RIVAL>"; "<MOM>" ]
+            |> List.filter text.Contains
+            |> List.map (fun token ->
+                fail "no-unresolved-rendered-text" snapshot $"rendered text still contains '{token}': {text}")
+
 let core =
     [ sceneStackIsConsistent
       noVisibleActorOverlapsPlayer
-      noVisibleActorOverlapsVisibleActor ]
+      noVisibleActorOverlapsVisibleActor
+      noUnresolvedRenderedTextPlaceholders ]
 
 let failures invariants snapshot =
     invariants |> List.collect (fun invariant -> invariant snapshot)

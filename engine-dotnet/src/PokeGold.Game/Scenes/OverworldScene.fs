@@ -2,6 +2,7 @@ namespace PokeGold.Game.Scenes
 
 open System
 open System.Collections.Generic
+open System.Text.RegularExpressions
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Audio
@@ -375,21 +376,37 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             if value = "" then ""
             else cleanInline (inlineText value)
 
+        let ramValue name =
+            match name with
+            | "wPlayerName" -> player.Name
+            | "wMonOrItemNameBuffer" ->
+                match bufferValue "wMonOrItemNameBuffer" with
+                | "" -> bufferValue "STRING_BUFFER_4"
+                | value -> value
+            | _ -> bufferValue name
+
         let raw = rawText label
 
         // Substitute player/rival name placeholders and named text buffers.
         let withBuffers (text: string) : string =
-           [ 1..5 ]
-           |> List.fold
-               (fun (acc: string) (i: int) ->
-                   acc.Replace($"<STRING_BUFFER_{i}>", bufferValue $"STRING_BUFFER_{i}"))
-               text
+            [ 1..5 ]
+            |> List.fold
+                (fun (acc: string) (i: int) ->
+                    acc.Replace($"<STRING_BUFFER_{i}>", bufferValue $"STRING_BUFFER_{i}"))
+                text
+
+        let withRamBuffers (text: string) =
+            Regex.Replace(
+                text,
+                "<RAM_([^>]+)>",
+                MatchEvaluator(fun m -> ramValue m.Groups.[1].Value))
 
         raw.Replace("<PLAYER>", player.Name)
            .Replace("<RIVAL>", "SILVER")
            .Replace("<MOM>", "MOM")
            .Replace("@", "")
            |> withBuffers
+           |> withRamBuffers
 
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =
@@ -535,6 +552,26 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         resume (Some 1) vm
                     | CheckItem item ->
                         resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) vm
+                    | CheckMoney amount ->
+                        resume (Some(if Money.canAfford player.Money amount then 1 else 0)) vm
+                    | GiveMoney amount ->
+                        player <- { player with Money = Money.give player.Money amount }
+                        resume None vm
+                    | TakeMoney amount ->
+                        let ok = Money.canAfford player.Money amount
+                        if ok then
+                            player <- { player with Money = Money.take player.Money amount }
+                        resume (Some(if ok then 1 else 0)) vm
+                    | CheckCoins amount ->
+                        resume (Some(if player.Coins >= amount then 1 else 0)) vm
+                    | GiveCoins amount ->
+                        player <- { player with Coins = min 9999 (max 0 (player.Coins + amount)) }
+                        resume None vm
+                    | TakeCoins amount ->
+                        let ok = player.Coins >= amount
+                        if ok then
+                            player <- { player with Coins = max 0 (player.Coins - amount) }
+                        resume (Some(if ok then 1 else 0)) vm
                     | LoadWild(species, level) ->
                         stagedWild <- Some(species, level)
                         stagedTrainer <- None

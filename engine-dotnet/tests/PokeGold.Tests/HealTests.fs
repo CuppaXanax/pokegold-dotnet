@@ -129,7 +129,7 @@ let ``interpreter suspends with HealParty effect`` () =
     | other -> Assert.Fail(sprintf "Expected Suspended HealParty, got %A" other)
 
 [<Fact>]
-let ``interpreter no-ops cosmetic specials and completes`` () =
+let ``interpreter routes restart music special but skips heal animation`` () =
     let prog =
         ScriptParser.parseText
             "S:\n\
@@ -138,8 +138,8 @@ let ``interpreter no-ops cosmetic specials and completes`` () =
              \tend\n"
 
     match (Script.start "S" World.empty prog "").Outcome with
-    | Completed -> ()
-    | other -> Assert.Fail(sprintf "Expected Completed, got %A" other)
+    | Suspended(_, PlayMusic "__MAP_DEFAULT__") -> ()
+    | other -> Assert.Fail(sprintf "Expected map music effect, got %A" other)
 
 [<Fact>]
 let ``script continues past HealParty on resume`` () =
