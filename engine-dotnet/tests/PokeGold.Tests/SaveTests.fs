@@ -20,7 +20,8 @@ let ``a save round-trips through JSON unchanged`` () =
             { Events = [| "EVENT_A" |]
               EngineFlags = [||]
               Vars = [| { Name = "VAR_X"; Value = 3 } |]
-              Scenes = [||] }
+              Scenes = [||]
+              StringBuffers = [||] }
           Bag = [| { Item = "POTION"; Qty = 2 } |]
           Player = Unchecked.defaultof<_> }
 

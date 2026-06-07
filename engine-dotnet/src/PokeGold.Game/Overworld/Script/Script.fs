@@ -127,6 +127,9 @@ module Script =
     /// program (see [`StdScriptsData`]).
     let private targetOf (prog: ScriptProgram) (label: string) : int option = prog.Labels.TryFind label
 
+    let private tryInt (s: string) : int =
+        try int s with _ -> 0
+
     /// Suspend the VM on an effect, with the pc already advanced past the command
     /// that produced it so `resume` continues after it.
     let private suspend (vm: ScriptVm) (world: World) (effect: ScriptEffect) : ScriptStep =
@@ -284,6 +287,13 @@ module Script =
             // that depend on them.
             | Unsupported(name, args) ->
                 match name with
+                | "verticalmenu" | "_2dmenu" -> run world { next with ScriptVar = 1 }
+                | "loadmenu" | "closewindow" | "pokepic" | "closepokepic" | "itemnotify" | "prompt" -> run world next
+                | "elevator" -> run world { next with ScriptVar = 1 }
+                | "checkpokemail" | "conditional_event" -> run world { next with ScriptVar = 0 }
+                | "giveegg" when args.Length >= 2 ->
+                    suspend next world (GivePoke(args.[0], (try int args.[1] with _ -> 5), None))
+                | "catchtutorial" | "trade" | "givepokemail" | "addcellnum" | "describedecoration" | "stonetable" | "cmdqueue" | "writecmdqueue" -> run world next
                 | "checktime" ->
                     run world { next with ScriptVar = TimeOfDay.toScriptVar (TimeOfDay.current()) }
                 | "checkcellnum" -> run world { next with ScriptVar = 0 }
@@ -292,18 +302,42 @@ module Script =
                 | "askforphonenumber" -> run world { next with ScriptVar = 2 }
                 | "checkmoney" -> run world { next with ScriptVar = 1 }
                 | "checkcoins" -> run world { next with ScriptVar = 1 }
+                | "checkver" -> run world { next with ScriptVar = 0 }
+                | "random" when args.Length >= 1 ->
+                    let limit = max 1 (tryInt args.[0])
+                    run world { next with ScriptVar = (vm.ScriptVar + 7) % limit }
                 | "loadvar" when args.Length >= 2 ->
                     let varName = args.[0]
-                    let value = try int args.[1] with _ -> 0
-                    run (World.setVar varName value world) next
+                    let value = tryInt args.[1]
+                    run (World.setVar varName value world) { next with ScriptVar = value }
                 | "loadmem" when args.Length >= 2 ->
                     let addr = args.[0]
-                    let value = try int args.[1] with _ -> 0
-                    run (World.setVar addr value world) next
+                    let value = tryInt args.[1]
+                    run (World.setVar addr value world) { next with ScriptVar = value }
                 | "readmem" when args.Length >= 1 ->
                     run world { next with ScriptVar = World.getVar args.[0] world }
                 | "writemem" when args.Length >= 1 ->
                     run (World.setVar args.[0] vm.ScriptVar world) next
+                | "gettrainername" when args.Length >= 3 ->
+                    let bufferName = args.[0]
+                    let trainerName =
+                        Trainers.lookupByName args.[1] args.[2]
+                        |> Option.map (fun t -> t.Name)
+                        |> Option.defaultValue args.[2]
+                    run (World.setBuffer bufferName trainerName world) next
+                | "getitemname" when args.Length >= 2 ->
+                    let itemName =
+                        Items.byId |> Map.tryFind args.[1] |> Option.map (fun item -> item.Name) |> Option.defaultValue (args.[1].Replace("_", " "))
+                    run (World.setBuffer args.[0] itemName world) next
+                | "getmonname" when args.Length >= 2 ->
+                    let monName =
+                        Species.all |> Map.tryFind args.[1] |> Option.map (fun stats -> stats.Name) |> Option.defaultValue (args.[1].Replace("_", " "))
+                    run (World.setBuffer args.[0] monName world) next
+                | "getstring" when args.Length >= 2 ->
+                    run (World.setBuffer args.[0] (args.[1].Replace("_", " ")) world) next
+                | "getnum" when args.Length >= 2 ->
+                    run (World.setBuffer args.[0] (string (World.getVar args.[1] world)) world) next
+                | "text_ram" -> run world next
                 | "halloffame" ->
                     let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                     suspend (endLike vm) w HallOfFame
@@ -311,7 +345,6 @@ module Script =
                     run world (endLike vm)
                 | "givemoney"
                 | "takemoney" -> run world next
-                | "trade" -> run world next
                 | _ -> run world next
 
     /// Start a script at `label` over `world`, running until it suspends or ends.

@@ -180,6 +180,68 @@ let ``jump targets resolve to the labelled command index`` () =
     Assert.Equal(End, prog.Commands.[prog.Labels.["S.Tail"]])
 
 [<Fact>]
+let ``menu and UI opcodes set script var via control flow`` () =
+    let verticalProg =
+        parse
+            "S:\n\
+             \tverticalmenu\n\
+             \tiftrue .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
+
+    match Script.start "S" World.empty verticalProg "" with
+    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+    | other -> Assert.Fail($"expected ShowText from verticalmenu branch, got {other}")
+
+    let elevatorProg =
+        parse
+            "S:\n\
+             \televator\n\
+             \tiftrue .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
+
+    match Script.start "S" World.empty elevatorProg "" with
+    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+    | other -> Assert.Fail($"expected ShowText from elevator branch, got {other}")
+
+    let checkProg =
+        parse
+            "S:\n\
+             \tcheckpokemail\n\
+             \tiffalse .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
+
+    match Script.start "S" World.empty checkProg "" with
+    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+    | other -> Assert.Fail($"expected ShowText from checkpokemail branch, got {other}")
+
+    let conditionalProg =
+        parse
+            "S:\n\
+             \tconditional_event\n\
+             \tiffalse .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
+
+    match Script.start "S" World.empty conditionalProg "" with
+    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+    | other -> Assert.Fail($"expected ShowText from conditional_event branch, got {other}")
+
+[<Fact>]
+let ``giveegg suspends as GivePoke`` () =
+    let prog = parse "S:\n\tgiveegg CYNDAQUIL, 5\n\tend\n"
+
+    match Script.start "S" World.empty prog "" with
+    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None)) } -> ()
+    | other -> Assert.Fail($"expected GivePoke effect, got {other}")
+
+[<Fact>]
 let ``trade parses as an unsupported opcode`` () =
     let prog =
         parse
@@ -189,6 +251,54 @@ let ``trade parses as an unsupported opcode`` () =
 
     Assert.Equal<ScriptCommand list>(
         [ Unsupported("trade", [ "NPC_TRADE_KIM" ]); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``new object/cosmetic opcodes are parsed as Unsupported no-ops`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tmoveobject PLAYER, 5, 6\n\
+             \tfollow PLAYER, RIVAL\n\
+             \tstopfollow\n\
+             \tvariablesprite VAR_SPRITE, SPRITE_POKEMON\n\
+             \tfix_facing\n\
+             \tremove_fixed_facing\n\
+             \twriteobjectxy PLAYER\n\
+             \tpause 30\n\
+             \tshowemote EMOTE_SHOCK, PLAYER, 15\n\
+             \tearthquake 8\n\
+             \tdoorstate\n\
+             \tdontrestartmapmusic\n\
+             \tplaymapmusic\n\
+             \tmusicfadeout\n\
+             \tnewloadmap\n\
+             \twarpcheck\n\
+             \tblackoutmod NEW_BARK_TOWN\n\
+             \treanchormap\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Unsupported("moveobject", [ "PLAYER"; "5"; "6" ])
+          Unsupported("follow", [ "PLAYER"; "RIVAL" ])
+          Unsupported("stopfollow", [])
+          Unsupported("variablesprite", [ "VAR_SPRITE"; "SPRITE_POKEMON" ])
+          Unsupported("fix_facing", [])
+          Unsupported("remove_fixed_facing", [])
+          Unsupported("writeobjectxy", [ "PLAYER" ])
+          Unsupported("pause", [ "30" ])
+          Unsupported("showemote", [ "EMOTE_SHOCK"; "PLAYER"; "15" ])
+          Unsupported("earthquake", [ "8" ])
+          Unsupported("doorstate", [])
+          Unsupported("dontrestartmapmusic", [])
+          Unsupported("playmapmusic", [])
+          Unsupported("musicfadeout", [])
+          Unsupported("newloadmap", [])
+          Unsupported("warpcheck", [])
+          Unsupported("blackoutmod", [ "NEW_BARK_TOWN" ])
+          Unsupported("reanchormap", [])
+          End ],
         ScriptProgram.blockAt "S" prog
     )
 
@@ -394,6 +504,38 @@ let private drive (respond: ScriptEffect -> int option) (world: World) (label: s
 // A driver that needs no answers (no result-bearing effects on the path).
 let private driveSilent world label prog =
     drive (fun _ -> None) world label prog
+
+[<Fact>]
+let ``loadvar sets the world var and script var`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tloadvar VAR_TEST, 5\n\
+             \tifequal 5, .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \twritetext Ok\n\
+             \tend\n"
+
+    let world, effects = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Ok", false) ], effects)
+    Assert.Equal(5, World.getVar "VAR_TEST" world)
+
+[<Fact>]
+let ``checkmoney and checkcoins always report enough funds`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tcheckmoney 100\n\
+             \tcheckcoins 10\n\
+             \tifequal 1, .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \twritetext Ok\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Ok", false) ], effects)
 
 [<Fact>]
 let ``World flag set-check-clear round-trips`` () =

@@ -22,6 +22,9 @@ type OverworldSave =
 [<CLIMutable>]
 type NamedInt = { Name: string; Value: int }
 
+[<CLIMutable>]
+type NamedString = { Name: string; Value: string }
+
 /// A bag entry: an item constant and how many are held.
 [<CLIMutable>]
 type ItemSave = { Item: string; Qty: int }
@@ -33,7 +36,8 @@ type WorldSave =
     { Events: string[]
       EngineFlags: string[]
       Vars: NamedInt[]
-      Scenes: NamedInt[] }
+      Scenes: NamedInt[]
+      StringBuffers: NamedString[] }
 
 [<CLIMutable>]
 type MovesSave = { MoveId: int; Pp: int }
@@ -127,6 +131,13 @@ module SaveData =
         if isNull a then Map.empty
         else a |> Array.map (fun e -> e.Name, e.Value) |> Map.ofArray
 
+    let private namedStringOfMap (m: Map<string, string>) : NamedString[] =
+        m |> Map.toArray |> Array.map (fun (n, v) -> { Name = n; Value = v })
+
+    let private mapOfNamedString (a: NamedString[]) : Map<string, string> =
+        if isNull a then Map.empty
+        else a |> Array.map (fun e -> e.Name, e.Value) |> Map.ofArray
+
     let private setOfArray (a: string[]) : Set<string> =
         if isNull a then Set.empty else Set.ofArray a
 
@@ -134,7 +145,8 @@ module SaveData =
         { Events = Set.toArray w.Events
           EngineFlags = Set.toArray w.EngineFlags
           Vars = namedOfMap w.Vars
-          Scenes = namedOfMap w.Scenes }
+          Scenes = namedOfMap w.Scenes
+          StringBuffers = namedStringOfMap w.StringBuffers }
 
     /// The `World` a save restores (an absent/v1 block becomes the empty world).
     let worldOf (save: SaveData) : World =
@@ -145,7 +157,8 @@ module SaveData =
             { Events = setOfArray ws.Events
               EngineFlags = setOfArray ws.EngineFlags
               Vars = mapOfNamed ws.Vars
-              Scenes = mapOfNamed ws.Scenes }
+              Scenes = mapOfNamed ws.Scenes
+              StringBuffers = mapOfNamedString ws.StringBuffers }
 
     /// The bag a save restores (item constant → quantity). For v2/v1 saves only.
     let bagOf (save: SaveData) : Map<string, int> =

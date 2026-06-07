@@ -111,7 +111,7 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
     let save =
         { Version = SaveData.CurrentVersion
           Overworld = { MapId = "AzaleaTown"; CellX = 5; CellY = 8; Facing = "Down" }
-          World = { Events = [||]; EngineFlags = [||]; Vars = [||]; Scenes = [||] }
+          World = { Events = [||]; EngineFlags = [||]; Vars = [||]; Scenes = [||]; StringBuffers = [||] }
           Bag = [||]
           Player =
             { Name = "RED"

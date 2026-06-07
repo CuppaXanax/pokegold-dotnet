@@ -43,7 +43,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable state = initial
     /// The script flag/var/scene world — mutated as scripts run; persisted in save.
     /// Starts empty; seeded by Load (debug) or Restore (save/new-game).
-    let mutable world = World.empty
+    let mutable world: PokeGold.Game.Overworld.Script.World = World.empty
     /// Coord triggers already fired this visit (fire-once).
     let mutable firedCoords: Set<int * int> = Set.empty
     /// The player's full persistent state (party, bag, dex, money, etc.).
@@ -127,10 +127,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 match Map.tryFind label StdScriptsData.text with
                 | Some s -> s
                 | None -> label + "<DONE>"
-        // Substitute player/rival name placeholders
+        // Substitute player/rival name placeholders and named text buffers.
+        let withBuffers (text: string) : string =
+           [ 1..5 ]
+           |> List.fold
+               (fun (acc: string) (i: int) ->
+                   acc.Replace($"<STRING_BUFFER_{i}>", PokeGold.Game.Overworld.Script.World.getBuffer $"STRING_BUFFER_{i}" world))
+               text
+
         raw.Replace("<PLAYER>", player.Name)
            .Replace("<RIVAL>", "SILVER")
            .Replace("<MOM>", "MOM")
+           .Replace("@", "")
+           |> withBuffers
 
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =

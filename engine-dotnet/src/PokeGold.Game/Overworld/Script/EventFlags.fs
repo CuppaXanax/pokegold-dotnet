@@ -19,7 +19,10 @@ type World =
       Vars: Map<string, int>
       /// Per-map scene id (`setscene`/`setmapscene`); absent ⇒ 0. The empty key
       /// `""` is *this* map's scene, used by the map-less `checkscene`/`setscene`. */
-      Scenes: Map<string, int> }
+      Scenes: Map<string, int>
+      /// Named text buffers used by `gettrainername`, `getitemname`, `getmonname`,
+      /// `getstring`, and `getnum`.
+      StringBuffers: Map<string, string> }
 
 module World =
 
@@ -28,7 +31,8 @@ module World =
         { Events = Set.empty
           EngineFlags = Set.empty
           Vars = Map.empty
-          Scenes = Map.empty }
+          Scenes = Map.empty
+          StringBuffers = Map.empty }
 
     // ---- Event flags (EVENT_*) ----------------------------------------------
 
@@ -75,3 +79,11 @@ module World =
     /// Write a map's scene id. Use `""` for the current map.
     let setScene (map: string) (value: int) (w: World) : World =
         { w with Scenes = Map.add map value w.Scenes }
+
+    /// Read a text buffer (absent ⇒ "").
+    let getBuffer (name: string) (w: World) : string =
+        Map.tryFind name w.StringBuffers |> Option.defaultValue ""
+
+    /// Write a text buffer.
+    let setBuffer (name: string) (value: string) (w: World) : World =
+        { w with StringBuffers = Map.add name value w.StringBuffers }
