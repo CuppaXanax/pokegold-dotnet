@@ -23,41 +23,20 @@ let ``the baked map scripts hold a stable command total`` () =
     Assert.Equal(20612, total)
 
 [<Fact>]
-let ``every map's baked script round-trips through the VM as no-ops where unsupported`` () =
-    // No command in any map should throw when classified; Unsupported is the only
-    // catch-all and it is always well-formed (name + args).
-    for kv in MapsData.all do
-        for c in kv.Value.Script.Commands do
-            match c with
-            | Unsupported(name, _) -> Assert.False(System.String.IsNullOrWhiteSpace name)
-            | _ -> ()
-
-[<Fact>]
-let ``generated script IR contains no parser-pollution commands`` () =
-    let parserPollution =
-        Set.ofList
-            [ "callback"; "add_stdscript"; "DEF"; "INCLUDE"; "dbw"; "text_end";
-              "turn_head"; "turn_step"; "slow_step"; "step"; "big_step";
-              "slow_slide_step"; "slide_step"; "fast_slide_step"; "turn_away"; "turn_in"; "turn_waterfall";
-              "slow_jump_step"; "jump_step"; "fast_jump_step";
-              "remove_sliding"; "set_sliding"; "remove_fixed_facing"; "fix_facing"; "show_object"; "hide_object";
-              "step_sleep"; "step_end"; "step_wait_end"; "remove_object"; "step_loop"; "step_stop";
-              "teleport_from"; "teleport_to"; "skyfall"; "step_dig"; "step_bump"; "fish_got_bite"; "fish_cast_rod";
-              "hide_emote"; "show_emote"; "step_shake"; "tree_shake"; "rock_smash"; "return_dig" ]
-
-    let offenders =
+let ``generated script IR contains no generic Unsupported commands`` () =
+    let unsupported =
         [ for kv in MapsData.all do
               for c in kv.Value.Script.Commands do
                   match c with
-                  | Unsupported(name, _) when parserPollution.Contains name -> yield kv.Key, name
+                  | Unsupported(name, _) -> yield kv.Key, name
                   | _ -> ()
 
           for c in StdScriptsData.program.Commands do
               match c with
-              | Unsupported(name, _) when parserPollution.Contains name -> yield "StdScripts", name
+              | Unsupported(name, _) -> yield "StdScripts", name
               | _ -> () ]
 
-    Assert.Empty offenders
+    Assert.Empty unsupported
 
 [<Fact>]
 let ``movement scripts are almost fully supported; only deferred macros remain`` () =
