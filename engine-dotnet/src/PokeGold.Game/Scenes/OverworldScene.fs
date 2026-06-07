@@ -66,6 +66,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable stagedLossText: string = ""
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// Script resumes waiting behind higher-priority map-entry scripts.
+    let scriptQueue = Queue<ScriptVm * int option>()
     /// The live NPC most recently selected by an A-press or `setlasttalked`.
     let mutable lastTalkedNpcIndex: int option = None
     /// A script suspended on an `applymovement`: the VM to resume, the moved object's
@@ -303,6 +305,55 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Some path -> sound.PlayMusic path
         | None -> ()
 
+    member private _.MoveObjectTo(objSym: string, x: int, y: int) =
+        match npcIndexOfSymbol objSym with
+        | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+            let npcs = Array.copy state.Npcs
+            let npc = npcs.[idx]
+            npcs.[idx] <-
+                { npc with
+                    HomeX = x
+                    HomeY = y
+                    CellX = x
+                    CellY = y
+                    SrcX = x
+                    SrcY = y
+                    Motion = NpcStanding
+                    Progress = 0 }
+            state <- { state with Npcs = npcs }
+        | _ -> ()
+
+    member private _.ChangeBlockAt(x: int, y: int, blockId: int) =
+        if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
+            let blocks = Array.copy state.Map.BlockIds
+            blocks.[y * state.Map.Width + x] <- byte blockId
+            state <- { state with Map = { state.Map with BlockIds = blocks } }
+
+    member private _.ReanchorCamera() =
+        let camX, camY = Camera.follow state.Map state.Player
+        state <- { state with CamX = camX; CamY = camY }
+
+    member private this.PlayScriptMusic(song: string) =
+        match song with
+        | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
+        | "__STOP__" -> sound.StopMusic()
+        | _ ->
+            match Map.tryFind song MusicData.byId with
+            | Some path -> sound.PlayMusic path
+            | None -> ()
+
+    member private _.ReloadCurrentMap() =
+        let p = state.Player
+        state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
+        resetObjectPresence ()
+
+    member private this.ContinueQueuedScripts() : Transition =
+        if scriptQueue.Count > 0 then
+            let vm, value = scriptQueue.Dequeue()
+            this.Drive(Script.resume value world vm)
+        else
+            Stay
+
     member private this.RunSceneScript(mapId: string) : Transition =
         let sceneIdx = World.getScene mapId world
         let sceneLabel = MapEvents.sceneLabelAt sceneIdx state.Events
@@ -310,46 +361,27 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         if sceneLabel <> "" && state.Script.Labels.ContainsKey sceneLabel then
             this.Drive(Script.start sceneLabel world state.Script mapId)
         else
-            Stay
+            this.ContinueQueuedScripts()
+
+    member private this.EnterMap(nextState: OverworldState, playMusic: bool) : Transition =
+        state <- nextState
+        resetObjectPresence ()
+        firedCoords <- Set.empty
+
+        if playMusic then
+            this.PlayMapMusic nextState.MapId
+
+        this.RunMapCallbacks nextState.MapId
+        this.RunSceneScript nextState.MapId
 
     member private this.ApplyCallbackEffect(effect: ScriptEffect) =
         match effect with
         | SetVisible(obj, visible) -> setObjectVisible obj visible
-        | MoveObject(objSym, x, y) ->
-            match npcIndexOfSymbol objSym with
-            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
-                let npcs = Array.copy state.Npcs
-                let npc = npcs.[idx]
-                npcs.[idx] <-
-                    { npc with
-                        HomeX = x
-                        HomeY = y
-                        CellX = x
-                        CellY = y
-                        SrcX = x
-                        SrcY = y
-                        Motion = NpcStanding
-                        Progress = 0 }
-                state <- { state with Npcs = npcs }
-            | _ -> ()
-        | ChangeBlock(x, y, blockId) ->
-            if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
-                let blocks = Array.copy state.Map.BlockIds
-                blocks.[y * state.Map.Width + x] <- byte blockId
-                state <- { state with Map = { state.Map with BlockIds = blocks } }
-        | ReanchorMap ->
-            let camX, camY = Camera.follow state.Map state.Player
-            state <- { state with CamX = camX; CamY = camY }
-        | PlayMusic "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
-        | PlayMusic "__STOP__" -> sound.StopMusic()
-        | PlayMusic song ->
-            match Map.tryFind song MusicData.byId with
-            | Some path -> sound.PlayMusic path
-            | None -> ()
-        | ReloadMap ->
-            let p = state.Player
-            state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
-            resetObjectPresence ()
+        | MoveObject(objSym, x, y) -> this.MoveObjectTo(objSym, x, y)
+        | ChangeBlock(x, y, blockId) -> this.ChangeBlockAt(x, y, blockId)
+        | ReanchorMap -> this.ReanchorCamera()
+        | PlayMusic song -> this.PlayScriptMusic song
+        | ReloadMap -> this.ReloadCurrentMap()
         | _ -> ()
 
     /// Run map callbacks of the given kind (MAPCALLBACK_NEWMAP, MAPCALLBACK_TILES, etc.)
@@ -466,227 +498,205 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Drive the VM from a run step: enact pure/immediate effects inline (resuming
     /// at once), and for effects that need a child scene, push it and suspend.
     member private this.Drive(step: ScriptStep) : Transition =
-        world <- step.World
+        let mutable current = Some step
+        let mutable result = Stay
+        let mutable finished = false
 
-        match step.Outcome with
-        | Completed -> Stay
-        | Suspended(vm, effect) ->
-            match effect with
-            // ----- effects that push a child scene and suspend -----
-            | ShowText(label, _faceFirst) ->
-                pending <- Some(vm, effect)
-                let speed = Options.textSpeedDelay player.Options.TextSpeed
-                Push(TextBoxScene.Of(content, this.ResolveText label, speed) :> Scene)
-            | HallOfFame ->
-                world <- World.setEvent "EVENT_BEAT_ELITE_FOUR" world
-                player <- { player with Party = Heal.healParty player.Party }
-                pending <- Some(vm, effect)
-                let speed = Options.textSpeedDelay player.Options.TextSpeed
-                Push(TextBoxScene.Of(content, "Congratulations! You are the new Champion!<DONE>", speed) :> Scene)
-            | AskYesNo ->
-                pending <- Some(vm, effect)
-                Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene)
-            | StartBattle ->
-                pending <- Some(vm, effect)
-                sound.PlaySfx "Sfx_Menu"
-                Push(this.BuildBattle() :> Scene)
-            | GiveItem(item, qty, true) ->
-                this.AddItem item qty
-                pending <- Some(vm, effect)
-                Push(TextBoxScene.Of(content, item.Replace("_", " ") + "<DONE>") :> Scene)
-            // ----- immediate effects: enact, resume this frame -----
-            | GiveItem(item, qty, false) ->
-                this.AddItem item qty
-                this.Drive(Script.resume (Some 1) world vm)
-            | TakeItem(item, qty) ->
-                this.RemoveItem item qty
-                this.Drive(Script.resume (Some 1) world vm)
-            | CheckItem item ->
-                this.Drive(Script.resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) world vm)
-            | LoadWild(species, level) ->
-                stagedWild <- Some(species, level)
-                stagedTrainer <- None
-                this.Drive(Script.resume None world vm)
-            | LoadTrainer(group, id) ->
-                stagedTrainer <- Some(group, id)
-                stagedWild <- None
-                this.Drive(Script.resume None world vm)
-            | WinLossText(win, loss) ->
-                stagedWinText <- win
-                stagedLossText <- loss
-                this.Drive(Script.resume None world vm)
-            | GivePoke(species, level, item) ->
-                match Map.tryFind species PokeGold.Game.Data.Species.all with
-                | Some stats ->
-                    let mon = PokeGold.Game.Player.PartyMon.create stats.Dex level
-                    let mon = match item with Some i -> { mon with HeldItem = Some i } | None -> mon
-                    let mon = PokeGold.Game.Player.MoveLearn.seedStartingMoves mon
-                    if player.Party.Length < 6 then
-                        player <- { player with Party = player.Party @ [ mon ] }
-                        this.Drive(Script.resume (Some 1) world vm)
+        while not finished do
+            match current with
+            | None ->
+                finished <- true
+            | Some step ->
+                current <- None
+                world <- step.World
+
+                let resume value vm =
+                    current <- Some(Script.resume value world vm)
+
+                let stop transition =
+                    result <- transition
+                    finished <- true
+
+                match step.Outcome with
+                | Completed ->
+                    if scriptQueue.Count > 0 then
+                        let vm, value = scriptQueue.Dequeue()
+                        resume value vm
                     else
-                        this.Drive(Script.resume (Some 0) world vm)
-                | None ->
-                    this.Drive(Script.resume (Some 0) world vm)
-            | CheckPoke species ->
-                match Map.tryFind species PokeGold.Game.Data.Species.all with
-                | Some stats ->
-                    let has = player.Party |> List.exists (fun m -> m.SpeciesId = stats.Dex)
-                    this.Drive(Script.resume (Some(if has then 1 else 0)) world vm)
-                | None ->
-                    this.Drive(Script.resume (Some 0) world vm)
-            | SetVisible(obj, visible) ->
-                setObjectVisible obj visible
-                this.Drive(Script.resume None world vm)
-            | HealParty ->
-                player <- { player with Party = Heal.healParty player.Party }
-                // Play the heal jingle *once*, layered over the map music. MUSIC_HEAL
-                // (audio/music/healpokemon.asm) is the real GSC heal track; playing it
-                // as a looping background track left it cycling forever (we don't model
-                // the `playmusic MUSIC_NONE` / HealMachineAnim sequence that silences it
-                // in GSC), so it is played as a self-retiring fanfare instead.
-                match Map.tryFind "MUSIC_HEAL" MusicData.byId with
-                | Some path -> sound.PlayJingle path
-                | None -> ()
-                this.Drive(Script.resume None world vm)
-            | OpenMart(_martType, items) ->
-                pending <- Some(vm, effect)
-                Push(MartScene(content, player, _martType, items, fun p -> player <- p) :> Scene)
-            | OpenPc ->
-                pending <- Some(vm, effect)
-                Push(PcMenuScene(content, player, fun p -> player <- p) :> Scene)
-            | SetLastTalked obj ->
-                lastTalkedNpcIndex <- npcIndexOfSymbol obj
-                this.Drive(Script.resume None world vm)
-            | FacePlayer ->
-                match lastTalkedNpcIndex with
-                | Some idx when idx >= 0 && idx < state.Npcs.Length ->
-                    let npc = state.Npcs.[idx]
-                    setNpcFacing idx (directionToward npc.CellX npc.CellY state.Player.CellX state.Player.CellY)
-                | _ -> ()
+                        stop Stay
+                | Suspended(vm, effect) ->
+                    match effect with
+                    // ----- effects that push a child scene and suspend -----
+                    | ShowText(label, _faceFirst) ->
+                        pending <- Some(vm, effect)
+                        let speed = Options.textSpeedDelay player.Options.TextSpeed
+                        stop (Push(TextBoxScene.Of(content, this.ResolveText label, speed) :> Scene))
+                    | HallOfFame ->
+                        world <- World.setEvent "EVENT_BEAT_ELITE_FOUR" world
+                        player <- { player with Party = Heal.healParty player.Party }
+                        pending <- Some(vm, effect)
+                        let speed = Options.textSpeedDelay player.Options.TextSpeed
+                        stop (Push(TextBoxScene.Of(content, "Congratulations! You are the new Champion!<DONE>", speed) :> Scene))
+                    | AskYesNo ->
+                        pending <- Some(vm, effect)
+                        stop (Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene))
+                    | StartBattle ->
+                        pending <- Some(vm, effect)
+                        sound.PlaySfx "Sfx_Menu"
+                        stop (Push(this.BuildBattle() :> Scene))
+                    | GiveItem(item, qty, true) ->
+                        this.AddItem item qty
+                        pending <- Some(vm, effect)
+                        stop (Push(TextBoxScene.Of(content, item.Replace("_", " ") + "<DONE>") :> Scene))
+                    | OpenMart(_martType, items) ->
+                        pending <- Some(vm, effect)
+                        stop (Push(MartScene(content, player, _martType, items, fun p -> player <- p) :> Scene))
+                    | OpenPc ->
+                        pending <- Some(vm, effect)
+                        stop (Push(PcMenuScene(content, player, fun p -> player <- p) :> Scene))
 
-                this.Drive(Script.resume None world vm)
-            | FaceObject(a, b) ->
-                match tryActorCell a, tryActorCell b with
-                | Some actor, Some(_, _, bx, by) ->
-                    let _, _, ax, ay = actor
-                    setActorFacing actor (directionToward ax ay bx by)
-                | _ -> ()
-
-                this.Drive(Script.resume None world vm)
-            | TurnObject(obj, facing) ->
-                match tryActorCell obj, parseDirection facing with
-                | Some actor, Some dir -> setActorFacing actor dir
-                | _ -> ()
-
-                this.Drive(Script.resume None world vm)
-            | MoveObject(objSym, x, y) ->
-                match npcIndexOfSymbol objSym with
-                | Some idx when idx >= 0 && idx < state.Npcs.Length ->
-                    let npcs = Array.copy state.Npcs
-                    let npc = npcs.[idx]
-                    npcs.[idx] <-
-                        { npc with
-                            HomeX = x
-                            HomeY = y
-                            CellX = x
-                            CellY = y
-                            SrcX = x
-                            SrcY = y
-                            Motion = NpcStanding
-                            Progress = 0 }
-                    state <- { state with Npcs = npcs }
-                | _ -> ()
-
-                this.Drive(Script.resume None world vm)
-            | Follow(follower, leader) ->
-                match actorIndexOfSymbol follower, actorIndexOfSymbol leader with
-                | Some f, Some l when f <> l -> followPair <- Some(f, l)
-                | _ -> ()
-
-                this.Drive(Script.resume None world vm)
-            | StopFollow ->
-                followPair <- None
-                this.Drive(Script.resume None world vm)
-            | ReanchorMap ->
-                let camX, camY = Camera.follow state.Map state.Player
-                state <- { state with CamX = camX; CamY = camY }
-                this.Drive(Script.resume None world vm)
-            | Pause frames ->
-                if frames <= 0 then
-                    this.Drive(Script.resume None world vm)
-                else
-                    pauseFrames <- frames
-                    pauseVm <- Some vm
-                    Stay
-            | ReloadMap ->
-                let p = state.Player
-                state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
-                resetObjectPresence ()
-                if World.getVar "__dont_restart_map_music" world = 0 then
-                    this.PlayMapMusic state.MapId
-                this.Drive(Script.resume None world vm)
-            | ChangeBlock(x, y, blockId) ->
-                if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
-                    let blocks = Array.copy state.Map.BlockIds
-                    blocks.[y * state.Map.Width + x] <- byte blockId
-                    state <- { state with Map = { state.Map with BlockIds = blocks } }
-
-                this.Drive(Script.resume None world vm)
-            | PlayMusic song ->
-                match song with
-                | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
-                | "__STOP__" -> sound.StopMusic()
-                | _ ->
-                    match Map.tryFind song MusicData.byId with
-                    | Some path -> sound.PlayMusic path
-                    | None -> ()
-
-                this.Drive(Script.resume None world vm)
-            | PlaySound sfx ->
-                let sfxName =
-                    if SongsData.byName.ContainsKey sfx then
-                        Some sfx
-                    else
-                        let stem =
-                            if sfx.StartsWith("SFX_", StringComparison.OrdinalIgnoreCase) then
-                                sfx.Substring(4)
+                    // ----- immediate effects: enact, continue this frame -----
+                    | GiveItem(item, qty, false) ->
+                        this.AddItem item qty
+                        resume (Some 1) vm
+                    | TakeItem(item, qty) ->
+                        this.RemoveItem item qty
+                        resume (Some 1) vm
+                    | CheckItem item ->
+                        resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) vm
+                    | LoadWild(species, level) ->
+                        stagedWild <- Some(species, level)
+                        stagedTrainer <- None
+                        resume None vm
+                    | LoadTrainer(group, id) ->
+                        stagedTrainer <- Some(group, id)
+                        stagedWild <- None
+                        resume None vm
+                    | WinLossText(win, loss) ->
+                        stagedWinText <- win
+                        stagedLossText <- loss
+                        resume None vm
+                    | GivePoke(species, level, item) ->
+                        match Map.tryFind species PokeGold.Game.Data.Species.all with
+                        | Some stats ->
+                            let mon = PokeGold.Game.Player.PartyMon.create stats.Dex level
+                            let mon = match item with Some i -> { mon with HeldItem = Some i } | None -> mon
+                            let mon = PokeGold.Game.Player.MoveLearn.seedStartingMoves mon
+                            if player.Party.Length < 6 then
+                                player <- { player with Party = player.Party @ [ mon ] }
+                                resume (Some 1) vm
                             else
-                                sfx
-                        let pascal =
-                            stem.Split('_', StringSplitOptions.RemoveEmptyEntries)
-                            |> Array.map (fun p ->
-                                let lower = p.ToLowerInvariant()
-                                if lower.Length = 0 then lower else lower.Substring(0, 1).ToUpperInvariant() + lower.Substring(1))
-                            |> String.concat ""
-                        let candidate = "Sfx_" + pascal
-                        if SongsData.byName.ContainsKey candidate then Some candidate else None
+                                resume (Some 0) vm
+                        | None ->
+                            resume (Some 0) vm
+                    | CheckPoke species ->
+                        match Map.tryFind species PokeGold.Game.Data.Species.all with
+                        | Some stats ->
+                            let has = player.Party |> List.exists (fun m -> m.SpeciesId = stats.Dex)
+                            resume (Some(if has then 1 else 0)) vm
+                        | None ->
+                            resume (Some 0) vm
+                    | SetVisible(obj, visible) ->
+                        setObjectVisible obj visible
+                        resume None vm
+                    | HealParty ->
+                        player <- { player with Party = Heal.healParty player.Party }
+                        match Map.tryFind "MUSIC_HEAL" MusicData.byId with
+                        | Some path -> sound.PlayJingle path
+                        | None -> ()
+                        resume None vm
+                    | SetLastTalked obj ->
+                        lastTalkedNpcIndex <- npcIndexOfSymbol obj
+                        resume None vm
+                    | FacePlayer ->
+                        match lastTalkedNpcIndex with
+                        | Some idx when idx >= 0 && idx < state.Npcs.Length ->
+                            let npc = state.Npcs.[idx]
+                            setNpcFacing idx (directionToward npc.CellX npc.CellY state.Player.CellX state.Player.CellY)
+                        | _ -> ()
+                        resume None vm
+                    | FaceObject(a, b) ->
+                        match tryActorCell a, tryActorCell b with
+                        | Some actor, Some(_, _, bx, by) ->
+                            let _, _, ax, ay = actor
+                            setActorFacing actor (directionToward ax ay bx by)
+                        | _ -> ()
+                        resume None vm
+                    | TurnObject(obj, facing) ->
+                        match tryActorCell obj, parseDirection facing with
+                        | Some actor, Some dir -> setActorFacing actor dir
+                        | _ -> ()
+                        resume None vm
+                    | MoveObject(objSym, x, y) ->
+                        this.MoveObjectTo(objSym, x, y)
+                        resume None vm
+                    | Follow(follower, leader) ->
+                        match actorIndexOfSymbol follower, actorIndexOfSymbol leader with
+                        | Some f, Some l when f <> l -> followPair <- Some(f, l)
+                        | _ -> ()
+                        resume None vm
+                    | StopFollow ->
+                        followPair <- None
+                        resume None vm
+                    | ReanchorMap ->
+                        this.ReanchorCamera()
+                        resume None vm
+                    | Pause frames ->
+                        if frames <= 0 then
+                            resume None vm
+                        else
+                            pauseFrames <- frames
+                            pauseVm <- Some vm
+                            stop Stay
+                    | ReloadMap ->
+                        this.ReloadCurrentMap()
+                        if World.getVar "__dont_restart_map_music" world = 0 then
+                            this.PlayMapMusic state.MapId
+                        resume None vm
+                    | ChangeBlock(x, y, blockId) ->
+                        this.ChangeBlockAt(x, y, blockId)
+                        resume None vm
+                    | PlayMusic song ->
+                        this.PlayScriptMusic song
+                        resume None vm
+                    | PlaySound sfx ->
+                        let sfxName =
+                            if SongsData.byName.ContainsKey sfx then
+                                Some sfx
+                            else
+                                let stem =
+                                    if sfx.StartsWith("SFX_", StringComparison.OrdinalIgnoreCase) then
+                                        sfx.Substring(4)
+                                    else
+                                        sfx
+                                let pascal =
+                                    stem.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                                    |> Array.map (fun p ->
+                                        let lower = p.ToLowerInvariant()
+                                        if lower.Length = 0 then lower else lower.Substring(0, 1).ToUpperInvariant() + lower.Substring(1))
+                                    |> String.concat ""
+                                let candidate = "Sfx_" + pascal
+                                if SongsData.byName.ContainsKey candidate then Some candidate else None
 
-                sfxName |> Option.iter sound.PlaySfx
-                this.Drive(Script.resume None world vm)
-            | ScriptEffect.Cry _ -> this.Drive(Script.resume None world vm)
-            | WaitSfx -> this.Drive(Script.resume None world vm)
-            // ----- applymovement: animate the actor over frames, then resume -----
-            | ApplyMovement(objSym, label) ->
-                match this.TryStartMovement(vm, objSym, label) with
-                | true -> Stay
-                | false -> this.Drive(Script.resume None world vm)
-            // ----- warp: load the destination map, then continue the script -----
-            | ScriptEffect.Warp(map, x, y, facing) ->
-                match OverworldState.tryWarpExplicit content map x y facing state.Player.Facing with
-                | Some ns ->
-                    state <- ns
-                    resetObjectPresence ()
-                    firedCoords <- Set.empty
-                    let resumed = this.Drive(Script.resume None world vm)
+                        sfxName |> Option.iter sound.PlaySfx
+                        resume None vm
+                    | ScriptEffect.Cry _ ->
+                        resume None vm
+                    | WaitSfx ->
+                        resume None vm
+                    | ApplyMovement(objSym, label) ->
+                        match this.TryStartMovement(vm, objSym, label) with
+                        | true -> stop Stay
+                        | false -> resume None vm
+                    | ScriptEffect.Warp(map, x, y, facing) ->
+                        match OverworldState.tryWarpExplicit content map x y facing state.Player.Facing with
+                        | Some ns ->
+                            scriptQueue.Enqueue(vm, None)
+                            stop (this.EnterMap(ns, true))
+                        | None ->
+                            resume None vm
 
-                    match resumed with
-                    | Stay ->
-                        this.RunMapCallbacks ns.MapId
-                        this.RunSceneScript ns.MapId
-                    | _ -> resumed
-                | None ->
-                    this.Drive(Script.resume None world vm)
+        result
 
     /// Begin an `applymovement`: resolve the symbolic actor to a live NPC and look up
     /// its baked movement script. Returns `true` if a run was started (the scene then
@@ -776,6 +786,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        scriptQueue.Clear()
         resetObjectPresence ()
         this.RunMapCallbacks state.MapId
         this.RunSceneScript state.MapId |> ignore
@@ -833,6 +844,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.DebugWarp (mapId: string) (x: int) (y: int) (facing: Direction) =
         let ns = OverworldState.loadByIdAt content mapId x y facing
         state <- ns
+        scriptQueue.Clear()
         resetObjectPresence ()
         firedCoords <- Set.empty
         this.PlayMapMusic ns.MapId
@@ -1129,12 +1141,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // active map once the step settles (player rebased to the same world
                     // position, so the view is seamless).
                     match OverworldState.crossConnection content state with
-                    | Some ns ->
-                        state <- ns
-                        resetObjectPresence ()
-                        this.PlayMapMusic ns.MapId
-                        firedCoords <- Set.empty
-                        Stay
+                    | Some ns -> this.EnterMap(ns, true)
                     | None ->
 
                     if after = before then
@@ -1172,13 +1179,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 match MapEvents.warpAt (fst after) (snd after) state.Events with
                                 | Some w ->
                                     match OverworldState.tryWarp content w.DestMap w.DestWarp with
-                                    | Some dest ->
-                                        state <- dest
-                                        resetObjectPresence ()
-                                        this.PlayMapMusic dest.MapId
-                                        firedCoords <- Set.empty
-                                        this.RunMapCallbacks dest.MapId
-                                        this.RunSceneScript dest.MapId
+                                    | Some dest -> this.EnterMap(dest, true)
                                     | None -> Stay
                                 | None ->
                                     let currentScene =

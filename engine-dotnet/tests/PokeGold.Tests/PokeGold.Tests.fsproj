@@ -26,6 +26,7 @@
     <Compile Include="StoryGateTests.fs" />
     <Compile Include="MapDataTests.fs" />
     <Compile Include="OverworldSfxTests.fs" />
+    <Compile Include="OverworldSchedulerTests.fs" />
     <Compile Include="ConnectionsTests.fs" />
     <Compile Include="ObjectTests.fs" />
     <Compile Include="MovementScriptTests.fs" />
