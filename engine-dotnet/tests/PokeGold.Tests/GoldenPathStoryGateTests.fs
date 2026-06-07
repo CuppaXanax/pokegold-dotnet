@@ -1,0 +1,220 @@
+module PokeGold.Tests.GoldenPathStoryGateTests
+
+open Xunit
+open PokeGold.Game.Core
+open PokeGold.Game.Data
+open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
+open PokeGold.Game.Save
+
+type private GateState =
+    { MapId: string
+      World: World
+      Player: PlayerState
+      Texts: string list }
+
+let private content = Content()
+
+let private mapData mapId =
+    MapsData.byName mapId
+    |> Option.defaultWith (fun () -> failwithf "missing generated map data for %s" mapId)
+
+let private speciesId name =
+    Species.all
+    |> Map.find name
+    |> fun stats -> stats.Dex
+
+let private initialGate =
+    { MapId = "PlayersHouse2F"
+      World = World.empty
+      Player = { PlayerStateOps.initial with Name = "GOLD" }
+      Texts = [] }
+
+let private roundTrip (state: GateState) =
+    let ow = OverworldState.loadByIdAt content state.MapId 1 1 Down
+
+    let save =
+        SaveData.captureWith ow state.World state.Player
+        |> SaveFile.serialize
+        |> SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "checkpoint save should deserialize")
+
+    { state with
+        MapId = save.Overworld.MapId
+        World = SaveData.worldOf save
+        Player = SaveData.playerOf save }
+
+let private applyEffect (mapId: string) (player: PlayerState) (texts: string list) (effect: ScriptEffect) : string * PlayerState * string list * int option =
+    match effect with
+    | ShowText(label, _) -> mapId, player, label :: texts, None
+    | AskYesNo -> mapId, player, texts, Some 1
+    | GiveItem(item, qty, _) ->
+        mapId, { player with Bag = Bag.add item qty player.Bag }, texts, Some 1
+    | TakeItem(item, qty) ->
+        let has = Bag.count item player.Bag >= qty
+        let player = if has then { player with Bag = Bag.remove item qty player.Bag } else player
+        mapId, player, texts, Some(if has then 1 else 0)
+    | CheckItem item ->
+        mapId, player, texts, Some(if Bag.count item player.Bag > 0 then 1 else 0)
+    | GivePoke(species, level, item) ->
+        match Species.all |> Map.tryFind species with
+        | Some stats when player.Party.Length < 6 ->
+            let mon =
+                PartyMon.create stats.Dex level
+                |> MoveLearn.seedStartingMoves
+                |> fun mon -> { mon with HeldItem = item }
+
+            mapId, { player with Party = player.Party @ [ mon ] }, texts, Some 1
+        | _ -> mapId, player, texts, Some 0
+    | CheckPoke species ->
+        let dex = speciesId species
+        mapId, player, texts, Some(if player.Party |> List.exists (fun mon -> mon.SpeciesId = dex) then 1 else 0)
+    | HealParty ->
+        mapId, { player with Party = Heal.healParty player.Party }, texts, None
+    | StartBattle ->
+        mapId, player, texts, Some 1
+    | ScriptEffect.Warp(dest, x, y, facing) ->
+        let resolved =
+            OverworldState.tryWarpExplicit content dest x y facing Down
+            |> Option.map (fun s -> s.MapId)
+            |> Option.defaultValue mapId
+        resolved, player, texts, None
+    | _ -> mapId, player, texts, None
+
+let private runMapScript mapId label state =
+    let data = mapData mapId
+    let step0 = Script.start label state.World data.Script mapId
+
+    let rec loop n mapId player texts (step: ScriptStep) =
+        if n <= 0 then
+            failwithf "script %s/%s did not complete" mapId label
+        else
+            match step.Outcome with
+            | Completed ->
+                { MapId = mapId
+                  World = step.World
+                  Player = player
+                  Texts = state.Texts @ (List.rev texts) }
+            | Suspended(vm, effect) ->
+                let mapId, player, texts, value = applyEffect mapId player texts effect
+                loop (n - 1) mapId player texts (Script.resume value step.World vm)
+
+    loop 1000 mapId state.Player [] step0
+
+let private runCurrent label state = runMapScript state.MapId label state
+
+let private newBarkPrologue () =
+    initialGate
+    |> runCurrent "PlayersHouse2FInitializeRoomCallback"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_INITIALIZED_EVENTS" s.World)
+        s
+    |> runMapScript "PlayersHouse1F" "PlayersHouse1FMeetMomScene"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasFlag "ENGINE_POKEGEAR" s.World)
+        Assert.True(World.hasFlag "ENGINE_PHONE_CARD" s.World)
+        Assert.Equal(1, World.getScene "PlayersHouse1F" s.World)
+        Assert.True(World.hasEvent "EVENT_PLAYERS_HOUSE_MOM_1" s.World)
+        Assert.False(World.hasEvent "EVENT_PLAYERS_HOUSE_MOM_2" s.World)
+        s
+    |> runMapScript "ElmsLab" "CyndaquilPokeBallScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GOT_CYNDAQUIL_FROM_ELM" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_A_POKEMON_FROM_ELM" s.World)
+        Assert.Equal(5, World.getScene "ElmsLab" s.World)
+        Assert.Equal(1, World.getScene "NEW_BARK_TOWN" s.World)
+        Assert.Contains(s.Player.Party, fun mon -> mon.SpeciesId = speciesId "CYNDAQUIL")
+
+        let newBarkScene = MapEvents.sceneAt (World.getScene "NEW_BARK_TOWN" s.World) (mapData "NewBarkTown").Events
+        Assert.Equal("SCENE_NEWBARKTOWN_NOOP", newBarkScene)
+        Assert.Equal(None, Triggers.coordToFire newBarkScene Set.empty (mapData "NewBarkTown").Events 1 8)
+        s
+
+let private mrPokemonLoop () =
+    newBarkPrologue ()
+    |> runMapScript "MrPokemonsHouse" "MrPokemonsHouseMeetMrPokemonScene"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GOT_MYSTERY_EGG_FROM_MR_POKEMON" s.World)
+        Assert.True(World.hasFlag "ENGINE_POKEDEX" s.World)
+        Assert.Equal(1, World.getScene "MrPokemonsHouse" s.World)
+        Assert.Equal(1, World.getScene "CHERRYGROVE_CITY" s.World)
+        Assert.Equal(3, World.getScene "ELMS_LAB" s.World)
+        Assert.Equal(1, Bag.count "MYSTERY_EGG" s.Player.Bag)
+        s
+    |> runMapScript "CherrygroveCity" "CherrygroveRivalSceneNorth"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(0, World.getScene "CherrygroveCity" s.World)
+        Assert.Contains("CherrygroveRivalText_YouWon", s.Texts)
+        s
+    |> runMapScript "ElmsLab" "ElmAfterTheftScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GAVE_MYSTERY_EGG_TO_ELM" s.World)
+        Assert.Equal(0, Bag.count "MYSTERY_EGG" s.Player.Bag)
+        Assert.Equal(1, World.getScene "ROUTE_29" s.World)
+        Assert.Equal(6, World.getScene "ElmsLab" s.World)
+        s
+    |> runMapScript "ElmsLab" "AideScript_GiveYouBalls"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(5, Bag.count "POKE_BALL" s.Player.Bag)
+        Assert.Equal(2, World.getScene "ElmsLab" s.World)
+        s
+
+let private violetGate () =
+    mrPokemonLoop ()
+    |> runMapScript "VioletGym" "VioletGymFalknerScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_FALKNER" s.World)
+        Assert.True(World.hasFlag "ENGINE_ZEPHYRBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM31_MUD_SLAP" s.World)
+        Assert.Equal(1, Bag.count "TM_MUD_SLAP" s.Player.Bag)
+        s
+
+let private azaleaIlexGate () =
+    violetGate ()
+    |> runMapScript "SlowpokeWellB1F" "TrainerGruntM1"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_CLEARED_SLOWPOKE_WELL" s.World)
+        Assert.True(World.hasEvent "EVENT_SLOWPOKE_WELL_KURT" s.World)
+        Assert.Equal(1, World.getScene "AZALEA_TOWN" s.World)
+        Assert.Equal("KurtsHouse", s.MapId)
+        s
+    |> runMapScript "AzaleaGym" "AzaleaGymBugsyScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_BUGSY" s.World)
+        Assert.True(World.hasFlag "ENGINE_HIVEBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM49_FURY_CUTTER" s.World)
+        Assert.Equal(1, Bag.count "TM_FURY_CUTTER" s.Player.Bag)
+        s
+    |> runMapScript "IlexForest" "IlexForestCharcoalMasterScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GOT_HM01_CUT" s.World)
+        Assert.Equal(1, Bag.count "HM_CUT" s.Player.Bag)
+        s
+
+[<Fact>]
+let ``G1 known good through New Bark starter unlock`` () =
+    newBarkPrologue () |> ignore
+
+[<Fact>]
+let ``G2 known good through Mr Pokemon and Elm return`` () =
+    mrPokemonLoop () |> ignore
+
+[<Fact>]
+let ``G3 known good through Violet Gym`` () =
+    violetGate () |> ignore
+
+[<Fact>]
+let ``G4 known good through Azalea Gym and Ilex pre-Cut`` () =
+    azaleaIlexGate () |> ignore

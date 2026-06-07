@@ -24,6 +24,7 @@
     <Compile Include="HealTests.fs" />
     <Compile Include="StdScriptsTests.fs" />
     <Compile Include="StoryGateTests.fs" />
+    <Compile Include="GoldenPathStoryGateTests.fs" />
     <Compile Include="MapDataTests.fs" />
     <Compile Include="OverworldSfxTests.fs" />
     <Compile Include="OverworldSchedulerTests.fs" />

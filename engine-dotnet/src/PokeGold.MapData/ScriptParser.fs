@@ -482,12 +482,13 @@ module ScriptParser =
                         //   startbattle
                         //   reloadmapafterbattle
                         //   setevent FLAG
-                        //   end                   ;; first encounter ends here (never reaches AFTER_SCRIPT)
+                        //   loadvar __just_battled, 1
+                        //   sjump AFTER_SCRIPT    ;; `endifjustbattled` ends ordinary after-text scripts
                         //
                         // The AFTER_SCRIPT label (e.g. `.Script`) follows the trainer data in the
-                        // source and typically starts with `endifjustbattled` (already a no-op in
-                        // the VM), so the "talk again" path sees the after-battle dialog while
-                        // the "just won" path ended above.
+                        // source and typically starts with `endifjustbattled`, which ends the
+                        // immediate post-battle path. Scripts that omit `endifjustbattled` (e.g.
+                        // Slowpoke Well Rocket clearing) intentionally run after battle.
                         match cmd with
                         | Unsupported("trainer", args) when args.Length >= 7 ->
                             let group = args.[0]
@@ -507,7 +508,8 @@ module ScriptParser =
                                    Startbattle
                                    Reloadmapafterbattle
                                    Setevent flag
-                                   End |])
+                                   Loadvar("__just_battled", 1)
+                                   Sjump afterLabel |])
                         | Unsupported("itemball", args) when args.Length >= 1 ->
                             let qty = if args.Length > 1 then intArg strict constants args.[1] else 1
                             commands.AddRange([| Verbosegiveitem(args.[0], qty); End |])
