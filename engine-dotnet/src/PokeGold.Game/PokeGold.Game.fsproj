@@ -196,6 +196,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <GameDataInput Include="$(RepoRoot)engine-dotnet\src\PokeGold.MapData\*.fs" />
+    <GameDataInput Include="$(RepoRoot)engine-dotnet\tools\PokeGold.DataGen\*.fs" />
     <GameDataInput Include="$(RepoRoot)constants\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\type_constants.asm" />
     <GameDataInput Include="$(RepoRoot)constants\pokemon_constants.asm" />

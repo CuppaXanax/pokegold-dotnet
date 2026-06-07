@@ -17,6 +17,7 @@
     <Compile Include="MusicParsers.fs" />
     <Compile Include="EmitMaps.fs" />
     <Compile Include="EmitSongs.fs" />
+    <Compile Include="Validate.fs" />
     <Compile Include="Emit.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

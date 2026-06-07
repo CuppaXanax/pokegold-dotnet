@@ -102,6 +102,50 @@ module ScriptParser =
 
             mn, args
 
+    /// Every mnemonic in the movement-script language. Movement blocks are parsed
+    /// separately by `MovementParser`; they are data referenced by `applymovement`,
+    /// not runnable overworld script commands.
+    let private movementMnemonics: Set<string> =
+        set
+            [ "turn_head"; "turn_step"; "slow_step"; "step"; "big_step"
+              "slow_slide_step"; "slide_step"; "fast_slide_step"; "turn_away"; "turn_in"; "turn_waterfall"
+              "slow_jump_step"; "jump_step"; "fast_jump_step"
+              "remove_sliding"; "set_sliding"; "remove_fixed_facing"; "fix_facing"; "show_object"; "hide_object"
+              "step_sleep"; "step_end"; "step_wait_end"; "remove_object"; "step_loop"; "step_stop"
+              "teleport_from"; "teleport_to"; "skyfall"; "step_dig"; "step_bump"; "fish_got_bite"; "fish_cast_rod"
+              "hide_emote"; "show_emote"; "step_shake"; "tree_shake"; "rock_smash"; "return_dig" ]
+
+    let private terminalMovementMnemonics: Set<string> =
+        set [ "step_end"; "step_wait_end"; "step_loop"; "step_stop" ]
+
+    let private globalLabelOf (body: string) : string option =
+        if body.EndsWith ":" && not (body.Contains " ") && not (body.Contains "\t") && not (body.StartsWith ".") then
+            Some(body.Substring(0, body.Length - 1))
+        else
+            None
+
+    let private collectMovementLabels (text: string) : Set<string> =
+        let labels = ResizeArray<string>()
+        let mutable pendingLabel: string option = None
+
+        for raw in text.Replace("\r\n", "\n").Split('\n') do
+            let body = stripComment raw
+
+            if body <> "" then
+                match globalLabelOf body with
+                | Some label -> pendingLabel <- Some label
+                | None ->
+                    let mn, _ = splitLine body
+
+                    match pendingLabel with
+                    | Some label when movementMnemonics.Contains mn ->
+                        labels.Add label
+                        pendingLabel <- None
+                    | Some _ -> pendingLabel <- None
+                    | None -> ()
+
+        labels |> Set.ofSeq
+
     /// Qualify a local label/target (`.Foo`) with the enclosing global label.
     let private qualify (lastGlobal: string) (name: string) : string =
         if name.StartsWith "." then lastGlobal + name else name
@@ -249,7 +293,6 @@ module ScriptParser =
         // map & warp
         | "halloffame" -> Some(Unsupported(mn, args))
         | "credits" -> Some(Unsupported(mn, args))
-        | "callback" -> Some(Unsupported(mn, args))
         | "warp" -> Some(Warp(arg 0, i 1, i 2))
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))
         | "reloadmap" -> Some Reloadmap
@@ -266,16 +309,17 @@ module ScriptParser =
     /// (so a label in front of them just points at the next real script command).
     let private nonScript =
         set
-            [ "db"; "dw"; "dn"; "dl"; "ds"; "dba"; "dab"; "bigdt"
-              "text"; "text_far"; "line"; "cont"; "next"; "para"; "done"; "page"
-              "text_start"; "raw"; "ascii"; "sound"; "interpret_data"
-              "object_const_def"; "const"; "const_def"; "const_skip"; "const_value"
-              "map_def"; "map_attributes"; "map_header"; "connection"
-              "def_scene_scripts"; "scene_script"; "scene_const"
-              "def_callbacks"
-              "def_warp_events"; "warp_event"
-              "def_coord_events"; "coord_event"
-              "def_bg_events"; "bg_event"
+            [ "db"; "dw"; "dn"; "dl"; "ds"; "dba"; "dab"; "dbw"; "bigdt";
+              "text"; "text_far"; "line"; "cont"; "next"; "para"; "done"; "page";
+              "text_start"; "text_end"; "raw"; "ascii"; "sound"; "interpret_data";
+              "DEF"; "INCLUDE"; "MACRO"; "ENDM"; "add_stdscript";
+              "object_const_def"; "const"; "const_def"; "const_skip"; "const_value";
+              "map_def"; "map_attributes"; "map_header"; "connection";
+              "def_scene_scripts"; "scene_script"; "scene_const";
+              "def_callbacks"; "callback";
+              "def_warp_events"; "warp_event";
+              "def_coord_events"; "coord_event";
+              "def_bg_events"; "bg_event";
               "def_object_events"; "object_event" ]
 
     /// Decide what a stripped, non-empty line is: a label, a script command, an
@@ -348,8 +392,10 @@ module ScriptParser =
         let labels = System.Collections.Generic.Dictionary<string, int>()
         let mutable lastGlobal = ""
         let constants = constantsFor extraConstants text
+        let movementLabels = collectMovementLabels text
 
         let mutable inMacro = false
+        let mutable inMovementBlock = false
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
@@ -360,8 +406,21 @@ module ScriptParser =
                 if inMacro then
                     if mn = "ENDM" then
                         inMacro <- false
+                elif inMovementBlock then
+                    if terminalMovementMnemonics.Contains mn then
+                        inMovementBlock <- false
                 elif mn = "MACRO" then
                     inMacro <- true
+                elif
+                    match globalLabelOf body with
+                    | Some label when movementLabels.Contains label ->
+                        inMovementBlock <- true
+                        true
+                    | _ -> false
+                then
+                    ()
+                elif movementMnemonics.Contains mn then
+                    ()
                 else
                     match classify strict constants lastGlobal body with
                     | LLabel name ->

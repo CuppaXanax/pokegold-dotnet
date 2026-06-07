@@ -103,6 +103,26 @@ let ``strict parser skips macro definitions instead of parsing their bodies`` ()
     )
 
 [<Fact>]
+let ``parser skips movement script blocks from ScriptProgram`` () =
+    let prog =
+        ScriptParser.parseTextWithConstants
+            Map.empty
+            "MovementLabel:\n\
+             \tstep LEFT\n\
+             \tturn_head UP\n\
+             \tstep_end\n\
+             \n\
+             RealScript:\n\
+             \tsetval TRUE\n\
+             \tend\n"
+
+    Assert.False(prog.Labels.ContainsKey "MovementLabel")
+    Assert.Equal<ScriptCommand list>(
+        [ Setval 1; End ],
+        ScriptProgram.blockAt "RealScript" prog
+    )
+
+[<Fact>]
 let ``giveitem and verbosegiveitem default quantity to one`` () =
     let prog =
         parse
@@ -314,8 +334,6 @@ let ``new object/cosmetic opcodes are parsed as Unsupported no-ops`` () =
              \tfollow PLAYER, RIVAL\n\
              \tstopfollow\n\
              \tvariablesprite VAR_SPRITE, SPRITE_POKEMON\n\
-             \tfix_facing\n\
-             \tremove_fixed_facing\n\
              \twriteobjectxy PLAYER\n\
              \tpause 30\n\
              \tshowemote EMOTE_SHOCK, PLAYER, 15\n\
@@ -335,8 +353,6 @@ let ``new object/cosmetic opcodes are parsed as Unsupported no-ops`` () =
           Unsupported("follow", [ "PLAYER"; "RIVAL" ])
           Unsupported("stopfollow", [])
           Unsupported("variablesprite", [ "VAR_SPRITE"; "SPRITE_POKEMON" ])
-          Unsupported("fix_facing", [])
-          Unsupported("remove_fixed_facing", [])
           Unsupported("writeobjectxy", [ "PLAYER" ])
           Unsupported("pause", [ "30" ])
           Unsupported("showemote", [ "EMOTE_SHOCK"; "PLAYER"; "15" ])

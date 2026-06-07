@@ -15,12 +15,12 @@ open PokeGold.Game.Overworld.Script
 [<Fact>]
 let ``the baked map scripts hold a stable command total`` () =
     // Matches the M9.6 runtime sweep: drift here means generation went stale.
-    // (Dropped from 22556 when the parser stopped treating MACRO bodies as runnable
-    // script commands.)
+    // (Dropped from 22548 when movement-script blocks stopped being emitted into
+    // map ScriptPrograms as Unsupported commands.)
     let total =
         MapsData.all |> Seq.sumBy (fun kv -> kv.Value.Script.Commands.Length)
 
-    Assert.Equal(22548, total)
+    Assert.Equal(20612, total)
 
 [<Fact>]
 let ``every map's baked script round-trips through the VM as no-ops where unsupported`` () =
@@ -31,6 +31,33 @@ let ``every map's baked script round-trips through the VM as no-ops where unsupp
             match c with
             | Unsupported(name, _) -> Assert.False(System.String.IsNullOrWhiteSpace name)
             | _ -> ()
+
+[<Fact>]
+let ``generated script IR contains no parser-pollution commands`` () =
+    let parserPollution =
+        Set.ofList
+            [ "callback"; "add_stdscript"; "DEF"; "INCLUDE"; "dbw"; "text_end";
+              "turn_head"; "turn_step"; "slow_step"; "step"; "big_step";
+              "slow_slide_step"; "slide_step"; "fast_slide_step"; "turn_away"; "turn_in"; "turn_waterfall";
+              "slow_jump_step"; "jump_step"; "fast_jump_step";
+              "remove_sliding"; "set_sliding"; "remove_fixed_facing"; "fix_facing"; "show_object"; "hide_object";
+              "step_sleep"; "step_end"; "step_wait_end"; "remove_object"; "step_loop"; "step_stop";
+              "teleport_from"; "teleport_to"; "skyfall"; "step_dig"; "step_bump"; "fish_got_bite"; "fish_cast_rod";
+              "hide_emote"; "show_emote"; "step_shake"; "tree_shake"; "rock_smash"; "return_dig" ]
+
+    let offenders =
+        [ for kv in MapsData.all do
+              for c in kv.Value.Script.Commands do
+                  match c with
+                  | Unsupported(name, _) when parserPollution.Contains name -> yield kv.Key, name
+                  | _ -> ()
+
+          for c in StdScriptsData.program.Commands do
+              match c with
+              | Unsupported(name, _) when parserPollution.Contains name -> yield "StdScripts", name
+              | _ -> () ]
+
+    Assert.Empty offenders
 
 [<Fact>]
 let ``movement scripts are almost fully supported; only deferred macros remain`` () =

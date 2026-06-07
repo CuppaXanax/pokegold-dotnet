@@ -392,6 +392,8 @@ module Emit =
 
     /// Generate all data files into `outDir`. Returns the list of (path, changed).
     let all (outDir: string) : (string * bool) list =
+        Validate.generatedScripts MapParsers.maps MapParsers.stdScripts
+
         [ "TypeChart.Generated.fs", typeChart ()
           "Collision.Generated.fs", collisionFile ()
           "Species.Generated.fs", speciesFile ()
