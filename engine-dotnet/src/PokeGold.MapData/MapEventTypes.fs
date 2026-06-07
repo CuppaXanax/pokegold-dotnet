@@ -93,7 +93,13 @@ module MapEventParser =
 
     /// Parse an integer operand, defaulting to 0 if it is symbolic.
     let private intArg (s: string) : int =
-        try parseInt s with _ -> 0
+        // Resolve well-known symbolic constants that appear in object_event args
+        match s.Trim() with
+        | "MORN" -> 1          // 1 << 0
+        | "DAY" -> 2           // 1 << 1
+        | "NITE" -> 4          // 1 << 2
+        | "DARKNESS" -> 8      // 1 << 3
+        | _ -> try parseInt s with _ -> 0
 
     /// Strip a trailing `; comment` and surrounding whitespace.
     let private stripComment (line: string) : string =

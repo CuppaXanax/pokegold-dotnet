@@ -36,13 +36,22 @@ module MapEvents =
         else
             defaultScene events
 
-    /// Is this object currently present, given the world's event flags? An object
-    /// with no `EventFlag` is always present; otherwise it is hidden while its
-    /// flag is set (GSC semantics: `EVENT_*` means "hidden when set").
+    /// Is this object currently present, given the world's event flags and time?
+    /// An object with no `EventFlag` is always present; otherwise it is hidden
+    /// while its flag is set (GSC semantics: `EVENT_*` means "hidden when set").
+    /// Objects with Hour1=-1 and Hour2 != -1 are time-of-day gated: Hour2 is a
+    /// bitmask (MORN=1, DAY=2, NITE=4) ANDed with the current time-of-day bit.
     let objectVisible (world: World) (o: ObjectEvent) : bool =
-        match o.EventFlag with
-        | None -> true
-        | Some flag -> not (World.hasEvent flag world)
+        let flagVisible =
+            match o.EventFlag with
+            | None -> true
+            | Some flag -> not (World.hasEvent flag world)
+        if not flagVisible then false
+        elif o.Hour1 = -1 && o.Hour2 <> -1 then
+            // Time-of-day check: Hour2 is a bitmask
+            let todBit = 1 <<< (PokeGold.Game.Core.TimeOfDay.toIndex (PokeGold.Game.Core.TimeOfDay.current()))
+            o.Hour2 &&& todBit <> 0
+        else true
 
     /// The objects currently present in the world (visibility-filtered).
     let visibleObjects (world: World) (events: MapEvents) : ObjectEvent[] =
