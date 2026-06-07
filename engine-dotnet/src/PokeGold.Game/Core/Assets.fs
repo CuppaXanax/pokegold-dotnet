@@ -7,7 +7,18 @@ open System.Reflection
 /// (`gfx/`, `maps/`, `data/`, …) in place, without copying them into the build.
 module Assets =
 
-    let private asm = Assembly.GetExecutingAssembly()
+    /// The assembly containing embedded game assets.
+    let private asm =
+        try
+            let name = "PokeGold.Game"
+            System.AppDomain.CurrentDomain.GetAssemblies()
+            |> Array.tryFind (fun a -> a.GetName().Name = name)
+            |> Option.defaultWith (fun () ->
+                try Assembly.Load(name)
+                with _ -> Assembly.GetExecutingAssembly())
+        with ex ->
+            System.Console.Error.WriteLine($"Assets: asm init failed: {ex}")
+            reraise ()
 
     let private normalizeRelative (relative: string) : string =
         relative.Replace('\\', '/').TrimStart('/')
@@ -26,21 +37,26 @@ module Assets =
     /// On platforms where the repo isn't present (e.g. Android APK), this will be
     /// None and all assets must come from embedded resources.
     let private repoRoot : string option =
-        let start = DirectoryInfo(System.AppContext.BaseDirectory)
+        try
+            let start = DirectoryInfo(System.AppContext.BaseDirectory)
 
-        match findUp "roms.sha1" start with
-        | Some d -> Some d.FullName
-        | None ->
-            // Fall back to the current directory (useful for tests run from the repo).
-            match findUp "roms.sha1" (DirectoryInfo(Directory.GetCurrentDirectory())) with
+            match findUp "roms.sha1" start with
             | Some d -> Some d.FullName
-            | None -> None
+            | None ->
+                match findUp "roms.sha1" (DirectoryInfo(Directory.GetCurrentDirectory())) with
+                | Some d -> Some d.FullName
+                | None -> None
+        with ex ->
+            System.Console.Error.WriteLine($"Assets: repoRoot init failed: {ex}")
+            None
 
-    /// The repository root. Throws if not available (e.g. on Android).
+    /// The repository root. Empty on platforms without a repo (Android APK).
     let root : string =
         match repoRoot with
         | Some r -> r
-        | None -> failwith "Could not locate repository root (no roms.sha1 found in any parent)."
+        | None ->
+            System.Console.Error.WriteLine("Assets: no repo root, relying on embedded resources only")
+            ""
 
     let private findResource (relative: string) : string option =
         let assetPath = "assets/" + normalizeRelative relative
@@ -58,7 +74,9 @@ module Assets =
     /// Resolve a repo-relative path (e.g. "gfx/tilesets/johto_modern.png") to an
     /// absolute path under the repository root.
     let path (relative: string) : string =
-        Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar))
+        match repoRoot with
+        | Some r -> Path.Combine(r, relative.Replace('/', Path.DirectorySeparatorChar))
+        | None -> failwith $"Cannot resolve path '{relative}': no repository root available (running from APK?)."
 
     /// Whether the asset exists either in the embedded resource set or on disk.
     let exists (relative: string) : bool =
@@ -80,7 +98,11 @@ module Assets =
             use ms = new MemoryStream()
             stream.CopyTo(ms)
             ms.ToArray()
-        | None -> File.ReadAllBytes(path relative)
+        | None ->
+            // Fall back to disk if repo root is available.
+            match repoRoot with
+            | Some r -> File.ReadAllBytes(Path.Combine(r, relative.Replace('/', Path.DirectorySeparatorChar)))
+            | None -> failwithf "Asset '%s' not found as embedded resource and no repository root available." relative
 
     /// Read all text of a repo-relative file.
     let readText (relative: string) : string =
