@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PokeGold.Host.Android</RootNamespace>
+    <AssemblyName>PokeGold.Host.Android</AssemblyName>
+    <ApplicationId>com.pokegold.engine</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <SupportedOSPlatformVersion>21</SupportedOSPlatformVersion>
+    <!-- Landscape-only; the GB viewport is wider than it is tall. -->
+    <AndroidScreenOrientation>SensorLandscape</AndroidScreenOrientation>
+    <!-- Keep the screen on while playing. -->
+    <AndroidScreenFlags>KeepScreenOn</AndroidScreenFlags>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="HostAudio.fs" />
+    <Compile Include="HostGame.fs" />
+    <Compile Include="Activity.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.Android" Version="3.8.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PokeGold.Game\PokeGold.Game.fsproj" />
+  </ItemGroup>
+
+</Project>
