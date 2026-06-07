@@ -53,6 +53,11 @@ type ScriptCommand =
     | Readvar of var: string
     /// `writevar $1d VAR_*` — store the script var into a game variable.
     | Writevar of var: string
+    | Loadvar of var: string * value: int
+    | Loadmem of addr: string * value: int
+    | Readmem of addr: string
+    | Writemem of addr: string
+    | Random of limit: int
 
     // ---- Event flags (the persistent EVENT_* bitset) ---------------------
     /// `checkevent $31 EVENT_*` — script var := flag bit.
@@ -107,6 +112,15 @@ type ScriptCommand =
     | Promptbutton
     /// `yesorno $4e` — yes/no menu (var := chose yes).
     | Yesorno
+    | Loadmenu of menu: string
+    | Verticalmenu
+    | Closewindow
+    | Pokepic of species: string
+    | Closepokepic
+    | TwoDMenu
+    | Itemnotify
+    | Prompt
+    | Elevator of args: string list
 
     // ---- Battle ----------------------------------------------------------
     /// `loadwildmon $5c SPECIES, level`.
@@ -125,6 +139,11 @@ type ScriptCommand =
     | Winlosstext of win: string * loss: string
     /// `setlasttalked $67 object` — set the active object id.
     | Setlasttalked of obj: string
+    | Giveegg of species: string * level: int
+    | Catchtutorial
+    | Trade of tradeId: string
+    | Givepokemail of args: string list
+    | Checkpokemail of args: string list
 
     // ---- Movement & objects ----------------------------------------------
     /// `applymovement $68 object, movement` — run a movement script on an object.
@@ -139,6 +158,14 @@ type ScriptCommand =
     | Appear of obj: string
     /// `turnobject $75 object, facing`.
     | Turnobject of obj: string * facing: string
+    | Moveobject of obj: string * x: int * y: int
+    | Follow of follower: string * leader: string
+    | Stopfollow
+    | Variablesprite of sprite: string * replacement: string
+    | Writeobjectxy of obj: string
+    | Pause of frames: int
+    | Showemote of emote: string * obj: string * frames: int
+    | Earthquake of frames: int option
 
     // ---- Audio -----------------------------------------------------------
     /// `playmusic $7e song`.
@@ -161,12 +188,23 @@ type ScriptCommand =
     | Refreshmap
     /// `changeblock x, y, block` — replace a map block at `(x, y)`.
     | Changeblock of x: int * y: int * blockId: int
+    | Doorstate of door: int option * state: string option
+    | Ugdoor of args: string list
+    | Dontrestartmapmusic
+    | Playmapmusic
+    | Musicfadeout
+    | Newloadmap
+    | Warpcheck
+    | Blackoutmod of map: string
+    | Reanchormap
 
     // ---- Terminators -----------------------------------------------------
     /// `end $90` — return from `scall`, or stop the script.
     | End
     /// `endall $92` — stop all script execution.
     | EndAll
+    | Halloffame
+    | Credits
 
     // ---- Special functions -----------------------------------------------
     /// `special name` — invoke a named special function. `HealParty` is
@@ -179,6 +217,39 @@ type ScriptCommand =
     /// mart's inventory. `martType` is one of MARTTYPE_STANDARD/BITTER/BARGAIN/
     /// PHARMACY; `mart` is the MART_* index constant that names the inventory.
     | Pokemart of martType: string * mart: string
+
+    // ---- Deferred state/UI opcodes with current high-level semantics --------
+    | Addcellnum of phone: string
+    | Checkcellnum of phone: string
+    | Checkphonecall
+    | Checkjustbattled
+    | Askforphonenumber of phone: string
+    | Checkmoney of args: string list
+    | Takemoney of args: string list
+    | Givemoney of args: string list
+    | Checkcoins of amount: int option
+    | Takecoins of amount: int option
+    | Givecoins of amount: int option
+    | Checkver
+    | Checktime of time: string
+    | ConditionalEvent of args: string list
+    | Endifjustbattled
+    | Gettrainername of buffer: string * group: string * trainer: string
+    | Getitemname of buffer: string * item: string
+    | Getmonname of buffer: string * species: string
+    | Getstring of buffer: string * value: string
+    | Getnum of buffer: string * var: string
+    | Getcurlandmarkname of buffer: string
+    | TextRam of value: string
+    | Describedecoration of args: string list
+    | Stonetable of args: string list
+    | Cmdqueue of args: string list
+    | Writecmdqueue of args: string list
+    | MenuCoords of args: string list
+    | Specialphonecall of call: string
+    | TeleportFrom
+    | TreeShake
+    | Elevfloor of args: string list
 
     // ---- Fallback --------------------------------------------------------
     /// Any opcode outside the M9 slice: the source mnemonic + its raw args,

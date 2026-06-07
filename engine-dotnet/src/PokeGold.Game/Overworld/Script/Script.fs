@@ -291,6 +291,125 @@ module Script =
                 let items = MartsData.byConstant |> Map.tryFind mart |> Option.defaultValue []
                 suspend next world (OpenMart(martType, items))
 
+            // ---- Typed deferred opcodes ------------------------------------
+            | Verticalmenu
+            | TwoDMenu -> run world { next with ScriptVar = 1 }
+            | Loadmenu _
+            | Closewindow
+            | Pokepic _
+            | Closepokepic
+            | Itemnotify
+            | Prompt -> run world next
+            | Elevator _ -> run world { next with ScriptVar = 1 }
+            | Checkpokemail _
+            | ConditionalEvent _ -> run world { next with ScriptVar = 0 }
+            | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
+            | Catchtutorial
+            | Trade _
+            | Givepokemail _
+            | Addcellnum _
+            | Describedecoration _
+            | Stonetable _
+            | Cmdqueue _
+            | Writecmdqueue _ -> run world next
+            | Checktime _ -> run world { next with ScriptVar = TimeOfDay.toScriptVar (TimeOfDay.current()) }
+            | Checkcellnum _ -> run world { next with ScriptVar = 0 }
+            | Checkphonecall -> run world { next with ScriptVar = 0 }
+            | Checkjustbattled -> run world { next with ScriptVar = 0 }
+            | Askforphonenumber _ -> run world { next with ScriptVar = 2 }
+            | Checkmoney _ -> run world { next with ScriptVar = 1 }
+            | Checkcoins _ -> run world { next with ScriptVar = 1 }
+            | Checkver -> run world { next with ScriptVar = 0 }
+            | Random limit -> run world { next with ScriptVar = (vm.ScriptVar + 7) % (max 1 limit) }
+            | Loadvar(varName, value) -> run (World.setVar varName value world) { next with ScriptVar = value }
+            | Loadmem(addr, value) -> run (World.setVar addr value world) { next with ScriptVar = value }
+            | Readmem addr -> run world { next with ScriptVar = World.getVar addr world }
+            | Writemem addr -> run (World.setVar addr vm.ScriptVar world) next
+            | Gettrainername(bufferName, group, id) ->
+                let trainerName =
+                    Trainers.lookupByName group id
+                    |> Option.map (fun t -> t.Name)
+                    |> Option.defaultValue id
+                run (World.setBuffer bufferName trainerName world) next
+            | Getitemname(bufferName, itemId) ->
+                let itemName =
+                    Items.byId |> Map.tryFind itemId |> Option.map (fun item -> item.Name) |> Option.defaultValue (itemId.Replace("_", " "))
+                run (World.setBuffer bufferName itemName world) next
+            | Getmonname(bufferName, speciesId) ->
+                let monName =
+                    Species.all |> Map.tryFind speciesId |> Option.map (fun stats -> stats.Name) |> Option.defaultValue (speciesId.Replace("_", " "))
+                run (World.setBuffer bufferName monName world) next
+            | Getstring(bufferName, value) -> run (World.setBuffer bufferName (value.Replace("_", " ")) world) next
+            | Getnum(bufferName, varName) -> run (World.setBuffer bufferName (string (World.getVar varName world)) world) next
+            | Getcurlandmarkname bufferName -> run (World.setBuffer bufferName (vm.MapId.Replace("_", " ")) world) next
+            | TextRam _ -> run world next
+            | Halloffame ->
+                let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
+                suspend (endLike vm) w HallOfFame
+            | Credits -> run world (endLike vm)
+            | Givemoney _
+            | Takemoney _ -> run world next
+            | Blackoutmod map ->
+                run (World.setBuffer "__blackout_map" map (World.setVar "wLastSpawnMap" 1 world)) next
+            | Dontrestartmapmusic -> run (World.setVar "__dont_restart_map_music" 1 world) next
+            | Doorstate(doorArg, stateArg) ->
+                let door =
+                    match doorArg with
+                    | Some 1 -> Some(16, 6)
+                    | Some 2 -> Some(10, 6)
+                    | Some 3 -> Some(2, 6)
+                    | Some 4 -> Some(2, 10)
+                    | Some 5 -> Some(10, 10)
+                    | Some 6 -> Some(16, 10)
+                    | Some 7 -> Some(12, 6)
+                    | Some 8 -> Some(12, 8)
+                    | Some 9 -> Some(6, 6)
+                    | Some 10 -> Some(6, 8)
+                    | Some 11 -> Some(12, 10)
+                    | Some 12 -> Some(12, 12)
+                    | Some 13 -> Some(6, 10)
+                    | Some 14 -> Some(6, 12)
+                    | Some 15 -> Some(18, 10)
+                    | Some 16 -> Some(18, 12)
+                    | _ -> None
+                let block =
+                    match stateArg |> Option.map (fun s -> s.ToUpperInvariant()) with
+                    | Some "CLOSED1" -> Some 0x2a
+                    | Some "CLOSED2" -> Some 0x3e
+                    | Some "CLOSED3" -> Some 0x3f
+                    | Some "OPEN1" -> Some 0x2d
+                    | Some "OPEN2" -> Some 0x3d
+                    | _ -> None
+                match door, block with
+                | Some(x, y), Some b -> suspend next world (ChangeBlock(x, y, b))
+                | _ -> run world next
+            | Earthquake frames -> suspend next world (ScriptEffect.Pause(defaultArg frames 30))
+            | Elevfloor _ -> run world next
+            | Endifjustbattled ->
+                if World.getVar "__just_battled" world <> 0 then
+                    run (World.setVar "__just_battled" 0 world) (endLike vm)
+                else run world next
+            | ScriptCommand.Follow(follower, leader) -> suspend next world (ScriptEffect.Follow(follower, leader))
+            | Stopfollow -> suspend next world StopFollow
+            | Givecoins _
+            | Takecoins _ -> run world next
+            | MenuCoords _ -> run world next
+            | Moveobject(obj, x, y) -> suspend next world (MoveObject(obj, x, y))
+            | Musicfadeout -> suspend next world (PlayMusic "__STOP__")
+            | Newloadmap -> suspend next world ReloadMap
+            | ScriptCommand.Pause frames -> if frames <= 0 then run world next else suspend next world (ScriptEffect.Pause frames)
+            | Playmapmusic -> suspend next world (PlayMusic "__MAP_DEFAULT__")
+            | Reanchormap -> suspend next world ReanchorMap
+            | Showemote(_, _, frames) -> if frames <= 0 then run world next else suspend next world (ScriptEffect.Pause frames)
+            | Specialphonecall _ -> run world next
+            | TeleportFrom ->
+                run (world |> World.setBuffer "__teleport_from_map" vm.MapId |> World.setVar "__teleport_from_x" 0 |> World.setVar "__teleport_from_y" 0) next
+            | TreeShake -> suspend next world (ScriptEffect.Pause 30)
+            | Ugdoor _ -> run world next
+            | Variablesprite(sprite, replacement) -> run (World.setBuffer ("__sprite_" + sprite) replacement world) next
+            | Warpcheck -> run world next
+            | Writeobjectxy _ -> run world next
+
             // ---- Deferred opcodes ------------------------------------------
             // Outside the M9 slice: a few of these are still required to set the
             // script var or write back to world state for the control-flow scripts

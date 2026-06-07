@@ -2,6 +2,7 @@ namespace PokeGold.Game.Overworld.Script
 
 open System
 open System.Globalization
+open System.Text.RegularExpressions
 
 /// Parses a map's `.asm` into a `ScriptProgram` (command stream + label map).
 ///
@@ -19,6 +20,8 @@ open System.Globalization
 /// qualified the same way before being stored, so the VM can resolve them
 /// against `Labels` regardless of where they were written.
 module ScriptParser =
+
+    let private defEquRx = Regex(@"^\s*DEF\s+([A-Za-z_][A-Za-z0-9_]*)\s+EQU\s+(.+?)\s*$")
 
     /// Parse a RGBDS integer literal (`$hex`, `%binary`, `&octal`, or decimal).
     let private parseInt (s: string) : int =
@@ -175,39 +178,43 @@ module ScriptParser =
         | "addval" -> Some(Addval(i 0))
         | "readvar" -> Some(Readvar(arg 0))
         | "writevar" -> Some(Writevar(arg 0))
-        | "loadvar" -> Some(Unsupported("loadvar", args))
-        | "loadmem" -> Some(Unsupported("loadmem", args))
-        | "readmem" -> Some(Unsupported("readmem", args))
-        | "writemem" -> Some(Unsupported("writemem", args))
-        | "random" -> Some(Unsupported("random", args))
-        | "loadmenu" -> Some(Unsupported("loadmenu", args))
-        | "verticalmenu" -> Some(Unsupported("verticalmenu", args))
-        | "closewindow" -> Some(Unsupported("closewindow", args))
-        | "pokepic" -> Some(Unsupported("pokepic", args))
-        | "closepokepic" -> Some(Unsupported("closepokepic", args))
-        | "_2dmenu" -> Some(Unsupported("_2dmenu", args))
-        | "itemnotify" -> Some(Unsupported("itemnotify", args))
-        | "prompt" -> Some(Unsupported("prompt", args))
-        | "elevator" -> Some(Unsupported("elevator", args))
-        | "giveegg" -> Some(Unsupported("giveegg", args))
-        | "catchtutorial" -> Some(Unsupported("catchtutorial", args))
-        | "givepokemail" -> Some(Unsupported("givepokemail", args))
-        | "checkpokemail" -> Some(Unsupported("checkpokemail", args))
-        | "addcellnum" -> Some(Unsupported("addcellnum", args))
-        | "describedecoration" -> Some(Unsupported("describedecoration", args))
-        | "stonetable" -> Some(Unsupported("stonetable", args))
-        | "cmdqueue" -> Some(Unsupported("cmdqueue", args))
-        | "writecmdqueue" -> Some(Unsupported("writecmdqueue", args))
-        | "conditional_event" -> Some(Unsupported("conditional_event", args))
-        | "endifjustbattled" -> Some(Unsupported("endifjustbattled", args))
-        | "checkmoney" -> Some(Unsupported("checkmoney", args))
-        | "takemoney" -> Some(Unsupported("takemoney", args))
-        | "givemoney" -> Some(Unsupported("givemoney", args))
-        | "checkcoins" -> Some(Unsupported("checkcoins", args))
-        | "takecoins" -> Some(Unsupported("takecoins", args))
-        | "givecoins" -> Some(Unsupported("givecoins", args))
-        | "checkver" -> Some(Unsupported("checkver", args))
-        | "checktime" -> Some(Unsupported("checktime", args))
+        | "loadvar" -> Some(Loadvar(arg 0, i 1))
+        | "loadmem" -> Some(Loadmem(arg 0, i 1))
+        | "readmem" -> Some(Readmem(arg 0))
+        | "writemem" -> Some(Writemem(arg 0))
+        | "random" -> Some(ScriptCommand.Random(i 0))
+        | "loadmenu" -> Some(Loadmenu(arg 0))
+        | "verticalmenu" -> Some Verticalmenu
+        | "closewindow" -> Some Closewindow
+        | "pokepic" -> Some(Pokepic(arg 0))
+        | "closepokepic" -> Some Closepokepic
+        | "_2dmenu" -> Some TwoDMenu
+        | "itemnotify" -> Some Itemnotify
+        | "prompt" -> Some Prompt
+        | "elevator" -> Some(Elevator args)
+        | "giveegg" -> Some(Giveegg(arg 0, i 1))
+        | "catchtutorial" -> Some Catchtutorial
+        | "givepokemail" -> Some(Givepokemail args)
+        | "checkpokemail" -> Some(Checkpokemail args)
+        | "addcellnum" -> Some(Addcellnum(arg 0))
+        | "describedecoration" -> Some(Describedecoration args)
+        | "stonetable" -> Some(Stonetable args)
+        | "cmdqueue" -> Some(Cmdqueue args)
+        | "writecmdqueue" -> Some(Writecmdqueue args)
+        | "conditional_event" -> Some(ConditionalEvent args)
+        | "endifjustbattled" -> Some Endifjustbattled
+        | "checkmoney" -> Some(Checkmoney args)
+        | "takemoney" -> Some(Takemoney args)
+        | "givemoney" -> Some(Givemoney args)
+        | "checkcoins" -> Some(Checkcoins(if args.Length > 0 then Some(i 0) else None))
+        | "takecoins" -> Some(Takecoins(if args.Length > 0 then Some(i 0) else None))
+        | "givecoins" -> Some(Givecoins(if args.Length > 0 then Some(i 0) else None))
+        | "checkver" -> Some Checkver
+        | "checktime" -> Some(Checktime(arg 0))
+        | "checkcellnum" -> Some(Checkcellnum(arg 0))
+        | "checkphonecall" -> Some Checkphonecall
+        | "checkjustbattled" -> Some Checkjustbattled
+        | "askforphonenumber" -> Some(Askforphonenumber(arg 0))
         // event flags
         | "checkevent" -> Some(Checkevent(arg 0))
         | "clearevent" -> Some(Clearevent(arg 0))
@@ -237,7 +244,7 @@ module ScriptParser =
         | "yesorno" -> Some Yesorno
         // battle
         | "loadwildmon" -> Some(Loadwildmon(arg 0, i 1))
-        | "trade" -> Some(Unsupported("trade", args))
+        | "trade" -> Some(Trade(arg 0))
         | "givepoke" ->
             let item = if args.Length > 2 then Some(arg 2) else None
             Some(Givepoke(arg 0, i 1, item))
@@ -255,26 +262,29 @@ module ScriptParser =
         | "disappear" -> Some(Disappear(arg 0))
         | "appear" -> Some(Appear(arg 0))
         | "turnobject" -> Some(Turnobject(arg 0, arg 1))
-        // object manipulation / cosmetic / timing (kept as Unsupported no-ops)
-        | "moveobject" -> Some(Unsupported("moveobject", args))
-        | "follow" -> Some(Unsupported("follow", args))
-        | "stopfollow" -> Some(Unsupported("stopfollow", args))
-        | "variablesprite" -> Some(Unsupported("variablesprite", args))
-        | "fix_facing" -> Some(Unsupported("fix_facing", args))
-        | "remove_fixed_facing" -> Some(Unsupported("remove_fixed_facing", args))
-        | "writeobjectxy" -> Some(Unsupported("writeobjectxy", args))
-        | "pause" -> Some(Unsupported("pause", args))
-        | "showemote" -> Some(Unsupported("showemote", args))
-        | "earthquake" -> Some(Unsupported("earthquake", args))
-        | "doorstate" -> Some(Unsupported("doorstate", args))
-        | "ugdoor" -> Some(Unsupported("ugdoor", args))
-        | "dontrestartmapmusic" -> Some(Unsupported("dontrestartmapmusic", args))
-        | "playmapmusic" -> Some(Unsupported("playmapmusic", args))
-        | "musicfadeout" -> Some(Unsupported("musicfadeout", args))
-        | "newloadmap" -> Some(Unsupported("newloadmap", args))
-        | "warpcheck" -> Some(Unsupported("warpcheck", args))
-        | "blackoutmod" -> Some(Unsupported("blackoutmod", args))
-        | "reanchormap" -> Some(Unsupported("reanchormap", args))
+        // object manipulation / cosmetic / timing
+        | "moveobject" -> Some(Moveobject(arg 0, i 1, i 2))
+        | "follow" -> Some(Follow(arg 0, arg 1))
+        | "stopfollow" -> Some Stopfollow
+        | "variablesprite" -> Some(Variablesprite(arg 0, arg 1))
+        | "writeobjectxy" -> Some(Writeobjectxy(arg 0))
+        | "pause" -> Some(Pause(i 0))
+        | "showemote" -> Some(Showemote(arg 0, arg 1, i 2))
+        | "earthquake" -> Some(Earthquake(if args.Length > 0 then Some(i 0) else None))
+        | "doorstate" -> Some(Doorstate((if args.Length > 0 then Some(i 0) else None), (if args.Length > 1 then Some(arg 1) else None)))
+        | "ugdoor" -> Some(Ugdoor args)
+        | "dontrestartmapmusic" -> Some Dontrestartmapmusic
+        | "playmapmusic" -> Some Playmapmusic
+        | "musicfadeout" -> Some Musicfadeout
+        | "newloadmap" -> Some Newloadmap
+        | "warpcheck" -> Some Warpcheck
+        | "blackoutmod" -> Some(Blackoutmod(arg 0))
+        | "reanchormap" -> Some Reanchormap
+        | "elevfloor" -> Some(Elevfloor args)
+        | "menu_coords" -> Some(MenuCoords args)
+        | "specialphonecall" -> Some(Specialphonecall(arg 0))
+        | "teleport_from" -> Some TeleportFrom
+        | "tree_shake" -> Some TreeShake
         // audio
         | "playmusic" -> Some(Playmusic(arg 0))
         | "playsound" -> Some(Playsound(arg 0))
@@ -282,17 +292,18 @@ module ScriptParser =
         | "cry" -> Some(Cry(arg 0))
         // special functions
         | "special" -> Some(Special(arg 0))
-        | "gettrainername" -> Some(Unsupported("gettrainername", args))
-        | "getitemname" -> Some(Unsupported("getitemname", args))
-        | "getmonname" -> Some(Unsupported("getmonname", args))
-        | "getstring" -> Some(Unsupported("getstring", args))
-        | "getnum" -> Some(Unsupported("getnum", args))
-        | "text_ram" -> Some(Unsupported("text_ram", args))
+        | "gettrainername" -> Some(Gettrainername(arg 0, arg 1, arg 2))
+        | "getitemname" -> Some(Getitemname(arg 0, arg 1))
+        | "getmonname" -> Some(Getmonname(arg 0, arg 1))
+        | "getstring" -> Some(Getstring(arg 0, arg 1))
+        | "getnum" -> Some(Getnum(arg 0, arg 1))
+        | "getcurlandmarkname" -> Some(Getcurlandmarkname(arg 0))
+        | "text_ram" -> Some(TextRam(arg 0))
         // mart
         | "pokemart" -> Some(Pokemart(arg 0, arg 1))
         // map & warp
-        | "halloffame" -> Some(Unsupported(mn, args))
-        | "credits" -> Some(Unsupported(mn, args))
+        | "halloffame" -> Some Halloffame
+        | "credits" -> Some Credits
         | "warp" -> Some(Warp(arg 0, i 1, i 2))
         | "warpfacing" -> Some(Warpfacing(arg 0, arg 1, i 2, i 3))
         | "reloadmap" -> Some Reloadmap
@@ -379,19 +390,38 @@ module ScriptParser =
         |> Seq.distinctBy fst
         |> Map.ofSeq
 
-    let private constantsFor (extraConstants: Map<string, int>) (text: string) : Map<string, int> =
+    let private collectLocalConstants (strict: bool) (constants: Map<string, int>) (text: string) : Map<string, int> =
+        let mutable result = constants
+
+        for raw in text.Replace("\r\n", "\n").Split('\n') do
+            let body = stripComment raw
+
+            if body <> "" then
+                let m = defEquRx.Match body
+
+                if m.Success then
+                    let name = m.Groups.[1].Value
+                    let value = intArg strict result m.Groups.[2].Value
+                    result <- Map.add name value result
+
+        result
+
+    let private constantsFor (strict: bool) (extraConstants: Map<string, int>) (text: string) : Map<string, int> =
         let addAll source target =
             source |> Map.fold (fun acc key value -> Map.add key value acc) target
 
-        builtInConstants
-        |> addAll extraConstants
-        |> addAll (collectSceneConstants text)
+        let constants =
+            builtInConstants
+            |> addAll extraConstants
+            |> addAll (collectSceneConstants text)
+
+        collectLocalConstants strict constants text
 
     let private parseTextInternal (strict: bool) (extraConstants: Map<string, int>) (text: string) : ScriptProgram =
         let commands = ResizeArray<ScriptCommand>()
         let labels = System.Collections.Generic.Dictionary<string, int>()
         let mutable lastGlobal = ""
-        let constants = constantsFor extraConstants text
+        let constants = constantsFor strict extraConstants text
         let movementLabels = collectMovementLabels text
 
         let mutable inMacro = false

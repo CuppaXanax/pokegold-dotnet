@@ -313,7 +313,7 @@ let ``giveegg suspends as GivePoke`` () =
     | other -> Assert.Fail($"expected GivePoke effect, got {other}")
 
 [<Fact>]
-let ``trade parses as an unsupported opcode`` () =
+let ``trade parses as a typed deferred opcode`` () =
     let prog =
         parse
             "S:\n\
@@ -321,12 +321,12 @@ let ``trade parses as an unsupported opcode`` () =
              \tend\n"
 
     Assert.Equal<ScriptCommand list>(
-        [ Unsupported("trade", [ "NPC_TRADE_KIM" ]); End ],
+        [ Trade "NPC_TRADE_KIM"; End ],
         ScriptProgram.blockAt "S" prog
     )
 
 [<Fact>]
-let ``new object/cosmetic opcodes are parsed as Unsupported no-ops`` () =
+let ``object and cosmetic opcodes are parsed as typed deferred commands`` () =
     let prog =
         parse
             "S:\n\
@@ -349,22 +349,22 @@ let ``new object/cosmetic opcodes are parsed as Unsupported no-ops`` () =
              \tend\n"
 
     Assert.Equal<ScriptCommand list>(
-        [ Unsupported("moveobject", [ "PLAYER"; "5"; "6" ])
-          Unsupported("follow", [ "PLAYER"; "RIVAL" ])
-          Unsupported("stopfollow", [])
-          Unsupported("variablesprite", [ "VAR_SPRITE"; "SPRITE_POKEMON" ])
-          Unsupported("writeobjectxy", [ "PLAYER" ])
-          Unsupported("pause", [ "30" ])
-          Unsupported("showemote", [ "EMOTE_SHOCK"; "PLAYER"; "15" ])
-          Unsupported("earthquake", [ "8" ])
-          Unsupported("doorstate", [])
-          Unsupported("dontrestartmapmusic", [])
-          Unsupported("playmapmusic", [])
-          Unsupported("musicfadeout", [])
-          Unsupported("newloadmap", [])
-          Unsupported("warpcheck", [])
-          Unsupported("blackoutmod", [ "NEW_BARK_TOWN" ])
-          Unsupported("reanchormap", [])
+        [ Moveobject("PLAYER", 5, 6)
+          Follow("PLAYER", "RIVAL")
+          Stopfollow
+          Variablesprite("VAR_SPRITE", "SPRITE_POKEMON")
+          Writeobjectxy "PLAYER"
+          Pause 30
+          Showemote("EMOTE_SHOCK", "PLAYER", 15)
+          Earthquake(Some 8)
+          Doorstate(None, None)
+          Dontrestartmapmusic
+          Playmapmusic
+          Musicfadeout
+          Newloadmap
+          Warpcheck
+          Blackoutmod "NEW_BARK_TOWN"
+          Reanchormap
           End ],
         ScriptProgram.blockAt "S" prog
     )
@@ -380,7 +380,7 @@ let ``unmodelled opcodes become Unsupported but keep parsing`` () =
 
     Assert.Equal<ScriptCommand list>(
         [ Special "Special_FadeOutPalettes"
-          Unsupported("pause", [ "30" ])
+          Pause 30
           End ],
         ScriptProgram.blockAt "S" prog
     )
@@ -427,7 +427,7 @@ let ``real Kanto quest scripts still parse through their current opcode coverage
     let ceruleanGym = AsmLoad.script "maps/CeruleanGym.asm"
 
     Assert.Contains(
-        Unsupported("pause", [ "30" ]),
+        Pause 30,
         ScriptProgram.blockAt "PowerPlantGuardPhoneScript" powerPlant)
 
     Assert.Contains(
@@ -435,7 +435,7 @@ let ``real Kanto quest scripts still parse through their current opcode coverage
         ScriptProgram.blockAt "CeruleanGymGruntRunsOutScene" ceruleanGym)
 
     Assert.Contains(
-        Unsupported("showemote", [ "EMOTE_SHOCK"; "CERULEANGYM_ROCKET"; "15" ]),
+        Showemote("EMOTE_SHOCK", "CERULEANGYM_ROCKET", 15),
         ScriptProgram.blockAt "CeruleanGymGruntRunsOutScript" ceruleanGym)
 
 [<Fact>]
@@ -838,8 +838,8 @@ let ``supported timed formerly-unsupported opcodes suspend then keep running`` (
     let _, effects = driveSilent World.empty "S" prog
     Assert.Equal<ScriptEffect list>(
         [ ShowText("Shown", false)
-          Pause 30
-          Pause 15
+          ScriptEffect.Pause 30
+          ScriptEffect.Pause 15
           MoveObject("PLAYER", 5, 6) ],
         effects)
 

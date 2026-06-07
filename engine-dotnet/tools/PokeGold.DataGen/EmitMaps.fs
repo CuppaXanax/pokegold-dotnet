@@ -20,6 +20,11 @@ module EmitMaps =
         | Some s -> sprintf "Some %s" (str s)
         | None -> "None"
 
+    let private intOpt (o: int option) : string =
+        match o with
+        | Some i -> sprintf "Some %d" i
+        | None -> "None"
+
     /// One script command rendered as its DU constructor.
     let private cmd (c: ScriptCommand) : string =
         match c with
@@ -37,6 +42,11 @@ module EmitMaps =
         | Addval v -> sprintf "Addval %d" v
         | Readvar v -> sprintf "Readvar %s" (str v)
         | Writevar v -> sprintf "Writevar %s" (str v)
+        | Loadvar(v, value) -> sprintf "Loadvar(%s, %d)" (str v) value
+        | Loadmem(addr, value) -> sprintf "Loadmem(%s, %d)" (str addr) value
+        | Readmem addr -> sprintf "Readmem %s" (str addr)
+        | Writemem addr -> sprintf "Writemem %s" (str addr)
+        | Random limit -> sprintf "Random %d" limit
         | Checkevent f -> sprintf "Checkevent %s" (str f)
         | Clearevent f -> sprintf "Clearevent %s" (str f)
         | Setevent f -> sprintf "Setevent %s" (str f)
@@ -59,9 +69,23 @@ module EmitMaps =
         | Waitbutton -> "Waitbutton"
         | Promptbutton -> "Promptbutton"
         | Yesorno -> "Yesorno"
+        | Loadmenu m -> sprintf "Loadmenu %s" (str m)
+        | Verticalmenu -> "Verticalmenu"
+        | Closewindow -> "Closewindow"
+        | Pokepic s -> sprintf "Pokepic %s" (str s)
+        | Closepokepic -> "Closepokepic"
+        | TwoDMenu -> "TwoDMenu"
+        | Itemnotify -> "Itemnotify"
+        | Prompt -> "Prompt"
+        | Elevator args -> sprintf "Elevator [%s]" (args |> List.map str |> String.concat "; ")
         | Loadwildmon (s, l) -> sprintf "Loadwildmon(%s, %d)" (str s) l
         | Givepoke (s, l, item) -> sprintf "Givepoke(%s, %d, %s)" (str s) l (strOpt item)
         | Checkpoke s -> sprintf "Checkpoke %s" (str s)
+        | Giveegg(s, l) -> sprintf "Giveegg(%s, %d)" (str s) l
+        | Catchtutorial -> "Catchtutorial"
+        | Trade tradeId -> sprintf "Trade %s" (str tradeId)
+        | Givepokemail args -> sprintf "Givepokemail [%s]" (args |> List.map str |> String.concat "; ")
+        | Checkpokemail args -> sprintf "Checkpokemail [%s]" (args |> List.map str |> String.concat "; ")
         | Loadtrainer (g, i) -> sprintf "Loadtrainer(%s, %s)" (str g) (str i)
         | Startbattle -> "Startbattle"
         | Reloadmapafterbattle -> "Reloadmapafterbattle"
@@ -73,6 +97,14 @@ module EmitMaps =
         | Disappear o -> sprintf "Disappear %s" (str o)
         | Appear o -> sprintf "Appear %s" (str o)
         | Turnobject (o, f) -> sprintf "Turnobject(%s, %s)" (str o) (str f)
+        | Moveobject(o, x, y) -> sprintf "Moveobject(%s, %d, %d)" (str o) x y
+        | Follow(follower, leader) -> sprintf "Follow(%s, %s)" (str follower) (str leader)
+        | Stopfollow -> "Stopfollow"
+        | Variablesprite(sprite, replacement) -> sprintf "Variablesprite(%s, %s)" (str sprite) (str replacement)
+        | Writeobjectxy o -> sprintf "Writeobjectxy %s" (str o)
+        | Pause frames -> sprintf "Pause %d" frames
+        | Showemote(emote, obj, frames) -> sprintf "Showemote(%s, %s, %d)" (str emote) (str obj) frames
+        | Earthquake frames -> sprintf "Earthquake(%s)" (intOpt frames)
         | Playmusic s -> sprintf "Playmusic %s" (str s)
         | Playsound s -> sprintf "Playsound %s" (str s)
         | Waitsfx -> "Waitsfx"
@@ -82,10 +114,52 @@ module EmitMaps =
         | Reloadmap -> "Reloadmap"
         | Refreshmap -> "Refreshmap"
         | Changeblock (x, y, blockId) -> sprintf "Changeblock(%d, %d, %d)" x y blockId
+        | Doorstate(door, state) -> sprintf "Doorstate(%s, %s)" (intOpt door) (state |> strOpt)
+        | Ugdoor args -> sprintf "Ugdoor [%s]" (args |> List.map str |> String.concat "; ")
+        | Dontrestartmapmusic -> "Dontrestartmapmusic"
+        | Playmapmusic -> "Playmapmusic"
+        | Musicfadeout -> "Musicfadeout"
+        | Newloadmap -> "Newloadmap"
+        | Warpcheck -> "Warpcheck"
+        | Blackoutmod m -> sprintf "Blackoutmod %s" (str m)
+        | Reanchormap -> "Reanchormap"
         | End -> "End"
         | EndAll -> "EndAll"
+        | Halloffame -> "Halloffame"
+        | Credits -> "Credits"
         | Special n -> sprintf "Special %s" (str n)
         | Pokemart(mt, m) -> sprintf "Pokemart(%s, %s)" (str mt) (str m)
+        | Addcellnum phone -> sprintf "Addcellnum %s" (str phone)
+        | Checkcellnum phone -> sprintf "Checkcellnum %s" (str phone)
+        | Checkphonecall -> "Checkphonecall"
+        | Checkjustbattled -> "Checkjustbattled"
+        | Askforphonenumber phone -> sprintf "Askforphonenumber %s" (str phone)
+        | Checkmoney args -> sprintf "Checkmoney [%s]" (args |> List.map str |> String.concat "; ")
+        | Takemoney args -> sprintf "Takemoney [%s]" (args |> List.map str |> String.concat "; ")
+        | Givemoney args -> sprintf "Givemoney [%s]" (args |> List.map str |> String.concat "; ")
+        | Checkcoins amount -> sprintf "Checkcoins(%s)" (intOpt amount)
+        | Takecoins amount -> sprintf "Takecoins(%s)" (intOpt amount)
+        | Givecoins amount -> sprintf "Givecoins(%s)" (intOpt amount)
+        | Checkver -> "Checkver"
+        | Checktime time -> sprintf "Checktime %s" (str time)
+        | ConditionalEvent args -> sprintf "ConditionalEvent [%s]" (args |> List.map str |> String.concat "; ")
+        | Endifjustbattled -> "Endifjustbattled"
+        | Gettrainername(buffer, group, trainer) -> sprintf "Gettrainername(%s, %s, %s)" (str buffer) (str group) (str trainer)
+        | Getitemname(buffer, item) -> sprintf "Getitemname(%s, %s)" (str buffer) (str item)
+        | Getmonname(buffer, species) -> sprintf "Getmonname(%s, %s)" (str buffer) (str species)
+        | Getstring(buffer, value) -> sprintf "Getstring(%s, %s)" (str buffer) (str value)
+        | Getnum(buffer, var) -> sprintf "Getnum(%s, %s)" (str buffer) (str var)
+        | Getcurlandmarkname buffer -> sprintf "Getcurlandmarkname %s" (str buffer)
+        | TextRam value -> sprintf "TextRam %s" (str value)
+        | Describedecoration args -> sprintf "Describedecoration [%s]" (args |> List.map str |> String.concat "; ")
+        | Stonetable args -> sprintf "Stonetable [%s]" (args |> List.map str |> String.concat "; ")
+        | Cmdqueue args -> sprintf "Cmdqueue [%s]" (args |> List.map str |> String.concat "; ")
+        | Writecmdqueue args -> sprintf "Writecmdqueue [%s]" (args |> List.map str |> String.concat "; ")
+        | MenuCoords args -> sprintf "MenuCoords [%s]" (args |> List.map str |> String.concat "; ")
+        | Specialphonecall call -> sprintf "Specialphonecall %s" (str call)
+        | TeleportFrom -> "TeleportFrom"
+        | TreeShake -> "TreeShake"
+        | Elevfloor args -> sprintf "Elevfloor [%s]" (args |> List.map str |> String.concat "; ")
         | Unsupported (n, args) ->
             let a = args |> List.map str |> String.concat "; "
             sprintf "Unsupported(%s, [%s])" (str n) a
