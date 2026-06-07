@@ -216,7 +216,7 @@ let ``event-gated objects are visible until their flag is set`` () =
     let mutable st = st0
 
     for _ in 1..300 do
-        st <- OverworldState.tick vis Buttons.none st
+        st <- OverworldState.tick (fun _ n -> vis n) Buttons.none st
 
     Assert.True(st.Npcs |> Array.exists vis, "expected visible objects to remain present after stepping")
 
@@ -226,7 +226,7 @@ let ``visible NPCs still wander when the world is stepped`` () =
     // proving the visibility filter doesn't freeze present objects.
     let content = PokeGold.Game.Data.Content()
     let st0 = OverworldState.loadById content "AzaleaTown"
-    let always = fun (_: NpcObject) -> true
+    let always = fun _ (_: NpcObject) -> true
 
     let mutable st = st0
 

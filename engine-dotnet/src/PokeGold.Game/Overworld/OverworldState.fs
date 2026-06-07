@@ -198,13 +198,13 @@ module OverworldState =
     /// `visible` reports whether an object is currently present (event-flag gated):
     /// only visible objects are solid, wander, and animate — a hidden object neither
     /// renders (scene-side) nor blocks the player, so there are no invisible walls.
-    let tick (visible: NpcObject -> bool) (buttons: Buttons) (s: OverworldState) : OverworldState =
+    let tick (visible: int -> NpcObject -> bool) (buttons: Buttons) (s: OverworldState) : OverworldState =
         let walkable = MapConnections.cellWalkable s.Map s.Collision s.Neighbors
         let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
 
         // Only present objects participate in collision and stepping. Hidden ones are
         // carried through untouched so they reappear (and resume) once their flag flips.
-        let activeNpcs = s.Npcs |> Array.filter visible
+        let activeNpcs = s.Npcs |> Array.mapi (fun i n -> i, n) |> Array.filter (fun (i, n) -> visible i n) |> Array.map snd
 
         // Live NPCs are solid: the player can't walk onto a cell an object holds
         // (or is stepping out of). Ledge hops still don't re-validate the landing,
@@ -235,8 +235,8 @@ module OverworldState =
             let mutable q = 0
 
             s.Npcs
-            |> Array.map (fun n ->
-                if visible n then
+            |> Array.mapi (fun i n ->
+                if visible i n then
                     let r = stepped.[q]
                     q <- q + 1
                     r

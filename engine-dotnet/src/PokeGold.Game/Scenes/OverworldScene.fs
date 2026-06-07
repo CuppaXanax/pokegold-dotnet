@@ -34,6 +34,15 @@ module TrainerSight =
             && MapEvents.objectVisible world npc.Event
             && isInSightCone npc px py)
 
+    let checkTrainerSightPresent (npcs: NpcObject[]) (isPresent: int -> bool) (px: int) (py: int) : int option =
+        npcs
+        |> Array.mapi (fun i npc -> i, npc)
+        |> Array.tryFind (fun (i, npc) ->
+            isPresent i
+            && npc.Event.Type = "OBJECTTYPE_TRAINER"
+            && isInSightCone npc px py)
+        |> Option.map fst
+
 /// The walk-around-the-map scene. Owns the mutable overworld state plus the
 /// running-script bookkeeping that turns NPC/sign interactions and coord triggers
 /// into real GSC scripts: it drives the pure [`Script`] VM, enacting each
@@ -78,6 +87,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
+    /// Live object presence for this map visit. Event flags seed this on map load;
+    /// scripts that merely set/clear flags do not despawn already-loaded objects.
+    let mutable objectPresent: bool[] = [||]
 
     let directionToward (fromX: int) (fromY: int) (toX: int) (toY: int) : Direction =
         let dx = toX - fromX
@@ -96,6 +108,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Up -> 0, -1
         | Left -> -1, 0
         | Right -> 1, 0
+
+    let resetObjectPresence () =
+        objectPresent <- state.Npcs |> Array.map (fun n -> MapEvents.objectVisible world n.Event)
+
+    let isObjectPresent (idx: int) =
+        idx >= 0 && idx < objectPresent.Length && objectPresent.[idx]
 
     let parseDirection (facing: string) : Direction option =
         match facing.Trim().ToUpperInvariant() with
@@ -453,6 +471,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | None -> ()
                 | None -> ()
 
+                match OverworldState.objectIndexOf state.MapId obj with
+                | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
+                | _ -> ()
+
                 this.Drive(Script.resume None world vm)
             | HealParty ->
                 player <- { player with Party = Heal.healParty player.Party }
@@ -538,6 +560,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | ReloadMap ->
                 let p = state.Player
                 state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
+                resetObjectPresence ()
                 if World.getVar "__dont_restart_map_music" world = 0 then
                     this.PlayMapMusic state.MapId
                 this.Drive(Script.resume None world vm)
@@ -591,12 +614,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 match OverworldState.tryWarpExplicit content map x y facing state.Player.Facing with
                 | Some ns ->
                     state <- ns
+                    resetObjectPresence ()
                     firedCoords <- Set.empty
                     let resumed = this.Drive(Script.resume None world vm)
 
                     match resumed with
                     | Stay ->
                         this.RunMapCallbacks ns.MapId
+                        resetObjectPresence ()
                         this.RunSceneScript ns.MapId
                     | _ -> resumed
                 | None ->
@@ -691,6 +716,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         world <- w
         player <- p
         this.RunMapCallbacks state.MapId
+        resetObjectPresence ()
         this.RunSceneScript state.MapId |> ignore
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
@@ -746,6 +772,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.DebugWarp (mapId: string) (x: int) (y: int) (facing: Direction) =
         let ns = OverworldState.loadByIdAt content mapId x y facing
         state <- ns
+        resetObjectPresence ()
         firedCoords <- Set.empty
         this.PlayMapMusic ns.MapId
 
@@ -777,18 +804,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | NpcWalking -> Walking
                         | NpcStanding -> Standing
 
+                    let player =
+                        { state.Player with
+                            CellX = run'.Npc.CellX
+                            CellY = run'.Npc.CellY
+                            Facing = run'.Npc.Facing
+                            Motion = playerMotion
+                            SrcX = run'.Npc.SrcX
+                            SrcY = run'.Npc.SrcY
+                            Progress = run'.Npc.Progress
+                            AnimFrame = run'.Npc.AnimFrame }
+                    let camX, camY = Camera.followExt state.Map state.Neighbors player
                     state <-
                         { state with
-                            Player =
-                                { state.Player with
-                                    CellX = run'.Npc.CellX
-                                    CellY = run'.Npc.CellY
-                                    Facing = run'.Npc.Facing
-                                    Motion = playerMotion
-                                    SrcX = run'.Npc.SrcX
-                                    SrcY = run'.Npc.SrcY
-                                    Progress = run'.Npc.Progress
-                                    AnimFrame = run'.Npc.AnimFrame } }
+                            Player = player
+                            CamX = camX
+                            CamY = camY }
                 else
                     let npcs = Array.copy state.Npcs
                     if i < npcs.Length then
@@ -989,9 +1020,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                         let objectScriptAt fx fy =
                             state.Npcs
-                            |> Array.tryFindIndex (fun n ->
-                                MapEvents.objectVisible world n.Event && n.CellX = fx && n.CellY = fy)
-                            |> Option.map (fun i ->
+                            |> Array.mapi (fun i n -> i, n)
+                            |> Array.tryFind (fun (i, n) ->
+                                isObjectPresent i && n.CellX = fx && n.CellY = fy)
+                            |> Option.map (fun (i, _) ->
                                 let script = state.Npcs.[i].Event.Script
 
                                 if script <> "" && script <> "ObjectEvent" then
@@ -1014,7 +1046,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     let before = state.Player.CellX, state.Player.CellY
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCellByIndex leader)
-                    state <- OverworldState.tick (fun n -> MapEvents.objectVisible world n.Event) buttons state
+                    state <- OverworldState.tick (fun i _ -> isObjectPresent i) buttons state
                     let after = state.Player.CellX, state.Player.CellY
 
                     match followPair, leaderBefore with
@@ -1038,6 +1070,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match OverworldState.crossConnection content state with
                     | Some ns ->
                         state <- ns
+                        resetObjectPresence ()
                         this.PlayMapMusic ns.MapId
                         firedCoords <- Set.empty
                         Stay
@@ -1062,7 +1095,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         match encounterTransition with
                         | Push _ -> encounterTransition
                         | _ ->
-                            match TrainerSight.checkTrainerSight state.Npcs (fst after) (snd after) world with
+                            match TrainerSight.checkTrainerSightPresent state.Npcs isObjectPresent (fst after) (snd after) with
                             | Some npcIdx ->
                                 let npc = state.Npcs.[npcIdx]
 
@@ -1080,9 +1113,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     match OverworldState.tryWarp content w.DestMap w.DestWarp with
                                     | Some dest ->
                                         state <- dest
+                                        resetObjectPresence ()
                                         this.PlayMapMusic dest.MapId
                                         firedCoords <- Set.empty
                                         this.RunMapCallbacks dest.MapId
+                                        resetObjectPresence ()
                                         this.RunSceneScript dest.MapId
                                     | None -> Stay
                                 | None ->
@@ -1103,8 +1138,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             // Draw visible NPC objects over the map (player already drawn above),
             // using each object's live, interpolated position and walk frame.
-            for n in state.Npcs do
-                if MapEvents.objectVisible world n.Event then
+            for i = 0 to state.Npcs.Length - 1 do
+                let n = state.Npcs.[i]
+                if isObjectPresent i then
                     let spriteName =
                         World.getBuffer ("__sprite_" + n.Event.Sprite) world
                         |> fun s -> if s = "" then n.Event.Sprite else s
