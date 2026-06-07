@@ -93,6 +93,30 @@ let ``restore runs map callbacks through the scheduler`` () =
     Assert.False(World.hasEvent "EVENT_FIRST_TIME_BANKING_WITH_MOM" scene.DebugWorld)
 
 [<Fact>]
+let ``idle overworld can be captured but transient scripts cannot`` () =
+    let content = Content()
+    let idle = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down)
+    idle.Restore(World.empty, PlayerStateOps.initial)
+
+    Assert.True(idle.CanCapture)
+    idle.Capture() |> ignore
+
+    let busy =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "PlayersHouse1F" 7 7 Up)
+    let initialWorld =
+        World.empty
+        |> World.setEvent "EVENT_INITIALIZED_EVENTS"
+        |> World.setEvent "EVENT_PLAYERS_HOUSE_MOM_2"
+
+    busy.Restore(initialWorld, PlayerStateOps.initial)
+
+    Assert.False(busy.CanCapture)
+    Assert.Throws<System.InvalidOperationException>(fun () -> busy.Capture() |> ignore) |> ignore
+
+[<Fact>]
 let ``direct event flags do not pop already loaded Mom objects`` () =
     let content = Content()
     let scene =

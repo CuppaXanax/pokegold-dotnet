@@ -711,8 +711,23 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         scene.Restore(SaveData.worldOf save, SaveData.playerOf save)
         scene
 
+    member private _.CaptureBlockers() : string list =
+        [ if pending.IsSome then "pending child scene"
+          if runningMove.IsSome then "scripted movement"
+          if pauseVm.IsSome || pauseFrames > 0 then "script pause"
+          if scriptQueue.Count > 0 then "queued script continuation"
+          if followPair.IsSome then "active follow relationship" ]
+
+    /// True when all transient runtime state is idle and a persistent save snapshot
+    /// can faithfully represent the overworld.
+    member this.CanCapture: bool = this.CaptureBlockers().IsEmpty
+
     /// Snapshot this scene's persistable state (position, world flags, player state).
-    member _.Capture() : SaveData = SaveData.captureWith state world player
+    member this.Capture() : SaveData =
+        match this.CaptureBlockers() with
+        | [] -> SaveData.captureWith state world player
+        | blockers ->
+            invalidOp ("Cannot capture overworld while transient runtime state is active: " + String.concat ", " blockers)
 
     /// Seed the script world and player state, then run callbacks and scene script.
     member this.Restore(w: World, p: PlayerState) =
