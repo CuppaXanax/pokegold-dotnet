@@ -88,3 +88,22 @@ let ``New Bark teacher blocker prevents early west exit without overlap`` trigge
     Assert.True(sawText, "teacher blocker should show text")
     Assert.True(teacherMoved, "teacher actor should move during blocker cutscene")
     Assert.True(ow.Player.CellX > 1, $"player should be brought back from west exit, got x={ow.Player.CellX}")
+
+[<Fact>]
+let ``New Bark coord trigger waits until player finishes stepping onto tile`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("NewBarkTown", 2, 8, Some Left))
+    driver.Apply(SetScene("NewBarkTown", 0))
+
+    let firstStepFrame = driver.Tick(press "left")
+    let ow = firstStepFrame.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+
+    Assert.Equal("OverworldScene", firstStepFrame.TopScene)
+    Assert.True(ow.Player.Moving)
+    Assert.Equal(1, ow.Player.CellX)
+    Assert.True(Option.isNone ow.LastTextLabel, "coord trigger should not fire at step start")
+
+    driver.Hold(press "left", 15)
+
+    Assert.True(driver.Trace |> List.exists (fun tick -> tick.Snapshot.TopScene = "TextBoxScene"))

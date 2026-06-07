@@ -1189,10 +1189,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             this.Drive(Script.start label world state.Script state.MapId)
                         | _ -> Stay
                 else
-                    let before = state.Player.CellX, state.Player.CellY
+                    let playerBefore = state.Player
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCell leader)
                     state <- OverworldState.tick (fun i _ -> isObjectPresent i) buttons state
                     let after = state.Player.CellX, state.Player.CellY
+                    let completedTranslation =
+                        match playerBefore.Motion with
+                        | Walking
+                        | Hopping -> not state.Player.Moving
+                        | _ -> false
 
                     match followPair, leaderBefore with
                     | Some(follower, leader), Some(lx, ly) ->
@@ -1212,13 +1217,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // Walking off the current map into a connected neighbour swaps the
                     // active map once the step settles (player rebased to the same world
                     // position, so the view is seamless).
-                    match OverworldState.crossConnection content state with
+                    match if completedTranslation then OverworldState.crossConnection content state else None with
                     | Some ns -> this.EnterMap(ns, true)
-                    | None ->
-
-                    if after = before then
+                    | None when not completedTranslation ->
                         Stay
-                    else
+                    | None ->
                         if player.RepelSteps > 0 then
                             player <- { player with RepelSteps = player.RepelSteps - 1 }
 
