@@ -12,6 +12,10 @@
     <EmbeddedResource Include="..\..\..\gfx\tilesets\**\*.png" LinkBase="assets\gfx\tilesets" />
     <EmbeddedResource Include="..\..\..\gfx\sprites\**\*.png" LinkBase="assets\gfx\sprites" />
     <EmbeddedResource Include="..\..\..\gfx\title\**\*" LinkBase="assets\gfx\title" />
+    <EmbeddedResource Include="..\..\..\constants\charmap.asm" LinkBase="assets\constants" />
+    <EmbeddedResource Include="..\..\..\audio\drumkits.asm" LinkBase="assets\audio" />
+    <EmbeddedResource Include="..\..\..\audio\notes.asm" LinkBase="assets\audio" />
+    <EmbeddedResource Include="..\..\..\audio\wave_samples.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
     <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
   </ItemGroup>
