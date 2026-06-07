@@ -74,18 +74,9 @@ module World =
 
     // ---- Map scene ids ------------------------------------------------------
 
-    let private sceneAliases =
-        lazy
-            (MapsData.all
-             |> Seq.collect (fun (KeyValue(name, map)) ->
-                 [ name, name
-                   map.Meta.Name, name
-                   map.Meta.Const, name ])
-             |> Map.ofSeq)
-
     let private sceneKey (map: string) : string =
         if map = "" then ""
-        else Map.tryFind map sceneAliases.Value |> Option.defaultValue map
+        else Maps.canonicalConst map |> Option.defaultValue map
 
     let private sceneLookupKeys (map: string) : string list =
         let key = sceneKey map
@@ -93,9 +84,9 @@ module World =
         if key = "" then
             [ "" ]
         else
-            match MapsData.byName key with
+            match Maps.byName key with
             | Some data ->
-                [ key; data.Meta.Name; data.Meta.Const; map ]
+                [ data.Meta.Const; data.Meta.Name; map ]
                 |> List.distinct
             | None -> [ key; map ] |> List.distinct
 

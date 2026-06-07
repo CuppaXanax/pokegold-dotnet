@@ -58,7 +58,7 @@ module OverworldState =
     /// The build-time-generated static data for a map id, if it exists. Events,
     /// scripts and text now come from the baked `MapsData` table — the overworld
     /// load path no longer parses any `maps/<Name>.asm` at runtime.
-    let private dataFor (mapId: string) : GeneratedMap option = MapsData.byName mapId
+    let private dataFor (mapId: string) : GeneratedMap option = Maps.byName mapId
 
     /// Parse a map's event tables, or empty if the map isn't in the generated table.
     let private eventsFor (mapId: string) : MapEvents =
@@ -179,14 +179,16 @@ module OverworldState =
 
     /// Load a known map by id, placing the player on its first walkable cell.
     let loadById (content: Content) (mapId: string) : OverworldState =
-        let map, tileset, coll, sprite = loadAssets content mapId
-        create mapId map tileset coll sprite |> withNeighbors content
+        let runtimeId = Maps.runtimeName mapId |> Option.defaultValue mapId
+        let map, tileset, coll, sprite = loadAssets content runtimeId
+        create runtimeId map tileset coll sprite |> withNeighbors content
 
     /// Load a known map by id, placing the player at an explicit cell and facing
     /// (used to restore a saved position).
     let loadByIdAt (content: Content) (mapId: string) (cellX: int) (cellY: int) (facing: Direction) : OverworldState =
-        let map, tileset, coll, sprite = loadAssets content mapId
-        createAt mapId map tileset coll sprite cellX cellY facing |> withNeighbors content
+        let runtimeId = Maps.runtimeName mapId |> Option.defaultValue mapId
+        let map, tileset, coll, sprite = loadAssets content runtimeId
+        createAt runtimeId map tileset coll sprite cellX cellY facing |> withNeighbors content
 
     /// Load the Azalea Town overworld through the shared asset cache.
     let loadAzalea (content: Content) : OverworldState = loadById content "AzaleaTown"
@@ -263,21 +265,12 @@ module OverworldState =
             MapConnections.resolve s.Neighbors cx cy
             |> Option.map (fun (n, lx, ly) -> loadByIdAt content n.Placement.Conn.Map lx ly s.Player.Facing)
 
-    /// A destination `MAP_*` constant → its loadable map id, resolved from the baked
-    /// metadata's name↔const link (every one of the 368 maps, not just Azalea).
-    let private constToName : Map<string, string> =
-        MapsData.all
-        |> Seq.map (fun kv -> kv.Value.Meta.Const, kv.Value.Meta.Name)
-        |> Map.ofSeq
-
-    let private mapIdOfConst (mapConst: string) : string option = Map.tryFind mapConst constToName
-
     /// Resolve a warp to its destination overworld: load the destination map and
     /// place the player on its `destWarp`-th warp tile (GSC pairs warps by id).
     /// `None` if the destination map is unknown, its assets aren't in the tree yet,
     /// or the warp id is out of range.
     let tryWarp (content: Content) (destMap: string) (destWarp: int) : OverworldState option =
-        match mapIdOfConst destMap |> Option.bind dataFor with
+        match dataFor destMap with
         | Some m when canLoad m.Meta ->
             let warps = m.Events.Warps
             if destWarp >= 1 && destWarp <= warps.Length then
@@ -310,7 +303,7 @@ module OverworldState =
                 else fallback
             | None -> fallback
 
-        match mapIdOfConst destMap |> Option.bind dataFor with
+        match dataFor destMap with
         | Some m when canLoad m.Meta -> Some(loadByIdAt content m.Meta.Name x y dir)
         | _ -> None
 

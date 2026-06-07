@@ -44,6 +44,15 @@ let ``NewBarkTown metadata and warps are baked correctly`` () =
     Assert.True(elmsLab.IsSome, "expected a warp to ELMS_LAB")
 
 [<Fact>]
+let ``map identity resolves ROM constants and runtime names`` () =
+    let byRuntimeName = Maps.byName "NewBarkTown" |> Option.defaultWith (fun () -> failwith "NewBarkTown missing")
+    let byRomConst = Maps.byName "NEW_BARK_TOWN" |> Option.defaultWith (fun () -> failwith "NEW_BARK_TOWN missing")
+
+    Assert.Equal(byRuntimeName.Meta.Name, byRomConst.Meta.Name)
+    Assert.Equal(Some "NEW_BARK_TOWN", Maps.canonicalConst "NewBarkTown")
+    Assert.Equal(Some "NewBarkTown", Maps.runtimeName "NEW_BARK_TOWN")
+
+[<Fact>]
 let ``critical New Bark story scenes are generated from symbolic constants`` () =
     let elm =
         match MapsData.byName "ElmsLab" with

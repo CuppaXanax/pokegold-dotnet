@@ -462,6 +462,8 @@ module Parsers =
     let private trainerDbRx = Regex(@"^\s*db\s+""([^""]+)@""\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*$")
     let private trainerPartyRx = Regex(@"^\s*db\s+(.+?)\s*$")
     let private trainerEndRx = Regex(@"^\s*db\s+-1\b")
+    let private trainerClassConstRx = Regex(@"^\s*trainerclass\s+([A-Za-z0-9_]+)\b")
+    let private trainerConstRx = Regex(@"^\s*const\s+([A-Za-z0-9_]+)\b")
 
     let private parseTrainerPartyLine (raw: string) (trainerType: string) : TrainerMon option =
         let m = trainerPartyRx.Match raw
@@ -533,6 +535,29 @@ module Parsers =
 
         flush ()
         List.ofSeq result
+
+    let trainerConstants : Map<string, string * int> =
+        let lines = Repo.readText("constants/trainer_constants.asm").Split('\n')
+        let mutable currentGroup = ""
+        let mutable currentId = 0
+        let constants = ResizeArray<string * (string * int)>()
+
+        for raw in lines do
+            let cleanLine =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            let classMatch = trainerClassConstRx.Match cleanLine
+            let constMatch = trainerConstRx.Match cleanLine
+
+            if classMatch.Success then
+                currentGroup <- classMatch.Groups.[1].Value
+                currentId <- 0
+            elif constMatch.Success && currentGroup <> "" then
+                currentId <- currentId + 1
+                constants.Add(constMatch.Groups.[1].Value, (currentGroup, currentId))
+
+        constants |> Seq.map id |> Map.ofSeq
 
     let private normalizeTrainerClass (name: string) : string =
         name.ToUpperInvariant().Replace(" ", "_")

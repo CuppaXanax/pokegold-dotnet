@@ -68,6 +68,7 @@
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
     <Compile Include="Data\EvosAttacks.fs" />
+    <Compile Include="Data\Maps.fs" />
     <Compile Include="Data\Content.fs" />
     <Compile Include="Data\Items.fs" />
     <Compile Include="Data\Trainers.fs" />

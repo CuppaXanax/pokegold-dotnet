@@ -286,6 +286,13 @@ module Emit =
             sb.AppendLine(sprintf "            ]; BaseReward = %d })" reward) |> ignore
 
         sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    /// Trainer constants from constants/trainer_constants.asm, keyed by constant name.") |> ignore
+        sb.AppendLine("    let byConstant : Map<string, string * int> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+        for KeyValue(constant, (group, id)) in Parsers.trainerConstants do
+            sb.AppendLine(sprintf "            (\"%s\", (\"%s\", %d))" constant group id) |> ignore
+        sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
     let private evosAttacksFile () : string =

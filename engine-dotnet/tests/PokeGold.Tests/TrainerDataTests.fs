@@ -2,6 +2,7 @@ module PokeGold.Tests.TrainerDataTests
 
 open Xunit
 open PokeGold.Game.Data
+open PokeGold.Game.Overworld.Script
 
 [<Fact>]
 let ``trainer lookup decodes Falkner's first party`` () =
@@ -27,3 +28,23 @@ let ``trainer lookup decodes Bug Catcher party levels and species`` () =
     Assert.Equal(4, trainer.BaseReward)
     Assert.Equal<string list>([ "CATERPIE"; "CATERPIE" ], trainer.Party |> List.map (fun mon -> mon.Species))
     Assert.Equal<int list>([ 3; 3 ], trainer.Party |> List.map (fun mon -> mon.Level))
+
+[<Fact>]
+let ``trainer lookup by constant resolves exact group id`` () =
+    let trainer = Trainers.lookupByName "HIKER" "ANTHONY2" |> Option.defaultWith (fun () -> failwith "ANTHONY2 not found")
+
+    Assert.Equal("HIKER", trainer.Group)
+    Assert.Equal(5, trainer.Id)
+    Assert.Equal("ANTHONY", trainer.Name)
+
+[<Fact>]
+let ``all generated loadtrainer operands resolve exactly`` () =
+    let unresolved =
+        [ for KeyValue(mapId, map) in MapsData.all do
+              for command in map.Script.Commands do
+                  match command with
+                  | Loadtrainer(group, trainer) when Trainers.lookupByName group trainer |> Option.isNone ->
+                      yield $"{mapId}: {group}, {trainer}"
+                  | _ -> () ]
+
+    Assert.True(List.isEmpty unresolved, "Unresolved loadtrainer operands: " + System.String.Join("; ", unresolved))
