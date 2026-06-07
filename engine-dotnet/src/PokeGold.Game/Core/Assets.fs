@@ -23,16 +23,24 @@ module Assets =
             findUp marker dir.Parent
 
     /// The repository root, discovered once from the running assembly's location.
-    let root : string =
+    /// On platforms where the repo isn't present (e.g. Android APK), this will be
+    /// None and all assets must come from embedded resources.
+    let private repoRoot : string option =
         let start = DirectoryInfo(System.AppContext.BaseDirectory)
 
         match findUp "roms.sha1" start with
-        | Some d -> d.FullName
+        | Some d -> Some d.FullName
         | None ->
             // Fall back to the current directory (useful for tests run from the repo).
             match findUp "roms.sha1" (DirectoryInfo(Directory.GetCurrentDirectory())) with
-            | Some d -> d.FullName
-            | None -> failwith "Could not locate repository root (no roms.sha1 found in any parent)."
+            | Some d -> Some d.FullName
+            | None -> None
+
+    /// The repository root. Throws if not available (e.g. on Android).
+    let root : string =
+        match repoRoot with
+        | Some r -> r
+        | None -> failwith "Could not locate repository root (no roms.sha1 found in any parent)."
 
     let private findResource (relative: string) : string option =
         let assetPath = "assets/" + normalizeRelative relative
@@ -45,8 +53,7 @@ module Assets =
             candidates
             |> List.exists (fun candidate -> name.EndsWith(candidate, System.StringComparison.OrdinalIgnoreCase)))
 
-    let private tryRoot () : string option =
-        try Some root with _ -> None
+    let private tryRoot () : string option = repoRoot
 
     /// Resolve a repo-relative path (e.g. "gfx/tilesets/johto_modern.png") to an
     /// absolute path under the repository root.
