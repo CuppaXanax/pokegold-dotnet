@@ -68,8 +68,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable pending: (ScriptVm * ScriptEffect) option = None
     /// Script resumes waiting behind higher-priority map-entry scripts.
     let scriptQueue = Queue<ScriptVm * int option>()
-    /// The live NPC most recently selected by an A-press or `setlasttalked`.
-    let mutable lastTalkedNpcIndex: int option = None
+    /// The live actor most recently selected by an A-press or `setlasttalked`.
+    let mutable lastTalkedActor: ActorId option = None
     /// A script suspended on an `applymovement`: the VM to resume, the moved object's
     /// index in `state.Npcs`, and the live movement run. Ticked each frame until done.
     let mutable runningMove: (ScriptVm * int * MovementRunner.Run) option = None
@@ -144,16 +144,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | _ -> None
 
     let npcIndexOfSymbol (objSym: string) : int option =
-        match objSym.Trim().ToUpperInvariant() with
-        | "LAST_TALKED"
-        | "-2" -> lastTalkedNpcIndex
-        | "PLAYER"
-        | "0"
-        | "-1" -> None
-        | _ ->
-            match Int32.TryParse objSym with
-            | true, n when n > 0 -> Some(n - 1)
-            | _ -> OverworldState.objectIndexOf state.MapId objSym
+        Actor.resolveObjectIndex (OverworldState.objectIndexOf state.MapId) lastTalkedActor objSym
 
     let setObjectVisible (objSym: string) (visible: bool) =
         let idxOpt = npcIndexOfSymbol objSym
@@ -174,29 +165,25 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             match idxOpt with
             | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
-            | None -> ()
+            | _ -> ()
         | None ->
             match idxOpt with
             | Some idx when idx >= 0 && idx < objectPresent.Length -> objectPresent.[idx] <- visible
             | _ -> ()
 
     let actorIndexOfSymbol (objSym: string) : int option =
-        match objSym.Trim().ToUpperInvariant() with
-        | "PLAYER"
-        | "0"
-        | "-1" -> Some -1
-        | _ -> npcIndexOfSymbol objSym
+        match Actor.resolve (OverworldState.objectIndexOf state.MapId) lastTalkedActor objSym with
+        | Some ActorId.Player -> Some -1
+        | Some(ActorId.Object idx) -> Some idx
+        | None -> None
 
     let tryActorCell (objSym: string) : (bool * int * int * int) option =
-        match objSym.Trim().ToUpperInvariant() with
-        | "PLAYER"
-        | "0" -> Some(true, -1, state.Player.CellX, state.Player.CellY)
-        | _ ->
-            match npcIndexOfSymbol objSym with
-            | Some idx when idx >= 0 && idx < state.Npcs.Length ->
-                let npc = state.Npcs.[idx]
-                Some(false, idx, npc.CellX, npc.CellY)
-            | _ -> None
+        match Actor.resolve (OverworldState.objectIndexOf state.MapId) lastTalkedActor objSym with
+        | Some ActorId.Player -> Some(true, -1, state.Player.CellX, state.Player.CellY)
+        | Some(ActorId.Object idx) when idx >= 0 && idx < state.Npcs.Length ->
+            let npc = state.Npcs.[idx]
+            Some(false, idx, npc.CellX, npc.CellY)
+        | _ -> None
 
     let actorCellByIndex (idx: int) : (int * int) option =
         if idx = -1 then
@@ -609,10 +596,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | None -> ()
                         resume None vm
                     | SetLastTalked obj ->
-                        lastTalkedNpcIndex <- npcIndexOfSymbol obj
+                        lastTalkedActor <- Actor.resolve (OverworldState.objectIndexOf state.MapId) lastTalkedActor obj
                         resume None vm
                     | FacePlayer ->
-                        match lastTalkedNpcIndex with
+                        match lastTalkedActor |> Option.bind Actor.objectIndex with
                         | Some idx when idx >= 0 && idx < state.Npcs.Length ->
                             let npc = state.Npcs.[idx]
                             setNpcFacing idx (directionToward npc.CellX npc.CellY state.Player.CellX state.Player.CellY)
@@ -1097,7 +1084,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         // Talk to / read whatever the player faces. Objects are resolved
                         // over the *live* NPC set (a wandering NPC is talked to where it
                         // now stands), filtered to those currently present.
-                        let mutable talkedNpcCandidate: int option = None
+                        let mutable talkedNpcCandidate: ActorId option = None
 
                         let objectScriptAt fx fy =
                             state.Npcs
@@ -1108,7 +1095,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 let script = state.Npcs.[i].Event.Script
 
                                 if script <> "" && script <> "ObjectEvent" then
-                                    talkedNpcCandidate <- Some i
+                                    talkedNpcCandidate <- Some(ActorId.Object i)
 
                                 script)
 
@@ -1120,7 +1107,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                         match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
                         | Some label when state.Script.Labels.ContainsKey label ->
-                            lastTalkedNpcIndex <- talkedNpcCandidate
+                            lastTalkedActor <- talkedNpcCandidate
                             sound.PlaySfx "Sfx_Menu"
                             this.Drive(Script.start label world state.Script state.MapId)
                         | _ -> Stay

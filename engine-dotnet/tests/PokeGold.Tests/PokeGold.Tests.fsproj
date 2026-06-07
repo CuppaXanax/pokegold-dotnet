@@ -30,6 +30,7 @@
     <Compile Include="OverworldSchedulerTests.fs" />
     <Compile Include="ConnectionsTests.fs" />
     <Compile Include="ObjectTests.fs" />
+    <Compile Include="ActorTests.fs" />
     <Compile Include="MovementScriptTests.fs" />
     <Compile Include="UiTests.fs" />
     <Compile Include="StartMenuTests.fs" />
