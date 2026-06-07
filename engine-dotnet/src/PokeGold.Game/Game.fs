@@ -24,7 +24,7 @@ type Game() =
     let audio = AudioEngine(44100)
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
-    let mutable overworld = OverworldScene.Load(content, audio)
+    let mutable overworld: OverworldScene option = None
     let hasSave = SaveFile.tryRead() |> Option.isSome
 
     /// Run the std-script InitializeEventsScript to set the ~60 event flags GSC
@@ -42,7 +42,7 @@ type Game() =
         let state = OverworldState.loadById content "PlayersHouse2F"
         let ow = OverworldScene(content, audio, state)
         ow.Restore(world, { PlayerStateOps.initial with Name = name })
-        overworld <- ow
+        overworld <- Some ow
         ow
 
     let titleScene =
@@ -57,7 +57,7 @@ type Game() =
                         match SaveFile.tryRead() with
                         | Some save ->
                             let ow = OverworldScene.OfSave(content, audio, save)
-                            overworld <- ow
+                            overworld <- Some ow
                             Replace(ow)
                         | None -> Stay),
                     (fun () -> Push(OptionsScene(content, PlayerStateOps.initial, fun _ -> ()))))))
@@ -82,7 +82,7 @@ type Game() =
 
     /// Make the given overworld scene the sole, bottom scene (used on load).
     member private _.ResetTo(ow: OverworldScene) =
-        overworld <- ow
+        overworld <- Some ow
         scenes.Clear()
         scenes.Push(ow :> Scene)
 
@@ -97,7 +97,10 @@ type Game() =
     member _.Frame = frame
 
     /// Capture the current overworld and write it to the save slot.
-    member _.Save() = SaveFile.write (overworld.Capture())
+    member _.Save() =
+        match overworld with
+        | Some ow when ow.CanCapture -> SaveFile.write (ow.Capture())
+        | _ -> ()
 
     /// Load the save slot, if present, replacing the scene stack with the
     /// restored overworld. No-op when there's no readable save.
@@ -122,6 +125,9 @@ type Game() =
             line.Trim().Split([| ' '; '\t' |], System.StringSplitOptions.RemoveEmptyEntries)
 
         match (if parts.Length > 0 then parts.[0].ToLowerInvariant() else "") with
+        | "ping" -> "pong"
+        | "frame" -> string frame
+        | "scene" -> top
         // Capture the most recently rendered framebuffer to a PNG. Handled here
         // (not in DebugCommands) because the framebuffer is owned by the Game.
         // `screenshot [path]` — defaults to %TEMP%/pokegold/screenshot.png.
@@ -153,7 +159,18 @@ type Game() =
                     else 1
                 for _ in 1 .. n do injected.Enqueue frame1
                 sprintf "ok: injected %s for %d frame(s)" parts.[1] n
-        | _ -> DebugCommands.dispatch overworld frame top line
+        | "debug-azalea" | "dev-azalea" ->
+            let ow = OverworldScene.DebugLoadAzalea(content, audio)
+            scenes.Clear()
+            scenes.Push(ow :> Scene)
+            overworld <- Some ow
+            "ok: debug Azalea overworld loaded"
+        | "help" when overworld.IsNone ->
+            DebugCommands.help + "\n  debug-azalea              explicit dev boot into Azalea seed"
+        | _ ->
+            match overworld with
+            | Some ow -> DebugCommands.dispatch ow frame top line
+            | None -> "no overworld scene active (try 'debug-azalea' or start/load a game)"
 
     /// Fill `buffer` with the next `nFrames` interleaved stereo sample-frames
     /// (range [-1, 1]). The host converts these to its device's PCM format.

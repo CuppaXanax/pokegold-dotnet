@@ -42,6 +42,19 @@ let private startMainMenu () =
     g
 
 [<Fact>]
+let ``new Game starts at title without an implicit debug overworld`` () =
+    let g = Game()
+    Assert.Equal("TitleScene", topScene g)
+    Assert.Contains("no overworld scene active", g.RunDebugCommand "player")
+
+[<Fact>]
+let ``debug Azalea boot is explicit`` () =
+    let g = Game()
+    Assert.Equal("ok: debug Azalea overworld loaded", g.RunDebugCommand "debug-azalea")
+    Assert.Equal("OverworldScene", topScene g)
+    Assert.Contains("map     AzaleaTown", g.RunDebugCommand "player")
+
+[<Fact>]
 let ``holding Start keeps the main menu open instead of flickering`` () =
     let g = startMainMenu ()
     let start = { Buttons.none with Start = true }

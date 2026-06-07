@@ -683,8 +683,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             true
         | _ -> false
 
-    /// Load the Azalea Town overworld scene through the shared asset cache.
-    static member Load(content: Content, sound: ISoundBoard) : OverworldScene =
+    /// Explicit debug boot into the old Azalea vertical-slice seed. Normal game
+    /// startup goes through Title/MainMenu/NewGame or save loading instead.
+    static member DebugLoadAzalea(content: Content, sound: ISoundBoard) : OverworldScene =
         let ow = OverworldScene(content, sound, OverworldState.loadAzalea content)
         // Seed Azalea-appropriate debug state (story flags + party)
         let debugWorld =
