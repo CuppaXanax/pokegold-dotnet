@@ -462,22 +462,19 @@ let ``S.S. Aqua is gated by EVENT_BEAT_ELITE_FOUR`` () =
     Assert.True(World.hasEvent "EVENT_BEAT_ELITE_FOUR" world)
 
 [<Fact>]
-let ``checktime sets script var to the current time-of-day`` () =
-    let expected = TimeOfDay.toScriptVar (TimeOfDay.current())
+let ``checktime suspends for runtime game time check`` () =
     let prog =
         parse
-            (sprintf
-                "S:\n\
-                 \tchecktime\n\
-                 \tifequal %d, .Ok\n\
-                 \tend\n\
-                 .Ok:\n\
-                 \tjumptext OkText\n"
-                expected)
+            "S:\n\
+             \tchecktime NITE\n\
+             \tiftrue .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \tjumptext OkText\n"
 
     match Script.start "S" World.empty prog "" with
-    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
-    | other -> Assert.Fail($"expected OkText after checktime, got {other}")
+    | { Outcome = Suspended(_, CheckTime "NITE") } -> ()
+    | other -> Assert.Fail($"expected CheckTime NITE, got {other}")
 
 [<Fact>]
 let ``text and event-table directives never emit commands`` () =

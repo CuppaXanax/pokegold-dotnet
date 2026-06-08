@@ -136,7 +136,11 @@ let private collectTexts (step0: ScriptStep) : string list =
                     match eff with
                     | ShowText(label, _) -> label :: acc
                     | _ -> acc
-                let v = match eff with AskYesNo -> Some 1 | _ -> None
+                let v =
+                    match eff with
+                    | AskYesNo -> Some 1
+                    | CheckTime _ -> Some 1
+                    | _ -> None
                 loop (n - 1) acc (Script.resume v step.World vm)
     loop 100 [] step0
 

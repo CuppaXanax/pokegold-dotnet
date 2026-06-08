@@ -1,5 +1,8 @@
 namespace PokeGold.Game.Player
 
+open System
+open PokeGold.Game.Core
+
 /// Player-facing game options (persisted in save).
 type GameOptions =
     { TextSpeed: int   // 1=slow, 2=mid, 3=fast (GSC default = mid)
@@ -11,6 +14,27 @@ type DayCareState =
       Mon2: PartyMon option
       EggSteps: int
       HasEgg: bool }
+
+type GameTimeState =
+    { Hour: int
+      Minute: int
+      Weekday: int
+      IsDst: bool }
+
+module GameTimeState =
+    let private clamp lo hi value = max lo (min hi value)
+
+    let create hour minute weekday isDst =
+        { Hour = clamp 0 23 hour
+          Minute = clamp 0 59 minute
+          Weekday = ((weekday % 7) + 7) % 7
+          IsDst = isDst }
+
+    let fromClock (now: DateTimeOffset) =
+        create now.Hour now.Minute (int now.DayOfWeek) false
+
+    let timeOfDay time =
+        TimeOfDay.fromHour time.Hour
 
 /// The full persistent player state.
 type PersistentPlayerState =
@@ -27,7 +51,8 @@ type PersistentPlayerState =
       Pc: PcStorage
       RepelSteps: int
       PhoneContacts: Set<string>
-      DayCare: DayCareState }
+      DayCare: DayCareState
+      GameTime: GameTimeState }
 
 /// Public alias for the persistent player state record.
 type PlayerState = PersistentPlayerState
@@ -47,7 +72,7 @@ module PlayerStateOps =
     let defaultOptions = { TextSpeed = 2; BoxBorder = 0; Sound = 0 }
 
     /// A brand-new game player state (empty party, no items, no dex, empty PC).
-    let initial =
+    let initialAt (now: DateTimeOffset) =
         { Name = "PLAYER"
           Money = 3000
           MomSavings = 0
@@ -61,7 +86,10 @@ module PlayerStateOps =
           Pc = Storage.empty
           RepelSteps = 0
           PhoneContacts = Set.empty
-          DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false } }
+          DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false }
+          GameTime = GameTimeState.fromClock now }
+
+    let initial = initialAt DateTimeOffset.Now
 
 module Repel =
 

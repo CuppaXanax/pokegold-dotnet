@@ -143,6 +143,39 @@ let ``phone contact script effects mutate player state`` () =
     Assert.Equal(Some "PhoneOk", scene.RuntimeSnapshot.LastTextLabel)
 
 [<Fact>]
+let ``RTC script effects use persistent game time state`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "RtcScene"
+            [| Special "SetDayOfWeek"
+               Readvar "VAR_WEEKDAY"
+               Ifnotequal(5, "RtcScene.Fail")
+               Checktime "NITE"
+               Iffalse "RtcScene.Fail"
+               Special "InitialSetDSTFlag"
+               Writetext "RtcOk"
+               End
+               Writetext "RtcFail"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "RtcOk", "ok<DONE>"; "RtcFail", "fail<DONE>" ] }
+
+    let player =
+        { PlayerStateOps.initial with
+            GameTime = GameTimeState.create 22 10 5 false }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    Assert.Equal(Some "RtcOk", scene.RuntimeSnapshot.LastTextLabel)
+    Assert.True(scene.DebugPlayer.GameTime.IsDst)
+    Assert.Equal(5, World.getVar "VAR_WEEKDAY" scene.DebugWorld)
+
+[<Fact>]
 let ``runtime text resolver substitutes rival name buffer`` () =
     let content = Content()
     let state =

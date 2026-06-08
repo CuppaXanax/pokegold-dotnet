@@ -69,6 +69,9 @@ type PocketSave = { Items: ItemSave[]; Balls: ItemSave[]; KeyItems: ItemSave[]; 
 type GameOptionsSave = { TextSpeed: int; BoxBorder: int; Sound: int }
 
 [<CLIMutable>]
+type GameTimeSave = { Hour: int; Minute: int; Weekday: int; IsDst: bool }
+
+[<CLIMutable>]
 type DayCareSave =
     { Mon1: PartyMonSave option
       Mon2: PartyMonSave option
@@ -90,7 +93,8 @@ type PlayerSave =
       Pc: PcStorageSave
       RepelSteps: int
       PhoneContacts: string[]
-      DayCare: DayCareSave }
+      DayCare: DayCareSave
+      GameTime: GameTimeSave }
 
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
@@ -108,7 +112,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 5
+    let CurrentVersion = 6
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -234,6 +238,15 @@ module SaveData =
               EggSteps = s.EggSteps
               HasEgg = s.HasEgg }
 
+    let private gameTimeToSave (t: GameTimeState) : GameTimeSave =
+        { Hour = t.Hour; Minute = t.Minute; Weekday = t.Weekday; IsDst = t.IsDst }
+
+    let private gameTimeOfSave (s: GameTimeSave) : GameTimeState =
+        if box s = null then
+            PlayerStateOps.initial.GameTime
+        else
+            GameTimeState.create s.Hour s.Minute s.Weekday s.IsDst
+
     // PcStorage conversions
     let private mailToSave (m: Mail) : MailSave =
         { Author = m.Author; Body = m.Body; Species = m.Species }
@@ -284,7 +297,8 @@ module SaveData =
           Pc = pcToSave p.Pc
           RepelSteps = p.RepelSteps
           PhoneContacts = p.PhoneContacts |> Set.toArray
-          DayCare = dayCareToSave p.DayCare }
+          DayCare = dayCareToSave p.DayCare
+          GameTime = gameTimeToSave p.GameTime }
 
     /// The PlayerState a save restores. For v1/v2 saves (no Player block),
     /// migrates the flat Bag to a pocketed Bag; party/dex/money start empty/zero.
@@ -310,7 +324,8 @@ module SaveData =
               Pc = pcOfSave ps.Pc
               RepelSteps = ps.RepelSteps
               PhoneContacts = nullToEmpty ps.PhoneContacts |> Set.ofArray
-              DayCare = dayCareOfSave ps.DayCare }
+              DayCare = dayCareOfSave ps.DayCare
+              GameTime = gameTimeOfSave ps.GameTime }
 
     /// Snapshot a live overworld plus its script world, bag, and player state into a save.
     let captureWith (s: OverworldState) (world: World) (player: PlayerState) : SaveData =

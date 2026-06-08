@@ -38,6 +38,10 @@ type ScriptEffect =
     | AddPhoneContact of phone: string
     | CheckPhoneContact of phone: string
     | AskPhoneNumber of phone: string
+    /// RTC/day setup commands and checks.
+    | SetDayOfWeek
+    | SetDstFlag of enabled: bool
+    | CheckTime of time: string
     /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
     | GivePoke of species: string * level: int * item: string option
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
@@ -306,6 +310,9 @@ module Script =
             | Special "HealParty" -> suspend next world HealParty
             | Special "PokemonCenterPC" -> suspend next world OpenPc
             | Special "NameRival" -> suspend next world NameRival
+            | Special "SetDayOfWeek" -> suspend next world SetDayOfWeek
+            | Special "InitialSetDSTFlag" -> suspend next world (SetDstFlag true)
+            | Special "InitialClearDSTFlag" -> suspend next world (SetDstFlag false)
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
@@ -338,7 +345,7 @@ module Script =
             | Stonetable _
             | Cmdqueue _
             | Writecmdqueue _ -> run world next
-            | Checktime _ -> run world { next with ScriptVar = TimeOfDay.toScriptVar (TimeOfDay.current()) }
+            | Checktime time -> suspend next world (CheckTime time)
             | Checkcellnum phone -> suspend next world (CheckPhoneContact phone)
             | Checkphonecall -> run world { next with ScriptVar = 0 }
             | Checkjustbattled -> run world { next with ScriptVar = 0 }

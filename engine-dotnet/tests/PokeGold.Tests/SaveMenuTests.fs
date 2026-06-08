@@ -127,7 +127,8 @@ let ``SaveData v3 player block round-trips through serialize/deserialize`` () =
               Pc = Unchecked.defaultof<_>
               RepelSteps = 0
               PhoneContacts = [| "PHONE_ELM" |]
-              DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false } } }
+              DayCare = { Mon1 = None; Mon2 = None; EggSteps = 0; HasEgg = false }
+              GameTime = { Hour = 9; Minute = 30; Weekday = 1; IsDst = false } } }
 
     let json = SaveFile.serialize save
 

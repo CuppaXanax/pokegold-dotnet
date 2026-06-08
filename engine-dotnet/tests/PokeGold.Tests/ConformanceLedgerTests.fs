@@ -92,12 +92,12 @@ module ConformanceLedger =
             [ "Checkver"; "Unsupported" ]
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Explicitly handled by the script integration layer."
-            [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic"; "NameRival" ]
+            [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic"; "NameRival"
+              "SetDayOfWeek"; "InitialSetDSTFlag"; "InitialClearDSTFlag" ]
 
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
-              "HealMachineAnim"; "InitialClearDSTFlag"; "InitialSetDSTFlag"; "MapRadio"; "OverworldTownMap"; "PlayersHousePC"
-              "SetDayOfWeek"; "TryQuickSave" ]
+              "HealMachineAnim"; "MapRadio"; "OverworldTownMap"; "PlayersHousePC"; "TryQuickSave" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckFirstMonIsEgg"; "CheckForLuckyNumberWinners"
@@ -317,7 +317,7 @@ let ``critical Johto debt is queryable`` () =
 
     Assert.Contains((ScriptCommandCase, "TextRam"), debt)
     Assert.Contains((ScriptSpecial, "BankOfMom"), debt)
-    Assert.Contains((ScriptSpecial, "SetDayOfWeek"), debt)
+    Assert.Contains((ScriptSpecial, "MapRadio"), debt)
 
 [<Fact>]
 let ``link-only debt is separated from normal story debt`` () =

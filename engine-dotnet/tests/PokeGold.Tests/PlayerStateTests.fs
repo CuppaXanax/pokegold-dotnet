@@ -84,6 +84,15 @@ let ``PhoneContacts starts empty`` () =
     Assert.True(PlayerStateOps.initial.PhoneContacts.IsEmpty)
 
 [<Fact>]
+let ``GameTime defaults from clock seed`` () =
+    let player = PlayerStateOps.initialAt (System.DateTimeOffset(2026, 6, 10, 14, 45, 0, System.TimeSpan.Zero))
+
+    Assert.Equal(14, player.GameTime.Hour)
+    Assert.Equal(45, player.GameTime.Minute)
+    Assert.Equal(3, player.GameTime.Weekday)
+    Assert.False(player.GameTime.IsDst)
+
+[<Fact>]
 let ``can add and check phone contacts`` () =
     let player =
         { PlayerStateOps.initial with
@@ -100,7 +109,8 @@ let ``SaveData v3 round-trip preserves PlayerState`` () =
             Money = 1234
             DexSeen = Set.ofList [1; 2; 155]
             Party = [ PartyMon.create 155 5 ]
-            RepelSteps = 75 }
+            RepelSteps = 75
+            GameTime = GameTimeState.create 22 10 5 true }
     let save = SaveData.captureWith state PokeGold.Game.Overworld.Script.World.empty player
     let json = SaveFile.serialize save
     let back = SaveFile.deserialize json |> Option.get
@@ -110,6 +120,7 @@ let ``SaveData v3 round-trip preserves PlayerState`` () =
     Assert.Equal(1, p2.Party.Length)
     Assert.Equal(155, p2.Party.[0].SpeciesId)
     Assert.Equal(75, p2.RepelSteps)
+    Assert.Equal(player.GameTime, p2.GameTime)
 
 [<Fact>]
 let ``SaveData v2 migration: flat bag repocketed, party empty, money uses default`` () =

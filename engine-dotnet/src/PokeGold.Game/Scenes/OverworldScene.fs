@@ -92,6 +92,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
+
+    let checkTimeMatches (time: string) =
+        let tod = GameTimeState.timeOfDay player.GameTime
+        match time.Trim().ToUpperInvariant() with
+        | "MORN" -> tod = Morn
+        | "DAY" -> tod = Day
+        | "NITE" -> tod = Nite
+        | "ANYTIME" -> true
+        | _ -> false
     /// Live object presence for this map visit. Event flags seed this on map load;
     /// only `appear`/`disappear` update it live. Plain `setevent`/`clearevent`
     /// prepares future map-load state and must not pop already-loaded actors.
@@ -586,6 +595,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         resume None vm
                     | CheckPhoneContact phone ->
                         resume (Some(if Set.contains phone player.PhoneContacts then 1 else 0)) vm
+                    | SetDayOfWeek ->
+                        world <- World.setVar "VAR_WEEKDAY" player.GameTime.Weekday world
+                        resume None vm
+                    | SetDstFlag enabled ->
+                        player <- { player with GameTime = { player.GameTime with IsDst = enabled } }
+                        resume None vm
+                    | CheckTime time ->
+                        resume (Some(if checkTimeMatches time then 1 else 0)) vm
                     | LoadWild(species, level) ->
                         stagedWild <- Some(species, level)
                         stagedTrainer <- None
