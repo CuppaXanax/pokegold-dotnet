@@ -591,6 +591,34 @@ let ``map music specials emit host music effects`` () =
         effects)
 
 [<Fact>]
+let ``phone and rival specials emit runtime effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \taddcellnum PHONE_MOM\n\
+             \tcheckcellnum PHONE_ELM\n\
+             \taskforphonenumber PHONE_JOEY\n\
+             \tspecial NameRival\n\
+             \tend\n"
+
+    let _, effects =
+        drive
+            (function
+             | CheckPhoneContact _ -> Some 0
+             | AskPhoneNumber _ -> Some 1
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ AddPhoneContact "PHONE_MOM"
+          CheckPhoneContact "PHONE_ELM"
+          AskPhoneNumber "PHONE_JOEY"
+          NameRival ],
+        effects)
+
+[<Fact>]
 let ``loadvar sets the world var and script var`` () =
     let prog =
         ScriptParser.parseText

@@ -117,6 +117,46 @@ let ``money and coin script effects mutate player state`` () =
     Assert.Equal(30, scene.DebugPlayer.Coins)
 
 [<Fact>]
+let ``phone contact script effects mutate player state`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "PhoneScene"
+            [| Addcellnum "PHONE_MOM"
+               Checkcellnum "PHONE_MOM"
+               Iffalse "PhoneScene.Fail"
+               Writetext "PhoneOk"
+               End
+               Writetext "PhoneFail"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "PhoneOk", "ok<DONE>"; "PhoneFail", "fail<DONE>" ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    Assert.Contains("PHONE_MOM", scene.DebugPlayer.PhoneContacts)
+    Assert.Equal(Some "PhoneOk", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``runtime text resolver substitutes rival name buffer`` () =
+    let content = Content()
+    let state =
+        scriptedScene content "NewBarkTown" 5 5 Down "RivalTextScene" [| Writetext "RivalText"; End |]
+        |> fun s -> { s with Text = Map.ofList [ "RivalText", "Rival is <RIVAL><DONE>" ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    let world = World.empty |> World.setBuffer "__rival_name" "SNEASEL"
+
+    scene.Restore(world, PlayerStateOps.initial)
+
+    Assert.Equal(Some "Rival is SNEASEL<DONE>", scene.RuntimeSnapshot.LastRenderedText)
+
+[<Fact>]
 let ``idle overworld can be captured but transient scripts cannot`` () =
     let content = Content()
     let idle = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "AzaleaTown" 9 12 Down)

@@ -74,12 +74,15 @@ module ConformanceLedger =
               "End"; "EndAll"; "Halloffame"; "Credits"; "Special"; "Pokemart"
               "Checktime"; "Endifjustbattled"; "Gettrainername"; "Getitemname"; "Getmonname"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
 
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone contact commands mutate player state or route through a yes/no effect; broader phone system behavior still needs conformance proof."
+            [ "Addcellnum"; "Checkcellnum"; "Askforphonenumber" ]
+
           yield! many ScriptCommandCase StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback on normal story/menu paths."
             [ "Loadmenu"; "Verticalmenu"; "Closewindow"; "TwoDMenu"; "Prompt"; "Catchtutorial"; "TextRam"; "MenuCoords" ]
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
-              "Addcellnum"; "Checkcellnum"; "Checkphonecall"; "Checkjustbattled"; "Askforphonenumber"
+              "Checkphonecall"; "Checkjustbattled"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Specialphonecall"; "Elevfloor" ]
 
           yield! many ScriptCommandCase StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated command is typed, but only cosmetic/timing behavior remains."
@@ -89,11 +92,11 @@ module ConformanceLedger =
             [ "Checkver"; "Unsupported" ]
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Explicitly handled by the script integration layer."
-            [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic" ]
+            [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic"; "NameRival" ]
 
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
-              "HealMachineAnim"; "InitialClearDSTFlag"; "InitialSetDSTFlag"; "MapRadio"; "NameRival"; "OverworldTownMap"; "PlayersHousePC"
+              "HealMachineAnim"; "InitialClearDSTFlag"; "InitialSetDSTFlag"; "MapRadio"; "OverworldTownMap"; "PlayersHousePC"
               "SetDayOfWeek"; "TryQuickSave" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
@@ -314,7 +317,7 @@ let ``critical Johto debt is queryable`` () =
 
     Assert.Contains((ScriptCommandCase, "TextRam"), debt)
     Assert.Contains((ScriptSpecial, "BankOfMom"), debt)
-    Assert.Contains((ScriptSpecial, "NameRival"), debt)
+    Assert.Contains((ScriptSpecial, "SetDayOfWeek"), debt)
 
 [<Fact>]
 let ``link-only debt is separated from normal story debt`` () =

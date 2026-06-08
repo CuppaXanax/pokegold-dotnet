@@ -34,6 +34,10 @@ type ScriptEffect =
     | CheckCoins of amount: int
     | GiveCoins of amount: int
     | TakeCoins of amount: int
+    /// Phone contact commands.
+    | AddPhoneContact of phone: string
+    | CheckPhoneContact of phone: string
+    | AskPhoneNumber of phone: string
     /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
     | GivePoke of species: string * level: int * item: string option
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
@@ -92,6 +96,8 @@ type ScriptEffect =
     /// (Bill's PC / Player's PC / LOG OFF). Resume with None when the player
     /// logs off. M12.5 will wire this to the real Pokémon Center map scripts.
     | OpenPc
+    /// `special NameRival` — open the rival naming scene and persist the result.
+    | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -299,6 +305,7 @@ module Script =
             // ---- Special functions -----------------------------------------
             | Special "HealParty" -> suspend next world HealParty
             | Special "PokemonCenterPC" -> suspend next world OpenPc
+            | Special "NameRival" -> suspend next world NameRival
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
@@ -325,17 +332,17 @@ module Script =
             | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
             | Catchtutorial
             | Trade _
-            | Givepokemail _
-            | Addcellnum _
+            | Givepokemail _ -> run world next
+            | Addcellnum phone -> suspend next world (AddPhoneContact phone)
             | Describedecoration _
             | Stonetable _
             | Cmdqueue _
             | Writecmdqueue _ -> run world next
             | Checktime _ -> run world { next with ScriptVar = TimeOfDay.toScriptVar (TimeOfDay.current()) }
-            | Checkcellnum _ -> run world { next with ScriptVar = 0 }
+            | Checkcellnum phone -> suspend next world (CheckPhoneContact phone)
             | Checkphonecall -> run world { next with ScriptVar = 0 }
             | Checkjustbattled -> run world { next with ScriptVar = 0 }
-            | Askforphonenumber _ -> run world { next with ScriptVar = 2 }
+            | Askforphonenumber phone -> suspend next world (AskPhoneNumber phone)
             | Checkmoney args -> suspend next world (CheckMoney(intArg args))
             | Checkcoins amount -> suspend next world (CheckCoins(defaultArg amount 0))
             | Checkver -> run world { next with ScriptVar = 0 }

@@ -83,6 +83,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Active `follow follower, leader` relationship.
     let mutable followPair: (ActorId * ActorId) option = None
     let mutable lastText: (string * string) option = None
+    let mutable askPhoneResult = 1
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -402,7 +403,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 MatchEvaluator(fun m -> ramValue m.Groups.[1].Value))
 
         raw.Replace("<PLAYER>", player.Name)
-           .Replace("<RIVAL>", "SILVER")
+           .Replace("<RIVAL>", (let r = World.getBuffer "__rival_name" world in if r = "" then "SILVER" else r))
            .Replace("<MOM>", "MOM")
            .Replace("@", "")
            |> withBuffers
@@ -526,6 +527,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | AskYesNo ->
                         pending <- Some(vm, effect)
                         stop (Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene))
+                    | AskPhoneNumber _ ->
+                        pending <- Some(vm, effect)
+                        stop (Push(YesNoScene(content.Font, fun r -> askPhoneResult <- r) :> Scene))
+                    | NameRival ->
+                        pending <- Some(vm, effect)
+                        stop (Push(NamingScene(content.Font, "RIVAL'S NAME", fun name ->
+                            world <- World.setBuffer "__rival_name" name world
+                            Pop) :> Scene))
                     | StartBattle ->
                         pending <- Some(vm, effect)
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
@@ -572,6 +581,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         if ok then
                             player <- { player with Coins = max 0 (player.Coins - amount) }
                         resume (Some(if ok then 1 else 0)) vm
+                    | AddPhoneContact phone ->
+                        player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
+                        resume None vm
+                    | CheckPhoneContact phone ->
+                        resume (Some(if Set.contains phone player.PhoneContacts then 1 else 0)) vm
                     | LoadWild(species, level) ->
                         stagedWild <- Some(species, level)
                         stagedTrainer <- None
@@ -1011,6 +1025,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 let value =
                     match effect with
                     | AskYesNo -> Some yesNoResult
+                    | AskPhoneNumber phone ->
+                        if askPhoneResult <> 0 then
+                            player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
+                        Some askPhoneResult
                     | HallOfFame -> None
                     | StartBattle ->
                         let won = lastBattleOutcome = Some Win
