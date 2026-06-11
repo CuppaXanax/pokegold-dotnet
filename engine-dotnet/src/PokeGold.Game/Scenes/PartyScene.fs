@@ -35,15 +35,16 @@ type PartyMode =
 ///   content   — loaded content (font)
 ///   player    — initial PlayerState to display
 ///   onChange  — callback invoked with the updated PlayerState on any mutation
-///   onSelect  — optional picker-mode seam (M11.3+): replaces action submenu
-type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onSelect: int -> Transition) =
+///   onSelect     — optional picker-mode seam (M11.3+): replaces action submenu
+///   onFieldMove  — optional field-move dispatcher supplied by the overworld.
+type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onSelect: int -> Transition, ?onFieldMove: string -> Transition) =
 
     let mutable currentPlayer = player
     let mutable mode          = Browsing : PartyMode
     let input   = EdgeDetector()
     let palette = TextRenderer.palette
 
-    // ── Field-move detection (M17 gate stubs) ────────────────────────────────
+    // ── Field-move detection ─────────────────────────────────────────────────
     // GSC HM / field-move constant names used to populate the action submenu.
     // M17: field-move dispatch will route these to the overworld-use system.
     let fieldMoveNameSet =
@@ -52,12 +53,10 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
               "WHIRLPOOL"; "WATERFALL"; "ROCK_SMASH"; "HEADBUTT"; "SWEET_SCENT" ]
 
     /// Move names from `mon.Moves` that are field/HM moves.
-    /// Move IDs are stored as ints; looked up via `Moves.all` (keyed by name).
     let fieldMovesOf (mon: PartyMon) : string list =
         mon.Moves
         |> List.choose (fun (moveId, _) ->
-            Moves.all
-            |> Map.tryFind (string moveId)
+            Moves.tryByIndex moveId
             |> Option.bind (fun m ->
                 if Set.contains m.Name fieldMoveNameSet then Some m.Name else None))
 
@@ -103,9 +102,14 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
         [|  yield "STATS"
             yield "SWITCH"
             yield "ITEM"
-            for fm in fieldMovesOf mon do   // M17: field-move dispatch
+            for fm in fieldMovesOf mon do
                 yield fm
             yield "CANCEL" |]
+
+    let dispatchFieldMove =
+        defaultArg
+            onFieldMove
+            (fun _ -> Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene))
 
     let swapPartySlots (i: int) (j: int) (party: Party) : Party =
         let arr = party |> List.toArray
@@ -245,10 +249,8 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                             Stay
 
                     | _ ->
-                        // Field move or unrecognised action.
-                        // M17: field-move dispatch
                         mode <- Browsing
-                        Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene)
+                        dispatchFieldMove chosen
 
                 elif edges.B then
                     mode <- Browsing

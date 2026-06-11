@@ -170,6 +170,12 @@ type Game() =
                 ow.DebugSetEvent flag value
                 Applied
             | None -> Rejected "no overworld scene active"
+        | SetFlag(flag, value) ->
+            match overworld with
+            | Some ow ->
+                ow.DebugSetFlag flag value
+                Applied
+            | None -> Rejected "no overworld scene active"
         | SetVar(name, value) ->
             match overworld with
             | Some ow ->

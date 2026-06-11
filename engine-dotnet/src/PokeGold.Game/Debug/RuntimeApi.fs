@@ -26,6 +26,10 @@ type RuntimePlayerSnapshot =
       Moving: bool
       Name: string
       PartyCount: int
+      PartySpecies: int list
+      PhoneContacts: string list
+      GameTimeWeekday: int
+      GameTimeIsDst: bool
       Money: int }
 
 type RuntimeOverworldSnapshot =
@@ -36,7 +40,10 @@ type RuntimeOverworldSnapshot =
       LastRenderedText: string option
       EventCount: int
       EngineFlagCount: int
+      Events: string list
+      EngineFlags: string list
       Vars: Map<string, int>
+      Scenes: Map<string, int>
       SceneId: int
       CanCapture: bool }
 
@@ -54,6 +61,7 @@ type RuntimeControl =
     | Teleport of x: int * y: int
     | Warp of mapId: string * x: int * y: int * facing: Direction option
     | SetEvent of flag: string * value: bool
+    | SetFlag of flag: string * value: bool
     | SetVar of name: string * value: int
     | SetScene of mapId: string * scene: int
     | StartNewGame of playerName: string

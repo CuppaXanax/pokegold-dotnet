@@ -4,6 +4,17 @@ open PokeGold.Game.Data
 
 module TmHm =
 
+    let isHmItem (item: string) =
+        match item with
+        | "HM_CUT" | "HM01"
+        | "HM_FLY" | "HM02"
+        | "HM_SURF" | "HM03"
+        | "HM_STRENGTH" | "HM04"
+        | "HM_FLASH" | "HM05"
+        | "HM_WHIRLPOOL" | "HM06"
+        | "HM_WATERFALL" | "HM07" -> true
+        | _ -> false
+
     /// Map TM/HM item IDs to the move they teach.
     let moveForItem (item: string) : string option =
         match item with

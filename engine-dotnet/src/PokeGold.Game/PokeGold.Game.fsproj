@@ -153,6 +153,9 @@
     <Compile Include="Scenes\TextBoxScene.fs" />
     <Compile Include="Scenes\BattleScene.fs" />
     <Compile Include="Scenes\YesNoScene.fs" />
+    <Compile Include="Scenes\WeekdayScene.fs" />
+    <Compile Include="Scenes\MomBankScene.fs" />
+    <Compile Include="Scenes\ScriptMenuScene.fs" />
     <Compile Include="Scenes\StartMenuScene.fs" />
     <Compile Include="Scenes\PackUseGive.fs" />
     <Compile Include="Scenes\SummaryScene.fs" />

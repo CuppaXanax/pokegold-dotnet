@@ -77,13 +77,19 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone contact commands mutate player state or route through a yes/no effect; broader phone system behavior still needs conformance proof."
             [ "Addcellnum"; "Checkcellnum"; "Askforphonenumber" ]
 
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone-call and script window commands now update runtime world/UI state with targeted VM and scheduler coverage."
+            [ "Checkphonecall"; "Specialphonecall"; "Closewindow" ]
+
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Menu commands preserve loaded menu state and route vertical/2D menu choices through a generic runtime UI."
+            [ "Loadmenu"; "Verticalmenu"; "TwoDMenu"; "MenuCoords" ]
+
           yield! many ScriptCommandCase StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback on normal story/menu paths."
-            [ "Loadmenu"; "Verticalmenu"; "Closewindow"; "TwoDMenu"; "Prompt"; "Catchtutorial"; "TextRam"; "MenuCoords" ]
+            [ "Prompt"; "Catchtutorial"; "TextRam" ]
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
-              "Checkphonecall"; "Checkjustbattled"
-              "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Specialphonecall"; "Elevfloor" ]
+              "Checkjustbattled"
+              "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Elevfloor" ]
 
           yield! many ScriptCommandCase StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated command is typed, but only cosmetic/timing behavior remains."
             [ "Cry"; "Waitsfx" ]
@@ -93,18 +99,26 @@ module ConformanceLedger =
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Explicitly handled by the script integration layer."
             [ "HealParty"; "PokemonCenterPC"; "RestartMapMusic"; "PlayMapMusic"; "FadeOutMusic"; "NameRival"
-              "SetDayOfWeek"; "InitialSetDSTFlag"; "InitialClearDSTFlag" ]
+              "InitialSetDSTFlag"; "InitialClearDSTFlag" ]
+
+          yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Runtime UI/state path exists and is covered; deeper exact menu fidelity remains future UI work."
+            [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "MapRadio"; "OverworldTownMap"; "PlayersHousePC" ]
+
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Runtime balance overlay path exists and is covered for scripts that show coin/money windows."
+            [ "DisplayCoinCaseBalance"; "PlaceMoneyTopRight" ]
+
+          yield entry ScriptSpecial "SetDayOfWeek" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Weekday setup UI is covered by WeekdaySceneTests and OverworldSchedulerTests."
 
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
-            [ "BankOfMom"; "DisplayMoneyAndCoinBalance"; "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
-              "HealMachineAnim"; "MapRadio"; "OverworldTownMap"; "PlayersHousePC"; "TryQuickSave" ]
+            [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID"
+              "HealMachineAnim"; "TryQuickSave" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckFirstMonIsEgg"; "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"; "DayCareLady"; "DayCareMan"; "DayCareManOutside"; "DayCareMon1"; "DayCareMon2"
-              "DisplayCoinCaseBalance"; "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
-              "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MoveDeletion"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"; "PlaceMoneyTopRight"
+              "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
+              "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MoveDeletion"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectApricornForKurt"; "SelectRandomBugContestContestants"
               "SlotMachine"; "SnorlaxAwake"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
 
@@ -129,6 +143,10 @@ module ConformanceLedger =
           yield! many SceneSurface ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work."
             [ "BattleScene"; "MainMenuScene"; "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
               "PokegearScene"; "SaveMenuScene"; "StartMenuScene"; "TextBoxScene"; "TitleScene"; "YesNoScene" ]
+
+          yield entry SceneSurface "WeekdayScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "WeekdaySceneTests cover selection, confirmation, cancellation, and wrapping."
+          yield entry SceneSurface "MomBankScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "CriticalSpecialSceneTests and OverworldSchedulerTests cover core Mom savings flows; exact digit/menu fidelity remains future UI work."
+          yield entry SceneSurface "ScriptMenuScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Generic ROM script-menu UI is covered by CriticalSpecialSceneTests and ScriptTests; exact per-menu labels remain future menu-header decoding work."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "PokedexScene"; "SummaryScene" ]
@@ -163,19 +181,28 @@ module ConformanceLedger =
           yield! many ItemBattleMenu Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Item battle-menu behavior exists in data; conformance status has not been audited in the ledger yet."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
 
+          yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "BattleTests cover party-held item propagation and end-of-turn held healing behavior."
+            [ "HELD_LEFTOVERS"; "HELD_BERRY" ]
+
+          yield entry ItemHeldEffect "HELD_AMULET_COIN" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Battle reward helper and trainer reward path double prize money when a party mon holds AMULET_COIN."
+
+          yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover special held-item battle mechanics for priority and lethal-hit survival."
+            [ "HELD_QUICK_CLAW"; "HELD_FOCUS_BAND" ]
+
+          yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover type-boosting held items increasing matching move damage."
+            [ "HELD_BUG_BOOST"; "HELD_DARK_BOOST"; "HELD_DRAGON_BOOST"; "HELD_ELECTRIC_BOOST"; "HELD_FIGHTING_BOOST"; "HELD_FIRE_BOOST"
+              "HELD_FLYING_BOOST"; "HELD_GHOST_BOOST"; "HELD_GRASS_BOOST"; "HELD_GROUND_BOOST"; "HELD_ICE_BOOST"; "HELD_NORMAL_BOOST"
+              "HELD_POISON_BOOST"; "HELD_PSYCHIC_BOOST"; "HELD_ROCK_BOOST"; "HELD_STEEL_BOOST"; "HELD_WATER_BOOST" ]
+
+          yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover status/confusion cure berries in the residual held-item slot."
+            [ "HELD_HEAL_BURN"; "HELD_HEAL_CONFUSION"; "HELD_HEAL_FREEZE"; "HELD_HEAL_PARALYZE"; "HELD_HEAL_POISON"; "HELD_HEAL_SLEEP"; "HELD_HEAL_STATUS" ]
+
           yield! many ItemHeldEffect Unknown [ RequiredFor100Percent; SideSystem ] "Held-item behavior exists in data; conformance status has not been audited in the ledger yet."
-            [ "HELD_AMULET_COIN"; "HELD_BERRY"; "HELD_BRIGHTPOWDER"; "HELD_BUG_BOOST"; "HELD_CLEANSE_TAG"; "HELD_CRITICAL_UP"; "HELD_DARK_BOOST"
-              "HELD_DRAGON_BOOST"; "HELD_ELECTRIC_BOOST"; "HELD_ESCAPE"; "HELD_FIGHTING_BOOST"; "HELD_FIRE_BOOST"; "HELD_FLINCH"
-              "HELD_FLYING_BOOST"; "HELD_FOCUS_BAND"; "HELD_GHOST_BOOST"; "HELD_GRASS_BOOST"; "HELD_GROUND_BOOST"; "HELD_HEAL_BURN"
-              "HELD_HEAL_CONFUSION"; "HELD_HEAL_FREEZE"; "HELD_HEAL_PARALYZE"; "HELD_HEAL_POISON"; "HELD_HEAL_SLEEP"; "HELD_HEAL_STATUS"
-              "HELD_ICE_BOOST"; "HELD_LEFTOVERS"; "HELD_METAL_POWDER"; "HELD_NONE"; "HELD_NORMAL_BOOST"; "HELD_POISON_BOOST"; "HELD_PSYCHIC_BOOST"
-              "HELD_QUICK_CLAW"; "HELD_RESTORE_PP"; "HELD_ROCK_BOOST"; "HELD_STEEL_BOOST"; "HELD_WATER_BOOST" ]
+            [ "HELD_BRIGHTPOWDER"; "HELD_CLEANSE_TAG"; "HELD_CRITICAL_UP"; "HELD_ESCAPE"; "HELD_FLINCH"
+              "HELD_METAL_POWDER"; "HELD_NONE"; "HELD_RESTORE_PP" ]
 
-          yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Field move has an initial runtime path but still needs GUI/input and map-effect conformance tests."
-            [ "CUT"; "SURF"; "STRENGTH" ]
-
-          yield! many FieldMove Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move is listed in data but not audited as a runtime field action."
-            [ "FLY"; "FLASH"; "WHIRLPOOL"; "WATERFALL" ]
+          yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
+            [ "CUT"; "SURF"; "STRENGTH"; "FLY"; "FLASH"; "WHIRLPOOL"; "WATERFALL" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]
@@ -316,8 +343,8 @@ let ``critical Johto debt is queryable`` () =
         |> Set.ofList
 
     Assert.Contains((ScriptCommandCase, "TextRam"), debt)
-    Assert.Contains((ScriptSpecial, "BankOfMom"), debt)
-    Assert.Contains((ScriptSpecial, "MapRadio"), debt)
+    Assert.Contains((ScriptSpecial, "HealMachineAnim"), debt)
+    Assert.Contains((ScriptSpecial, "TryQuickSave"), debt)
 
 [<Fact>]
 let ``link-only debt is separated from normal story debt`` () =

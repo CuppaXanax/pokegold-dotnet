@@ -3,6 +3,16 @@ namespace PokeGold.Game.Overworld.Script
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 
+type PokegearTab =
+    | MapTab
+    | PhoneTab
+    | RadioTab
+
+type BalanceDisplay =
+    | MoneyTopRight
+    | CoinCase
+    | MoneyAndCoins
+
 /// Something the script needs the outside world to do before it can continue. The
 /// VM ([`Script`](#)) runs every *pure* command itself (control flow, flags, vars,
 /// scene ids) but **suspends** on anything that touches the player, the screen, the
@@ -38,6 +48,7 @@ type ScriptEffect =
     | AddPhoneContact of phone: string
     | CheckPhoneContact of phone: string
     | AskPhoneNumber of phone: string
+    /// `specialphonecall` / `checkphonecall` state lives in script world buffers.
     /// RTC/day setup commands and checks.
     | SetDayOfWeek
     | SetDstFlag of enabled: bool
@@ -100,6 +111,16 @@ type ScriptEffect =
     /// (Bill's PC / Player's PC / LOG OFF). Resume with None when the player
     /// logs off. M12.5 will wire this to the real Pokémon Center map scripts.
     | OpenPc
+    /// `special BankOfMom` — open Mom's savings UI and persist money changes.
+    | OpenMomBank
+    /// PokeGear shell opened by Start menu or map/radio specials.
+    | OpenPokegear of tab: PokegearTab * mapId: string * radioChannel: int option
+    /// Money/coin display windows used by shop and prize scripts.
+    | DisplayBalance of BalanceDisplay
+    /// `closewindow` — clear script-opened overlay/menu windows.
+    | CloseWindow
+    /// `verticalmenu` / `2dmenu` — show the currently loaded script menu.
+    | OpenScriptMenu of menu: string
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
@@ -168,6 +189,27 @@ module Script =
 
     let private tryInt (s: string) : int =
         try int s with _ -> 0
+
+    let private johtoBadgeFlags =
+        [ "ENGINE_ZEPHYRBADGE"
+          "ENGINE_HIVEBADGE"
+          "ENGINE_PLAINBADGE"
+          "ENGINE_FOGBADGE"
+          "ENGINE_MINERALBADGE"
+          "ENGINE_STORMBADGE"
+          "ENGINE_GLACIERBADGE"
+          "ENGINE_RISINGBADGE" ]
+
+    let private readVar (name: string) (world: World) =
+        match name with
+        | "VAR_BADGES" ->
+            let explicitValue = World.getVar name world
+            if explicitValue <> 0 then explicitValue
+            else
+                johtoBadgeFlags
+                |> List.filter (fun flag -> World.hasFlag flag world)
+                |> List.length
+        | _ -> World.getVar name world
 
     /// Suspend the VM on an effect, with the pc already advanced past the command
     /// that produced it so `resume` continues after it.
@@ -244,7 +286,7 @@ module Script =
             // ---- Variables -------------------------------------------------
             | Setval v -> run world { next with ScriptVar = v }
             | Addval v -> run world { next with ScriptVar = vm.ScriptVar + v }
-            | Readvar var -> run world { next with ScriptVar = World.getVar var world }
+            | Readvar var -> run world { next with ScriptVar = readVar var world }
             | Writevar var -> run (World.setVar var vm.ScriptVar world) next
 
             // ---- Event flags (EVENT_*) -------------------------------------
@@ -313,6 +355,13 @@ module Script =
             | Special "SetDayOfWeek" -> suspend next world SetDayOfWeek
             | Special "InitialSetDSTFlag" -> suspend next world (SetDstFlag true)
             | Special "InitialClearDSTFlag" -> suspend next world (SetDstFlag false)
+            | Special "BankOfMom" -> suspend next world OpenMomBank
+            | Special "PlayersHousePC" -> suspend { next with ScriptVar = 0 } world OpenPc
+            | Special "OverworldTownMap" -> suspend next world (OpenPokegear(MapTab, vm.MapId, None))
+            | Special "MapRadio" -> suspend next world (OpenPokegear(RadioTab, vm.MapId, Some vm.ScriptVar))
+            | Special "DisplayMoneyAndCoinBalance" -> suspend next world (DisplayBalance MoneyAndCoins)
+            | Special "DisplayCoinCaseBalance" -> suspend next world (DisplayBalance CoinCase)
+            | Special "PlaceMoneyTopRight" -> suspend next world (DisplayBalance MoneyTopRight)
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
@@ -326,13 +375,16 @@ module Script =
 
             // ---- Typed deferred opcodes ------------------------------------
             | Verticalmenu
-            | TwoDMenu -> run world { next with ScriptVar = 1 }
-            | Loadmenu _
-            | Closewindow
+            | TwoDMenu ->
+                let menu = World.getBuffer "__loaded_menu" world
+                suspend next world (OpenScriptMenu(if menu = "" then "MENU" else menu))
+            | Loadmenu menu -> run (World.setBuffer "__loaded_menu" menu world) next
+            | MenuCoords coords -> run (World.setBuffer "__menu_coords" (String.concat "," coords) world) next
             | Pokepic _
             | Closepokepic
             | Itemnotify
             | Prompt -> run world next
+            | Closewindow -> suspend next world CloseWindow
             | Elevator _ -> run world { next with ScriptVar = 1 }
             | Checkpokemail _
             | ConditionalEvent _ -> run world { next with ScriptVar = 0 }
@@ -347,7 +399,11 @@ module Script =
             | Writecmdqueue _ -> run world next
             | Checktime time -> suspend next world (CheckTime time)
             | Checkcellnum phone -> suspend next world (CheckPhoneContact phone)
-            | Checkphonecall -> run world { next with ScriptVar = 0 }
+            | Checkphonecall ->
+                let hasCall =
+                    let call = World.getBuffer "__special_phone_call" world
+                    call <> "" && call <> "SPECIALCALL_NONE"
+                run world { next with ScriptVar = (if hasCall then 1 else 0) }
             | Checkjustbattled -> run world { next with ScriptVar = 0 }
             | Askforphonenumber phone -> suspend next world (AskPhoneNumber phone)
             | Checkmoney args -> suspend next world (CheckMoney(intArg args))
@@ -426,7 +482,6 @@ module Script =
             | Stopfollow -> suspend next world StopFollow
             | Givecoins amount -> suspend next world (GiveCoins(defaultArg amount 0))
             | Takecoins amount -> suspend next world (TakeCoins(defaultArg amount 0))
-            | MenuCoords _ -> run world next
             | Moveobject(obj, x, y) -> suspend next world (MoveObject(obj, x, y))
             | Musicfadeout -> suspend next world (PlayMusic "__STOP__")
             | Newloadmap -> suspend next world ReloadMap
@@ -434,7 +489,9 @@ module Script =
             | Playmapmusic -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Reanchormap -> suspend next world ReanchorMap
             | Showemote(_, _, frames) -> if frames <= 0 then run world next else suspend next world (ScriptEffect.Pause frames)
-            | Specialphonecall _ -> run world next
+            | Specialphonecall call ->
+                let value = if call = "SPECIALCALL_NONE" then "" else call
+                run (World.setBuffer "__special_phone_call" value world) next
             | TeleportFrom ->
                 run (world |> World.setBuffer "__teleport_from_map" vm.MapId |> World.setVar "__teleport_from_x" 0 |> World.setVar "__teleport_from_y" 0) next
             | TreeShake -> suspend next world (ScriptEffect.Pause 30)

@@ -66,8 +66,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable stagedTrainer: (string * string) option = None
     let mutable stagedWinText: string = ""
     let mutable stagedLossText: string = ""
+    let mutable balanceOverlay: BalanceDisplay option = None
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// A child scene transition produced while restoring/loading the overworld.
+    let mutable restoreTransition: Transition option = None
     /// Script resumes waiting behind higher-priority map-entry scripts.
     let scriptQueue = Queue<ScriptVm * int option>()
     /// The live actor most recently selected by an A-press or `setlasttalked`.
@@ -84,6 +87,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable followPair: (ActorId * ActorId) option = None
     let mutable lastText: (string * string) option = None
     let mutable askPhoneResult = 1
+    let mutable menuResult = 0
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -289,6 +293,42 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         let camX, camY = Camera.follow state.Map state.Player
         state <- { state with CamX = camX; CamY = camY }
 
+    member private _.FacingCell() =
+        let dx, dy =
+            match state.Player.Facing with
+            | Down -> 0, 1
+            | Up -> 0, -1
+            | Left -> -1, 0
+            | Right -> 1, 0
+
+        state.Player.CellX + dx, state.Player.CellY + dy
+
+    member private this.UseFieldMove(moveName: string) : Transition =
+        let x, y = this.FacingCell()
+        let targetColl = MapConnections.collisionId state.Map state.Collision state.Neighbors x y
+
+        match FieldMoves.tryUse moveName targetColl state.MapId world player.Party with
+        | FieldMoves.NotUsable reason ->
+            Push(TextBoxScene.Of(content, reason + "<DONE>") :> Scene)
+        | FieldMoves.Used(move, message) ->
+            world <-
+                world
+                |> World.setBuffer "__last_field_move" move
+                |> World.setVar "__field_move_success" 1
+
+            world <-
+                match move with
+                | "STRENGTH" -> World.setVar "__strength_active" 1 world
+                | "SURF" -> World.setVar "__surfing" 1 world
+                | "FLASH" -> World.setVar "__flash_active" 1 world
+                | "FLY" -> World.setVar "__fly_requested" 1 world
+                | "CUT" -> World.setVar "__cut_used" 1 world
+                | "WHIRLPOOL" -> World.setVar "__whirlpool_used" 1 world
+                | "WATERFALL" -> World.setVar "__waterfall_used" 1 world
+                | _ -> world
+
+            Push(TextBoxScene.Of(content, message + "<DONE>") :> Scene)
+
     member private this.PlayScriptMusic(song: string) =
         match song with
         | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
@@ -321,6 +361,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     member private this.EnterMap(nextState: OverworldState, playMusic: bool) : Transition =
         state <- nextState
+        balanceOverlay <- None
         resetObjectPresence ()
         firedCoords <- Set.empty
 
@@ -443,6 +484,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 Hp = max 0 battleMon.Hp
                 MaxHp = battleMon.MaxHp
                 Status = statusCode battleMon.Status
+                HeldItem = battleMon.HeldItem
                 Moves =
                     List.map2 (fun (moveId, _) pp -> (moveId, pp)) partyMon.Moves battleMon.Pp }
 
@@ -539,6 +581,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | AskPhoneNumber _ ->
                         pending <- Some(vm, effect)
                         stop (Push(YesNoScene(content.Font, fun r -> askPhoneResult <- r) :> Scene))
+                    | SetDayOfWeek ->
+                        pending <- Some(vm, effect)
+                        stop (Push(WeekdayScene(content, player.GameTime.Weekday, fun weekday ->
+                            player <- { player with GameTime = { player.GameTime with Weekday = weekday } }
+                            world <- World.setVar "VAR_WEEKDAY" weekday world) :> Scene))
                     | NameRival ->
                         pending <- Some(vm, effect)
                         stop (Push(NamingScene(content.Font, "RIVAL'S NAME", fun name ->
@@ -560,6 +607,27 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | OpenPc ->
                         pending <- Some(vm, effect)
                         stop (Push(PcMenuScene(content, player, fun p -> player <- p) :> Scene))
+                    | OpenMomBank ->
+                        world <- World.setFlag "ENGINE_MOM_ACTIVE" world
+                        pending <- Some(vm, effect)
+                        stop (
+                            Push(
+                                MomBankScene(
+                                    content,
+                                    player,
+                                    World.hasFlag "ENGINE_MOM_SAVING_MONEY" world,
+                                    (fun p -> player <- p),
+                                    (fun saving ->
+                                        world <-
+                                            if saving then World.setFlag "ENGINE_MOM_SAVING_MONEY" world
+                                            else World.clearFlag "ENGINE_MOM_SAVING_MONEY" world)) :> Scene))
+                    | OpenPokegear(tab, mapId, radioChannel) ->
+                        pending <- Some(vm, effect)
+                        stop (Push(PokegearScene(content.Font, player, initialTab = tab, mapId = mapId, ?radioChannel = radioChannel) :> Scene))
+                    | OpenScriptMenu menu ->
+                        pending <- Some(vm, effect)
+                        menuResult <- 0
+                        stop (Push(ScriptMenuScene(content, menu, fun result -> menuResult <- result) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -591,12 +659,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             player <- { player with Coins = max 0 (player.Coins - amount) }
                         resume (Some(if ok then 1 else 0)) vm
                     | AddPhoneContact phone ->
-                        player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
-                        resume None vm
+                        if Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
+                            player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
+                            resume (Some 0) vm
+                        else
+                            resume (Some 1) vm
                     | CheckPhoneContact phone ->
                         resume (Some(if Set.contains phone player.PhoneContacts then 1 else 0)) vm
-                    | SetDayOfWeek ->
-                        world <- World.setVar "VAR_WEEKDAY" player.GameTime.Weekday world
+                    | DisplayBalance display ->
+                        balanceOverlay <- Some display
+                        resume None vm
+                    | CloseWindow ->
+                        balanceOverlay <- None
                         resume None vm
                     | SetDstFlag enabled ->
                         player <- { player with GameTime = { player.GameTime with IsDst = enabled } }
@@ -836,11 +910,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        balanceOverlay <- None
         scriptQueue.Clear()
         resetObjectPresence ()
         this.RunMapCallbacks state.MapId
         syncFlaggedObjectPresenceFromWorld ()
-        this.RunSceneScript state.MapId |> ignore
+        match this.RunSceneScript state.MapId with
+        | Stay -> restoreTransition <- None
+        | transition -> restoreTransition <- Some transition
 
     // ---- Debug inspection / mutation surface (T1 debug pipe) ----------------
     // These give the debug channel a race-free window onto the scene's private
@@ -897,13 +974,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
               Moving = p.Moving
               Name = player.Name
               PartyCount = player.Party.Length
+              PartySpecies = player.Party |> List.map (fun mon -> mon.SpeciesId)
+              PhoneContacts = player.PhoneContacts |> Set.toList
+              GameTimeWeekday = player.GameTime.Weekday
+              GameTimeIsDst = player.GameTime.IsDst
               Money = player.Money }
           Actors = actors
           LastTextLabel = lastText |> Option.map fst
           LastRenderedText = lastText |> Option.map snd
           EventCount = world.Events.Count
           EngineFlagCount = world.EngineFlags.Count
+          Events = world.Events |> Set.toList
+          EngineFlags = world.EngineFlags |> Set.toList
           Vars = world.Vars
+          Scenes = world.Scenes
           SceneId = World.getScene state.MapId world
           CanCapture = this.CanCapture }
 
@@ -917,6 +1001,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Set or clear an `EVENT_*` story flag on the live world.
     member _.DebugSetEvent (flag: string) (value: bool) =
         world <- (if value then World.setEvent flag world else World.clearEvent flag world)
+
+    /// Set or clear an `ENGINE_*` flag on the live world.
+    member _.DebugSetFlag (flag: string) (value: bool) =
+        world <- (if value then World.setFlag flag world else World.clearFlag flag world)
 
     /// Write a `VAR_*` game variable on the live world.
     member _.DebugSetVar (var: string) (value: int) = world <- World.setVar var value world
@@ -945,11 +1033,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// assets aren't present (the channel turns that into an `error:` reply).
     member this.DebugWarp (mapId: string) (x: int) (y: int) (facing: Direction) =
         let ns = OverworldState.loadByIdAt content mapId x y facing
-        state <- ns
         scriptQueue.Clear()
-        resetObjectPresence ()
-        firedCoords <- Set.empty
-        this.PlayMapMusic ns.MapId
+        pending <- None
+        restoreTransition <- None
+
+        match this.EnterMap(ns, true) with
+        | Stay -> ()
+        | transition -> restoreTransition <- Some transition
 
     /// The NPC sprite for a SPRITE_* constant, best-effort (None if no PNG).
     member private _.SpriteFor(name: string) : Sprite option =
@@ -966,10 +1056,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     interface Scene with
         member this.Update(buttons: Buttons) : Transition =
-            match runningMove with
+            let transitionFromRestore = restoreTransition
+            restoreTransition <- None
+
+            match transitionFromRestore, runningMove with
+            | Some transition, _ -> transition
             // An applymovement is animating: advance the actor a frame, write it back,
             // and resume the suspended script once the run reaches step_end.
-            | Some(vm, actor, run) ->
+            | None, Some(vm, actor, run) ->
                 let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
                 let run' = MovementRunner.step walkable run
 
@@ -1017,7 +1111,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     runningMove <- Some(vm, actor, run')
                     Stay
-            | None ->
+            | None, None ->
 
             if pauseFrames > 0 then
                 pauseFrames <- pauseFrames - 1
@@ -1042,10 +1136,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 let value =
                     match effect with
                     | AskYesNo -> Some yesNoResult
+                    | OpenScriptMenu _ -> Some menuResult
                     | AskPhoneNumber phone ->
-                        if askPhoneResult <> 0 then
+                        if askPhoneResult = 0 then
+                            Some 2
+                        elif Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
                             player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
-                        Some askPhoneResult
+                            Some 0
+                        else
+                            Some 1
                     | HallOfFame -> None
                     | StartBattle ->
                         let won = lastBattleOutcome = Some Win
@@ -1112,7 +1211,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 player <- { player with Party = learnedLead :: rest }
 
                                 if isTrainer then
-                                    let reward =
+                                    let baseReward =
                                         match stagedTrainer with
                                         | Some(group, id) ->
                                             match Trainers.lookupByName group id with
@@ -1126,7 +1225,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                             | None -> Experience.moneyEarned 25 enemyLevel
                                         | None -> 0
 
-                                    player <- { player with Money = player.Money + reward }
+                                    let hasAmuletCoin =
+                                        player.Party
+                                        |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
+                                    let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
+                                    player <- { player with Money = Money.give player.Money reward }
                             | _ -> ()
                         else
                             // Lost: heal party, deduct half money
@@ -1156,13 +1259,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     Push(StartMenuScene(content, (fun entry ->
                         match entry with
                         | Pokedex -> Push(PokedexScene(content, player) :> Scene)
-                        | Pokemon -> Push(PartyScene(content, player, fun p -> player <- p) :> Scene)
+                        | Pokemon -> Push(PartyScene(content, player, (fun p -> player <- p), onFieldMove = this.UseFieldMove) :> Scene)
                         | Pack    ->
                             // TODO: once PackScene reports which rod was used, wire that
                             // result back into the overworld so fishing checks the
                             // facing water tile and stages fishEncounter here.
                             Push(PackScene(content, player, fun p -> player <- p) :> Scene)
-                        | Pokegear -> Push(PokegearScene(content.Font, player) :> Scene)
+                        | Pokegear -> Push(PokegearScene(content.Font, player, initialTab = PhoneTab, mapId = state.MapId) :> Scene)
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop), buttons) :> Scene)
@@ -1171,27 +1274,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy
 
                     match collId with
-                    | id when id = FieldMoves.CollCutTree ->
-                        match FieldMoves.tryCut id world player.Party with
-                        | FieldMoves.Used _ ->
-                            printfn "HM tile detected: CUT at (%d, %d)" fx fy
-                            Stay
-                        | FieldMoves.NotUsable _ ->
-                            Stay
-                    | id when id = FieldMoves.CollSurf ->
-                        match FieldMoves.trySurf id world player.Party with
-                        | FieldMoves.Used _ ->
-                            printfn "HM tile detected: SURF at (%d, %d)" fx fy
-                            Stay
-                        | FieldMoves.NotUsable _ ->
-                            Stay
-                    | id when id = FieldMoves.CollStrengthBoulder && FieldMoves.canUse "STRENGTH" world player.Party ->
-                        match FieldMoves.tryStrength id world player.Party with
-                        | FieldMoves.Used _ ->
-                            printfn "HM tile detected: STRENGTH at (%d, %d)" fx fy
-                            Stay
-                        | FieldMoves.NotUsable _ ->
-                            Stay
+                    | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
+                        this.UseFieldMove "CUT"
+                    | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
+                        this.UseFieldMove "SURF"
+                    | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->
+                        this.UseFieldMove "WHIRLPOOL"
+                    | id when
+                        id = FieldMoves.CollWaterfallRight
+                        || id = FieldMoves.CollWaterfallLeft
+                        || id = FieldMoves.CollWaterfallUp
+                        || id = FieldMoves.CollWaterfall ->
+                        this.UseFieldMove "WATERFALL"
                     | _ ->
                         // Talk to / read whatever the player faces. Objects are resolved
                         // over the *live* NPC set (a wandering NPC is talked to where it
@@ -1322,3 +1416,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let px, py = NpcObject.worldPixel n
                         SpriteRenderer.draw fb state.SpritePalette spr frame (px - state.CamX) (py - state.CamY) flip
                     | None -> ()
+
+            match balanceOverlay with
+            | None -> ()
+            | Some MoneyTopRight ->
+                WindowRenderer.drawBox fb content.Font TextRenderer.palette 11 0 9 3
+                WindowRenderer.drawString fb content.Font TextRenderer.palette 12 1 (sprintf "$%d" player.Money)
+            | Some CoinCase ->
+                WindowRenderer.drawBox fb content.Font TextRenderer.palette 11 0 8 3
+                WindowRenderer.drawString fb content.Font TextRenderer.palette 12 0 "COIN"
+                WindowRenderer.drawString fb content.Font TextRenderer.palette 13 1 (string player.Coins)
+            | Some MoneyAndCoins ->
+                WindowRenderer.drawBox fb content.Font TextRenderer.palette 5 0 14 5
+                WindowRenderer.drawString fb content.Font TextRenderer.palette 6 1 (sprintf "MONEY $%d" player.Money)
+                WindowRenderer.drawString fb content.Font TextRenderer.palette 6 3 (sprintf "COIN %d" player.Coins)

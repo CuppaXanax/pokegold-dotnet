@@ -14,12 +14,15 @@
     <Compile Include="RuntimeDriverTests.fs" />
     <Compile Include="RuntimeInvariantTests.fs" />
     <Compile Include="NewBarkRuntimeTests.fs" />
+    <Compile Include="JohtoRuntimeTests.fs" />
     <Compile Include="GraphicsTests.fs" />
     <Compile Include="AssetTests.fs" />
     <Compile Include="CollisionTests.fs" />
     <Compile Include="SpriteTests.fs" />
     <Compile Include="MovementTests.fs" />
     <Compile Include="TextTests.fs" />
+    <Compile Include="WeekdaySceneTests.fs" />
+    <Compile Include="CriticalSpecialSceneTests.fs" />
     <Compile Include="BattleTests.fs" />
     <Compile Include="TrainerDataTests.fs" />
     <Compile Include="SaveTests.fs" />

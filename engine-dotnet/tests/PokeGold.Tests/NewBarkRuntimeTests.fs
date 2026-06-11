@@ -2,6 +2,7 @@ module PokeGold.Tests.NewBarkRuntimeTests
 
 open Xunit
 open PokeGold.Game.Core
+open PokeGold.Game.Data
 open PokeGold.Game.Debug
 open PokeGold.Game.Save
 open PokeGold.Tests.GameDriver
@@ -33,6 +34,116 @@ let private tickCutscene (driver: GameDriver) frames =
                 Buttons.none
 
         driver.Tick buttons |> ignore
+
+let private tickStoryFlow (driver: GameDriver) maxFrames completed =
+    let mutable frame = 0
+    while frame < maxFrames && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+[<Fact>]
+let ``Mom intro drives PokeGear weekday and DST setup through runtime scenes`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("PlayersHouse1F", 9, 0, Some Down))
+
+    let mutable sawWeekdayScene = false
+    let mutable sawYesNoScene = false
+    let mutable weekdayStep = 0
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            sawWeekdayScene
+            && ow.CanCapture
+            && ow.SceneId = 1
+            && ow.Player.PhoneContacts |> List.contains "PHONE_MOM"
+            && ow.Player.GameTimeIsDst
+            && (ow.Vars |> Map.tryFind "VAR_WEEKDAY" = Some ow.Player.GameTimeWeekday)
+            && ow.LastTextLabel = Some "InstructionsNextText"
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 5000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "YesNoScene" ->
+                sawYesNoScene <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "WeekdayScene" ->
+                sawWeekdayScene <- true
+                match weekdayStep with
+                | 0 ->
+                    weekdayStep <- 1
+                    press "a"
+                | 1 ->
+                    weekdayStep <- 2
+                    Buttons.none
+                | 2 ->
+                    weekdayStep <- 3
+                    press "a"
+                | _ -> Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    assertTraceCore driver
+    Assert.True(sawWeekdayScene, "Mom intro should push weekday setup UI")
+    Assert.True(sawYesNoScene, "Mom intro should ask DST and phone yes/no prompts")
+    Assert.True(completed driver.Snapshot, "Mom intro did not finish with PokeGear, Mom phone contact, and RTC state committed")
+
+[<Fact>]
+let ``Elm starter flow gives Totodile and unlocks New Bark exit`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("ELMS_LAB", 1))
+    driver.Apply(Warp("ElmsLab", 7, 4, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.Player.PartyCount = 1
+            && ow.Events |> List.contains "EVENT_GOT_A_POKEMON_FROM_ELM"
+            && ow.Events |> List.contains "EVENT_GOT_TOTODILE_FROM_ELM"
+            && ow.Player.PhoneContacts |> List.contains "PHONE_ELM"
+            && (ow.Scenes |> Map.tryFind "NEW_BARK_TOWN" = Some 1)
+        | None -> false
+
+    tickStoryFlow driver 5000 completed
+
+    let ow = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    let totodileDex = (Species.byName "TOTODILE").Dex
+
+    assertTraceCore driver
+    Assert.True(completed driver.Snapshot, "starter script did not set Elm/New Bark state")
+    Assert.Contains(totodileDex, ow.Player.PartySpecies)
+    Assert.Equal(Some "GotElmsNumberText", ow.LastTextLabel)
+
+    let traceBeforeExitCheck = driver.Trace.Length
+    driver.Apply(Warp("NewBarkTown", 2, 8, Some Left))
+    driver.Step Left
+
+    let after = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    let newTextAfterWarp =
+        driver.Trace
+        |> List.skip traceBeforeExitCheck
+        |> List.exists (fun tick -> tick.Snapshot.TopScene = "TextBoxScene")
+
+    Assert.Equal("NewBarkTown", after.MapId)
+    Assert.Equal(1, after.SceneId)
+    Assert.Equal(1, after.Player.CellX)
+    Assert.False(newTextAfterWarp, "teacher blocker should not fire after actual starter acquisition")
 
 [<Fact>]
 let ``new game reaches PlayersHouse2F through title menu and naming input`` () =

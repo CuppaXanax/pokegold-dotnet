@@ -96,5 +96,7 @@ let applyTmHm (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerStat
         | None -> None
         | Some taughtMon ->
             let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then taughtMon else m)
-            let newBag = Bag.remove itemId 1 player.Bag
+            let newBag =
+                if TmHm.isHmItem itemId then player.Bag
+                else Bag.remove itemId 1 player.Bag
             Some { player with Party = newParty; Bag = newBag }

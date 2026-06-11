@@ -77,6 +77,9 @@ let private scriptedScene content mapId x y facing label commands =
             { Commands = commands
               Labels = Map.ofList [ label, 0 ] } }
 
+let private moveId name =
+    MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name)
+
 [<Fact>]
 let ``restore runs map callbacks through the scheduler`` () =
     let content = Content()
@@ -117,6 +120,60 @@ let ``money and coin script effects mutate player state`` () =
     Assert.Equal(30, scene.DebugPlayer.Coins)
 
 [<Fact>]
+let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "TrainerBattleScene"
+            [| Loadtrainer("YOUNGSTER", "JOEY1")
+               Startbattle
+               Writetext "BattleDone"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "BattleDone", "done<DONE>" ] }
+
+    let mon =
+        let baseMon = PartyMon.create (Species.byName "CYNDAQUIL").Dex 50
+        { baseMon with
+            Moves = [ moveId "EMBER", (Moves.byName "EMBER").Pp ]
+            HeldItem = Some "AMULET_COIN" }
+    let player =
+        { PlayerStateOps.initial with
+            Money = 1000
+            Party = [ mon ] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let buttons =
+            match stack.[stack.Count - 1].GetType().Name with
+            | "BattleScene"
+            | "TextBoxScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (stack.[stack.Count - 1].Update buttons)
+
+    Assert.Equal(1, stack.Count)
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push (:? TextBoxScene) -> ()
+    | other -> failwithf "expected resumed battle script to push text, got %A" other
+
+    Assert.Equal(Some "BattleDone", scene.RuntimeSnapshot.LastTextLabel)
+    Assert.True(scene.DebugPlayer.Party.[0].Exp > 0, "battle reward should grant EXP")
+    Assert.True(scene.DebugPlayer.Money > 1000, "trainer battle should award prize money")
+
+[<Fact>]
 let ``phone contact script effects mutate player state`` () =
     let content = Content()
     let state =
@@ -134,6 +191,7 @@ let ``phone contact script effects mutate player state`` () =
                End
                Writetext "PhoneFail"
                End |]
+        |> fun s -> { s with Script = { s.Script with Labels = Map.add "AskPhoneScene.Fail" 6 s.Script.Labels } }
         |> fun s -> { s with Text = Map.ofList [ "PhoneOk", "ok<DONE>"; "PhoneFail", "fail<DONE>" ] }
 
     let scene = OverworldScene(content, SilentSound(), state)
@@ -141,6 +199,167 @@ let ``phone contact script effects mutate player state`` () =
 
     Assert.Contains("PHONE_MOM", scene.DebugPlayer.PhoneContacts)
     Assert.Equal(Some "PhoneOk", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``askforphonenumber returns ROM contact result codes`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "AskPhoneScene"
+            [| Askforphonenumber "PHONE_MOM"
+               Ifnotequal(0, "AskPhoneScene.Fail")
+               Checkcellnum "PHONE_MOM"
+               Iffalse "AskPhoneScene.Fail"
+               Writetext "PhoneOk"
+               End
+               Writetext "PhoneFail"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "PhoneOk", "ok<DONE>"; "PhoneFail", "fail<DONE>" ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    let prompt =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? YesNoScene as yesNo) -> yesNo
+        | other -> failwithf "expected YesNoScene, got %A" other
+
+    Assert.Equal(Pop, (prompt :> Scene).Update { Buttons.none with A = true })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push _ -> ()
+    | other -> failwithf "expected resumed phone script to push text, got %A" other
+
+    Assert.Contains("PHONE_MOM", scene.DebugPlayer.PhoneContacts)
+    Assert.Equal(Some "PhoneOk", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``askforphonenumber reports full contact list`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "PhoneFullScene"
+            [| Askforphonenumber "PHONE_MOM"
+               Ifequal(1, "PhoneFullScene.Full")
+               Writetext "PhoneFail"
+               End
+               Writetext "PhoneFull"
+               End |]
+        |> fun s -> { s with Script = { s.Script with Labels = Map.add "PhoneFullScene.Full" 4 s.Script.Labels } }
+        |> fun s -> { s with Text = Map.ofList [ "PhoneFull", "full<DONE>"; "PhoneFail", "fail<DONE>" ] }
+    let fullContacts = [ for i in 0 .. 9 -> sprintf "PHONE_SLOT_%02d" i ] |> Set.ofList
+    let player = { PlayerStateOps.initial with PhoneContacts = fullContacts }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let prompt =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? YesNoScene as yesNo) -> yesNo
+        | other -> failwithf "expected YesNoScene, got %A" other
+
+    Assert.Equal(Pop, (prompt :> Scene).Update { Buttons.none with A = true })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push _ -> ()
+    | other -> failwithf "expected full-phone script to push text, got %A" other
+
+    Assert.DoesNotContain("PHONE_MOM", scene.DebugPlayer.PhoneContacts)
+    Assert.Equal(Some "PhoneFull", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``BankOfMom scene persists saving flag and resumes script`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "PlayersHouse1F"
+            7
+            7
+            Up
+            "BankScene"
+            [| Special "BankOfMom"
+               Checkflag "ENGINE_MOM_ACTIVE"
+               Iffalse "BankScene.Fail"
+               Checkflag "ENGINE_MOM_SAVING_MONEY"
+               Iffalse "BankScene.Fail"
+               Writetext "BankOk"
+               End
+               Writetext "BankFail"
+               End |]
+        |> fun s -> { s with Script = { s.Script with Labels = Map.add "BankScene.Fail" 7 s.Script.Labels } }
+        |> fun s -> { s with Text = Map.ofList [ "BankOk", "ok<DONE>"; "BankFail", "fail<DONE>" ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    let bank =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? MomBankScene as bank) -> bank
+        | other -> failwithf "expected MomBankScene, got %A" other
+
+    (bank :> Scene).Update { Buttons.none with Down = true } |> ignore
+    (bank :> Scene).Update Buttons.none |> ignore
+    (bank :> Scene).Update { Buttons.none with Down = true } |> ignore
+    (bank :> Scene).Update Buttons.none |> ignore
+    (bank :> Scene).Update { Buttons.none with A = true } |> ignore
+    (bank :> Scene).Update Buttons.none |> ignore
+    (bank :> Scene).Update { Buttons.none with A = true } |> ignore
+    (bank :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(Pop, (bank :> Scene).Update { Buttons.none with B = true })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push _ -> ()
+    | other -> failwithf "expected bank script to push text, got %A" other
+
+    Assert.True(World.hasFlag "ENGINE_MOM_ACTIVE" scene.DebugWorld)
+    Assert.True(World.hasFlag "ENGINE_MOM_SAVING_MONEY" scene.DebugWorld)
+    Assert.Equal(Some "BankOk", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``MapRadio opens PokeGear radio tab and resumes script`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "RadioScene"
+            [| Special "PlaceMoneyTopRight"
+               Closewindow
+               Setval 4
+               Special "MapRadio"
+               Writetext "RadioOk"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "RadioOk", "ok<DONE>" ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    let gear =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? PokegearScene as gear) -> gear
+        | other -> failwithf "expected PokegearScene, got %A" other
+
+    Assert.Equal(RadioTab, gear.CurrentTab)
+    Assert.Equal(Pop, (gear :> Scene).Update { Buttons.none with B = true })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push _ -> ()
+    | other -> failwithf "expected radio script to push text, got %A" other
+
+    Assert.Equal(Some "RadioOk", scene.RuntimeSnapshot.LastTextLabel)
 
 [<Fact>]
 let ``RTC script effects use persistent game time state`` () =
@@ -171,9 +390,86 @@ let ``RTC script effects use persistent game time state`` () =
     let scene = OverworldScene(content, SilentSound(), state)
     scene.Restore(World.empty, player)
 
+    let weekdayScene =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? WeekdayScene as weekday) -> weekday
+        | other -> failwithf "expected WeekdayScene, got %A" other
+
+    Assert.Equal(5, weekdayScene.Weekday)
+    (weekdayScene :> Scene).Update { Buttons.none with A = true } |> ignore
+    (weekdayScene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(Pop, (weekdayScene :> Scene).Update { Buttons.none with A = true })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push _ -> ()
+    | other -> failwithf "expected resumed script to push text, got %A" other
+
     Assert.Equal(Some "RtcOk", scene.RuntimeSnapshot.LastTextLabel)
     Assert.True(scene.DebugPlayer.GameTime.IsDst)
     Assert.Equal(5, World.getVar "VAR_WEEKDAY" scene.DebugWorld)
+
+[<Fact>]
+let ``party HM field move dispatches through overworld runtime`` () =
+    let content = Content()
+    let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "FLASH" [] }
+    let player = { PlayerStateOps.initial with Party = [ mon ] }
+    let world = World.empty |> World.setFlag "ENGINE_ZEPHYRBADGE"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" 5 5 Down)
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let press buttons =
+        let top = stack.[stack.Count - 1]
+        applyTransition stack (top.Update buttons)
+        applyTransition stack (stack.[stack.Count - 1].Update Buttons.none)
+
+    press { Buttons.none with Start = true }
+    press { Buttons.none with Down = true }
+    press { Buttons.none with A = true }
+    press { Buttons.none with A = true }
+
+    for _ in 1 .. 3 do
+        press { Buttons.none with Down = true }
+
+    press { Buttons.none with A = true }
+
+    Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+    Assert.Equal(1, World.getVar "__flash_active" scene.DebugWorld)
+    Assert.Equal("FLASH", World.getBuffer "__last_field_move" scene.DebugWorld)
+
+[<Fact>]
+let ``facing water triggers Surf field move through overworld A press`` () =
+    let content = Content()
+    let probe = OverworldState.loadById content "NewBarkTown"
+    let directions = [ Down, (0, 1); Up, (0, -1); Left, (-1, 0); Right, (1, 0) ]
+    let start =
+        seq {
+            for y in 0 .. probe.Map.Height * 2 - 1 do
+                for x in 0 .. probe.Map.Width * 2 - 1 do
+                    if Movement.cellWalkable probe.Map probe.Collision x y then
+                        for dir, (dx, dy) in directions do
+                            let coll = Movement.collisionIdAtCell probe.Map probe.Collision (x + dx) (y + dy)
+                            if coll = FieldMoves.CollSurf || coll = FieldMoves.CollWater21 then
+                                yield x, y, dir
+        }
+        |> Seq.tryHead
+        |> Option.defaultWith (fun () -> failwith "expected New Bark to have a land cell facing water")
+
+    let x, y, facing = start
+    let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "SURF" [] }
+    let player = { PlayerStateOps.initial with Party = [ mon ] }
+    let world = World.empty |> World.setFlag "ENGINE_FOGBADGE"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" x y facing)
+    scene.Restore(world, player)
+
+    match (scene :> Scene).Update { Buttons.none with A = true } with
+    | Push (:? TextBoxScene) -> ()
+    | other -> failwithf "expected Surf prompt text, got %A" other
+
+    Assert.Equal(1, World.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal("SURF", World.getBuffer "__last_field_move" scene.DebugWorld)
 
 [<Fact>]
 let ``runtime text resolver substitutes rival name buffer`` () =

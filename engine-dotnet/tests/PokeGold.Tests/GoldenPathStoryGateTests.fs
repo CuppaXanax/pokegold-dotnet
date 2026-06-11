@@ -70,9 +70,17 @@ let private applyEffect (mapId: string) (player: PlayerState) (texts: string lis
     | CheckPoke species ->
         let dex = speciesId species
         mapId, player, texts, Some(if player.Party |> List.exists (fun mon -> mon.SpeciesId = dex) then 1 else 0)
+    | AddPhoneContact phone ->
+        mapId, { player with PhoneContacts = Set.add phone player.PhoneContacts }, texts, Some 0
+    | CheckPhoneContact phone ->
+        mapId, player, texts, Some(if Set.contains phone player.PhoneContacts then 1 else 0)
+    | AskPhoneNumber phone ->
+        mapId, { player with PhoneContacts = Set.add phone player.PhoneContacts }, texts, Some 0
     | HealParty ->
         mapId, { player with Party = Heal.healParty player.Party }, texts, None
     | StartBattle ->
+        mapId, player, texts, Some 1
+    | OpenScriptMenu _ ->
         mapId, player, texts, Some 1
     | ScriptEffect.Warp(dest, x, y, facing) ->
         let resolved =
@@ -203,6 +211,164 @@ let private azaleaIlexGate () =
         Assert.Equal(1, Bag.count "HM_CUT" s.Player.Bag)
         s
 
+let private goldenrodSudowoodoGate () =
+    azaleaIlexGate ()
+    |> runMapScript "GoldenrodGym" "GoldenrodGymWhitneyScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_WHITNEY" s.World)
+        Assert.True(World.hasEvent "EVENT_MADE_WHITNEY_CRY" s.World)
+        Assert.Equal(1, World.getScene "GoldenrodGym" s.World)
+        s
+    |> runMapScript "GoldenrodGym" "WhitneyCriesScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.False(World.hasEvent "EVENT_MADE_WHITNEY_CRY" s.World)
+        Assert.Equal(0, World.getScene "GoldenrodGym" s.World)
+        s
+    |> runMapScript "GoldenrodGym" "GoldenrodGymWhitneyScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasFlag "ENGINE_PLAINBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM45_ATTRACT" s.World)
+        Assert.Equal(1, Bag.count "TM_ATTRACT" s.Player.Bag)
+        s
+    |> runMapScript "GoldenrodFlowerShop" "FlowerShopTeacherScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GOT_SQUIRTBOTTLE" s.World)
+        Assert.Equal(1, Bag.count "SQUIRTBOTTLE" s.Player.Bag)
+        s
+    |> runMapScript "Route36" "SudowoodoScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_FOUGHT_SUDOWOODO" s.World)
+        Assert.Contains("SudowoodoAttackedText", s.Texts)
+        s
+
+let private ecruteakOlivineGate () =
+    goldenrodSudowoodoGate ()
+    |> runMapScript "EcruteakGym" "EcruteakGymMortyScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_MORTY" s.World)
+        Assert.True(World.hasFlag "ENGINE_FOGBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM30_SHADOW_BALL" s.World)
+        Assert.Equal(1, Bag.count "TM_SHADOW_BALL" s.Player.Bag)
+        Assert.Equal(1, World.getScene "ECRUTEAK_TIN_TOWER_ENTRANCE" s.World)
+        s
+    |> runMapScript "OlivineLighthouse6F" "OlivineLighthouseJasmine"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_JASMINE_EXPLAINED_AMPHYS_SICKNESS" s.World)
+        s
+    |> runMapScript "CianwoodPharmacy" "CianwoodPharmacist"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_GOT_SECRETPOTION_FROM_PHARMACY" s.World)
+        Assert.Equal(1, Bag.count "SECRETPOTION" s.Player.Bag)
+        s
+    |> runMapScript "OlivineLighthouse6F" "OlivineLighthouseJasmine"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_JASMINE_RETURNED_TO_GYM" s.World)
+        Assert.False(World.hasEvent "EVENT_OLIVINE_GYM_JASMINE" s.World)
+        Assert.Equal(0, Bag.count "SECRETPOTION" s.Player.Bag)
+        s
+    |> runMapScript "CianwoodGym" "CianwoodGymChuckScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_CHUCK" s.World)
+        Assert.True(World.hasFlag "ENGINE_STORMBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM01_DYNAMICPUNCH" s.World)
+        Assert.Equal(1, Bag.count "TM_DYNAMICPUNCH" s.Player.Bag)
+        s
+    |> runMapScript "OlivineGym" "OlivineGymJasmineScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_JASMINE" s.World)
+        Assert.True(World.hasFlag "ENGINE_MINERALBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM23_IRON_TAIL" s.World)
+        Assert.Equal(1, Bag.count "TM_IRON_TAIL" s.Player.Bag)
+        s
+
+let private mahoganyRadioTowerGate () =
+    ecruteakOlivineGate ()
+    |> runMapScript "LakeOfRage" "RedGyarados"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(1, Bag.count "RED_SCALE" s.Player.Bag)
+        Assert.Contains("LakeOfRageGotRedScaleText", s.Texts)
+        s
+    |> runMapScript "LakeOfRage" "LakeOfRageLanceScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_DECIDED_TO_HELP_LANCE" s.World)
+        Assert.Equal(1, World.getScene "MAHOGANY_MART_1F" s.World)
+        s
+    |> runMapScript "TeamRocketBaseB2F" "RocketBaseElectrodeScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_CLEARED_ROCKET_HIDEOUT" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_HM06_WHIRLPOOL" s.World)
+        Assert.Equal(1, Bag.count "HM_WHIRLPOOL" s.Player.Bag)
+        Assert.False(World.hasFlag "ENGINE_ROCKET_SIGNAL_ON_CH20" s.World)
+        s
+    |> runMapScript "MahoganyGym" "MahoganyGymPryceScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_PRYCE" s.World)
+        Assert.True(World.hasFlag "ENGINE_GLACIERBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM16_ICY_WIND" s.World)
+        Assert.Equal(1, Bag.count "TM_ICY_WIND" s.Player.Bag)
+        Assert.True(World.hasFlag "ENGINE_ROCKETS_IN_RADIO_TOWER" s.World)
+        Assert.False(World.hasEvent "EVENT_RADIO_TOWER_ROCKET_TAKEOVER" s.World)
+        Assert.Equal(1, World.getScene "MAHOGANY_TOWN" s.World)
+        s
+    |> runMapScript "RadioTower5F" "RadioTower5FRocketBossScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_CLEARED_RADIO_TOWER" s.World)
+        Assert.True(World.hasEvent "EVENT_TEAM_ROCKET_DISBANDED" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_RAINBOW_WING" s.World)
+        Assert.False(World.hasFlag "ENGINE_ROCKETS_IN_RADIO_TOWER" s.World)
+        Assert.Equal(2, World.getScene "RadioTower5F" s.World)
+        Assert.Equal(1, Bag.count "RAINBOW_WING" s.Player.Bag)
+        s
+
+let private blackthornLeagueGate () =
+    mahoganyRadioTowerGate ()
+    |> runMapScript "BlackthornGym1F" "BlackthornGymClairScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_CLAIR" s.World)
+        Assert.True(World.hasEvent "EVENT_BLACKTHORN_CITY_GRAMPS_BLOCKS_DRAGONS_DEN" s.World)
+        Assert.False(World.hasFlag "ENGINE_RISINGBADGE" s.World)
+        s
+    |> runMapScript "DragonsDenB1F" "DragonsDenB1FDragonFangScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasFlag "ENGINE_RISINGBADGE" s.World)
+        Assert.True(World.hasEvent "EVENT_GOT_TM24_DRAGONBREATH" s.World)
+        Assert.Equal(1, Bag.count "DRAGON_FANG" s.Player.Bag)
+        Assert.Equal(1, Bag.count "TM_DRAGONBREATH" s.Player.Bag)
+        Assert.Equal("SPECIALCALL_MASTERBALL", World.getBuffer "__special_phone_call" s.World)
+        s
+    |> runMapScript "LancesRoom" "LancesRoomLanceScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_CHAMPION_LANCE" s.World)
+        Assert.Equal("HallOfFame", s.MapId)
+        s
+    |> runMapScript "HallOfFame" "HallOfFameEnterScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_ELITE_FOUR" s.World)
+        Assert.True(World.hasEvent "EVENT_TELEPORT_GUY" s.World)
+        Assert.Equal(1, World.getScene "HallOfFame" s.World)
+        Assert.Equal("SPECIALCALL_SSTICKET", World.getBuffer "__special_phone_call" s.World)
+        s
+
 [<Fact>]
 let ``G1 known good through New Bark starter unlock`` () =
     newBarkPrologue () |> ignore
@@ -218,3 +384,19 @@ let ``G3 known good through Violet Gym`` () =
 [<Fact>]
 let ``G4 known good through Azalea Gym and Ilex pre-Cut`` () =
     azaleaIlexGate () |> ignore
+
+[<Fact>]
+let ``G5 known good through Goldenrod and Sudowoodo`` () =
+    goldenrodSudowoodoGate () |> ignore
+
+[<Fact>]
+let ``G6 known good through Ecruteak Olivine and Cianwood`` () =
+    ecruteakOlivineGate () |> ignore
+
+[<Fact>]
+let ``G7 known good through Mahogany and Radio Tower`` () =
+    mahoganyRadioTowerGate () |> ignore
+
+[<Fact>]
+let ``G8 known good through Blackthorn and Hall of Fame`` () =
+    blackthornLeagueGate () |> ignore

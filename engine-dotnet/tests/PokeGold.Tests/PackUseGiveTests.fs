@@ -115,6 +115,30 @@ let ``applyRepel sets step counter and removes item`` () =
         Assert.Equal(0, Bag.count "REPEL" updated.Bag)
     | None -> Assert.Fail("should have applied")
 
+[<Fact>]
+let ``applyTmHm teaches HM without consuming it`` () =
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 155 10 ]
+            Bag = Bag.add "HM_CUT" 1 Bag.empty }
+
+    match PackUseGive.applyTmHm "HM_CUT" 0 player with
+    | Some updated ->
+        Assert.Equal(1, Bag.count "HM_CUT" updated.Bag)
+        Assert.True(updated.Party.[0].Moves.Length > player.Party.[0].Moves.Length)
+    | None -> Assert.Fail("HM_CUT should teach CUT")
+
+[<Fact>]
+let ``applyTmHm consumes TM after teaching it`` () =
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 155 10 ]
+            Bag = Bag.add "TM01" 1 Bag.empty }
+
+    match PackUseGive.applyTmHm "TM01" 0 player with
+    | Some updated -> Assert.Equal(0, Bag.count "TM01" updated.Bag)
+    | None -> Assert.Fail("TM01 should teach DYNAMICPUNCH")
+
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
 [<Fact>]

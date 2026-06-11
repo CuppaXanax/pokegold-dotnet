@@ -6,6 +6,7 @@
     <RootNamespace>PokeGold.Host.Android</RootNamespace>
     <AssemblyName>PokeGold.Host.Android</AssemblyName>
     <ApplicationId>com.pokegold.engine</ApplicationId>
+    <ApplicationTitle>PokéGold (.NET)</ApplicationTitle>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <SupportedOSPlatformVersion>21</SupportedOSPlatformVersion>

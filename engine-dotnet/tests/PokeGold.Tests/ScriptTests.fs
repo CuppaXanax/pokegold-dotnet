@@ -262,8 +262,11 @@ let ``menu and UI opcodes set script var via control flow`` () =
              \tjumptext OkText\n"
 
     match Script.start "S" World.empty verticalProg "" with
-    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
-    | other -> Assert.Fail($"expected ShowText from verticalmenu branch, got {other}")
+    | { World = world; Outcome = Suspended(vm, OpenScriptMenu "MENU") } ->
+        match Script.resume (Some 1) world vm with
+        | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
+        | other -> Assert.Fail($"expected ShowText after verticalmenu selection, got {other}")
+    | other -> Assert.Fail($"expected menu effect from verticalmenu, got {other}")
 
     let elevatorProg =
         parse
@@ -616,6 +619,85 @@ let ``phone and rival specials emit runtime effects`` () =
         effects)
 
 [<Fact>]
+let ``special phone call state is stored in script world`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecialphonecall SPECIALCALL_POKERUS\n\
+             \tcheckphonecall\n\
+             \tiffalse .Fail\n\
+             \tspecialphonecall SPECIALCALL_NONE\n\
+             \tcheckphonecall\n\
+             \tiftrue .Fail\n\
+             \twritetext Cleared\n\
+             \tend\n\
+             .Fail:\n\
+             \twritetext Failed\n\
+             \tend\n"
+
+    let world, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>([ ShowText("Cleared", false) ], effects)
+    Assert.Equal("", World.getBuffer "__special_phone_call" world)
+
+[<Fact>]
+let ``critical specials emit runtime UI effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial BankOfMom\n\
+             \tspecial OverworldTownMap\n\
+             \tsetval 4\n\
+             \tspecial MapRadio\n\
+             \tspecial DisplayMoneyAndCoinBalance\n\
+             \tspecial DisplayCoinCaseBalance\n\
+             \tspecial PlaceMoneyTopRight\n\
+             \tclosewindow\n\
+             \tspecial PlayersHousePC\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ OpenMomBank
+          OpenPokegear(MapTab, "", None)
+          OpenPokegear(RadioTab, "", Some 4)
+          DisplayBalance MoneyAndCoins
+          DisplayBalance CoinCase
+          DisplayBalance MoneyTopRight
+          CloseWindow
+          OpenPc ],
+        effects)
+
+[<Fact>]
+let ``script menu commands emit menu effect and resume with selection`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tloadmenu TestMenuHeader\n\
+             \tmenu_coords 0, 0, 8, 8\n\
+             \tverticalmenu\n\
+             \tifequal 2, .Second\n\
+             \twritetext First\n\
+             \tend\n\
+             .Second:\n\
+             \twritetext Second\n\
+             \tend\n"
+
+    let world, effects =
+        drive
+            (function
+             | OpenScriptMenu _ -> Some 2
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>([ OpenScriptMenu "TestMenuHeader"; ShowText("Second", false) ], effects)
+    Assert.Equal("TestMenuHeader", World.getBuffer "__loaded_menu" world)
+    Assert.Equal("0,0,8,8", World.getBuffer "__menu_coords" world)
+
+[<Fact>]
 let ``loadvar sets the world var and script var`` () =
     let prog =
         ScriptParser.parseText
@@ -630,6 +712,27 @@ let ``loadvar sets the world var and script var`` () =
     let world, effects = driveSilent World.empty "S" prog
     Assert.Equal<ScriptEffect list>([ ShowText("Ok", false) ], effects)
     Assert.Equal(5, World.getVar "VAR_TEST" world)
+
+[<Fact>]
+let ``readvar VAR_BADGES derives current Johto badge flags`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \treadvar VAR_BADGES\n\
+             \tifequal 3, .Ok\n\
+             \tend\n\
+             .Ok:\n\
+             \twritetext Ok\n\
+             \tend\n"
+
+    let world =
+        World.empty
+        |> World.setFlag "ENGINE_ZEPHYRBADGE"
+        |> World.setFlag "ENGINE_HIVEBADGE"
+        |> World.setFlag "ENGINE_PLAINBADGE"
+
+    let _, effects = driveSilent world "S" prog
+    Assert.Equal<ScriptEffect list>([ ShowText("Ok", false) ], effects)
 
 [<Fact>]
 let ``checkmoney and checkcoins suspend for runtime funds checks`` () =
