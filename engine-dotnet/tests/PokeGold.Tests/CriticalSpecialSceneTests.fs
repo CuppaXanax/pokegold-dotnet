@@ -68,6 +68,25 @@ let ``PokeGear scene opens requested tabs`` () =
     Assert.Equal(RadioTab, radioScene.CurrentTab)
 
 [<Fact>]
+let ``PokeGear radio tunes a station through the onTune callback`` () =
+    let mutable tuned = ""
+
+    let scene =
+        PokegearScene(
+            Content().Font,
+            PlayerStateOps.initial,
+            initialTab = RadioTab,
+            mapId = "VermilionCity",
+            stations = [ "OAKS_POKEMON_TALK", "OAK'S TALK"; "POKE_FLUTE", "POKe FLUTE" ],
+            onTune = fun id -> tuned <- id)
+
+    press { Buttons.none with Down = true } (scene :> Scene) |> ignore
+    press { Buttons.none with A = true } (scene :> Scene) |> ignore
+
+    Assert.Equal("POKE_FLUTE", tuned)
+    Assert.Equal(Some "POKE_FLUTE", scene.TunedStation)
+
+[<Fact>]
 let ``script menu returns one-based selections and zero on cancel`` () =
     let mutable selected = -1
     let menu = ScriptMenuScene(Content(), "TEST_MENU", fun value -> selected <- value) :> Scene

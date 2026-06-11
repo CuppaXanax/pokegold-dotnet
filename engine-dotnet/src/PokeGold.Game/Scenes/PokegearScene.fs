@@ -7,7 +7,14 @@ open PokeGold.Game.Player
 open PokeGold.Game.Render
 
 /// PokeGear shell with player-facing Map / Phone / Radio tabs.
-type PokegearScene(font: Font, player: PlayerState, ?initialTab: PokegearTab, ?mapId: string, ?radioChannel: int) =
+///
+/// `stations` is the tunable radio dial supplied by the caller (id, display
+/// name); availability rules (EXPN card, region) live with the caller, which
+/// has the world state. Tuning a station invokes `onTune` with its id so the
+/// overworld can persist it (`__radio_station`) — that buffer is what
+/// `special SnorlaxAwake` reads, mirroring the wMapMusic check in
+/// engine/events/specials.asm.
+type PokegearScene(font: Font, player: PlayerState, ?initialTab: PokegearTab, ?mapId: string, ?radioChannel: int, ?stations: (string * string) list, ?onTune: string -> unit) =
     let indexOf =
         function
         | MapTab -> 0
@@ -15,12 +22,16 @@ type PokegearScene(font: Font, player: PlayerState, ?initialTab: PokegearTab, ?m
         | RadioTab -> 2
 
     let mutable cursor = defaultArg initialTab PhoneTab |> indexOf
+    let mutable stationCursor = 0
+    let mutable tunedStation: string option = None
+    let stations = defaultArg stations []
     let input = PokeGold.Game.Ui.EdgeDetector()
     let tabs = [| "MAP"; "PHONE"; "RADIO" |]
     let palette = TextRenderer.palette
     let mapName = defaultArg mapId "UNKNOWN"
 
     member _.Cursor = cursor
+    member _.TunedStation = tunedStation
     member _.CurrentTab =
         match cursor with
         | 0 -> MapTab
@@ -28,18 +39,33 @@ type PokegearScene(font: Font, player: PlayerState, ?initialTab: PokegearTab, ?m
         | _ -> RadioTab
 
     interface Scene with
-        member _.Update(buttons: Buttons) : Transition =
+        member this.Update(buttons: Buttons) : Transition =
             let edges = input.Update buttons
 
             if edges.B then
                 Pop
+            elif this.CurrentTab = RadioTab && not stations.IsEmpty then
+                if edges.Down then
+                    stationCursor <- min (stations.Length - 1) (stationCursor + 1)
+                    Stay
+                elif edges.Up then
+                    stationCursor <- max 0 (stationCursor - 1)
+                    Stay
+                elif edges.A then
+                    let id, _ = stations.[stationCursor]
+                    tunedStation <- Some id
+                    onTune |> Option.iter (fun tune -> tune id)
+                    Stay
+                elif edges.Left || edges.Right then
+                    cursor <- (cursor + (if edges.Right then 1 else tabs.Length - 1)) % tabs.Length
+                    Stay
+                else
+                    Stay
             elif edges.Down then
                 cursor <- min (tabs.Length - 1) (cursor + 1)
                 Stay
             elif edges.Up then
                 cursor <- max 0 (cursor - 1)
-                Stay
-            elif edges.A then
                 Stay
             else
                 Stay
@@ -67,6 +93,17 @@ type PokegearScene(font: Font, player: PlayerState, ?initialTab: PokegearTab, ?m
                         WindowRenderer.drawString fb font palette 1 (9 + i) (contact.Replace("PHONE_", "").Replace("_", " ")))
             | _ ->
                 WindowRenderer.drawString fb font palette 1 7 "RADIO"
-                match radioChannel with
-                | Some channel -> WindowRenderer.drawString fb font palette 1 9 (sprintf "CHANNEL %d" channel)
-                | None -> WindowRenderer.drawString fb font palette 1 9 "SELECT A STATION"
+
+                if not stations.IsEmpty then
+                    stations
+                    |> List.truncate 4
+                    |> List.iteri (fun i (id, name) ->
+                        let marker =
+                            if tunedStation = Some id then "*"
+                            elif i = stationCursor then ">"
+                            else " "
+                        WindowRenderer.drawString fb font palette 1 (9 + i) (marker + name))
+                else
+                    match radioChannel with
+                    | Some channel -> WindowRenderer.drawString fb font palette 1 9 (sprintf "CHANNEL %d" channel)
+                    | None -> WindowRenderer.drawString fb font palette 1 9 "SELECT A STATION"

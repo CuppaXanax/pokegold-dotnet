@@ -329,6 +329,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             Push(TextBoxScene.Of(content, message + "<DONE>") :> Scene)
 
+    /// The Pokégear with the radio dial the player can currently receive. The
+    /// Poké Flute channel needs the EXPN CARD (it only broadcasts in Kanto,
+    /// where the card is obtained); tuning persists to `__radio_station`,
+    /// which `special SnorlaxAwake` checks.
+    member private _.MakePokegear(tab: PokegearTab, mapId: string, radioChannel: int option) : Scene =
+        let stations =
+            [ "OAKS_POKEMON_TALK", "OAK'S TALK"
+              "POKEMON_MUSIC", "POKeMON MUSIC"
+              "LUCKY_CHANNEL", "LUCKY NUMBER"
+              if World.hasFlag "ENGINE_EXPN_CARD" world then
+                  "POKE_FLUTE", "POKe FLUTE" ]
+
+        PokegearScene(
+            content.Font,
+            player,
+            initialTab = tab,
+            mapId = mapId,
+            ?radioChannel = radioChannel,
+            stations = stations,
+            onTune = fun id -> world <- World.setBuffer "__radio_station" id world)
+        :> Scene
+
     member private this.PlayScriptMusic(song: string) =
         match song with
         | "__MAP_DEFAULT__" -> this.PlayMapMusic state.MapId
@@ -623,7 +645,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                             else World.clearFlag "ENGINE_MOM_SAVING_MONEY" world)) :> Scene))
                     | OpenPokegear(tab, mapId, radioChannel) ->
                         pending <- Some(vm, effect)
-                        stop (Push(PokegearScene(content.Font, player, initialTab = tab, mapId = mapId, ?radioChannel = radioChannel) :> Scene))
+                        stop (Push(this.MakePokegear(tab, mapId, radioChannel)))
                     | OpenScriptMenu menu ->
                         pending <- Some(vm, effect)
                         menuResult <- 0
@@ -1265,7 +1287,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             // result back into the overworld so fishing checks the
                             // facing water tile and stages fishEncounter here.
                             Push(PackScene(content, player, fun p -> player <- p) :> Scene)
-                        | Pokegear -> Push(PokegearScene(content.Font, player, initialTab = PhoneTab, mapId = state.MapId) :> Scene)
+                        | Pokegear -> Push(this.MakePokegear(PhoneTab, state.MapId, None))
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
                         | Exit    -> Pop), buttons) :> Scene)

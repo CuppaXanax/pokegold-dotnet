@@ -190,15 +190,25 @@ module Script =
     let private tryInt (s: string) : int =
         try int s with _ -> 0
 
-    let private johtoBadgeFlags =
-        [ "ENGINE_ZEPHYRBADGE"
+    let private badgeFlags =
+        [ // wJohtoBadges (constants/engine_flags.asm)
+          "ENGINE_ZEPHYRBADGE"
           "ENGINE_HIVEBADGE"
           "ENGINE_PLAINBADGE"
           "ENGINE_FOGBADGE"
           "ENGINE_MINERALBADGE"
           "ENGINE_STORMBADGE"
           "ENGINE_GLACIERBADGE"
-          "ENGINE_RISINGBADGE" ]
+          "ENGINE_RISINGBADGE"
+          // wKantoBadges
+          "ENGINE_BOULDERBADGE"
+          "ENGINE_CASCADEBADGE"
+          "ENGINE_THUNDERBADGE"
+          "ENGINE_RAINBOWBADGE"
+          "ENGINE_SOULBADGE"
+          "ENGINE_MARSHBADGE"
+          "ENGINE_VOLCANOBADGE"
+          "ENGINE_EARTHBADGE" ]
 
     let private readVar (name: string) (world: World) =
         match name with
@@ -206,7 +216,7 @@ module Script =
             let explicitValue = World.getVar name world
             if explicitValue <> 0 then explicitValue
             else
-                johtoBadgeFlags
+                badgeFlags
                 |> List.filter (fun flag -> World.hasFlag flag world)
                 |> List.length
         | _ -> World.getVar name world
@@ -365,6 +375,12 @@ module Script =
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
+            // engine/events/specials.asm SnorlaxAwake: ScriptVar = 1 iff the radio
+            // is tuned to the Poké Flute channel next to Snorlax (proximity is the
+            // caller's concern — the script only runs from the Snorlax object).
+            | Special "SnorlaxAwake" ->
+                let tuned = World.getBuffer "__radio_station" world = "POKE_FLUTE"
+                run world { next with ScriptVar = if tuned then 1 else 0 }
             | Special _ -> run world next
 
             // ---- Mart -----------------------------------------------------

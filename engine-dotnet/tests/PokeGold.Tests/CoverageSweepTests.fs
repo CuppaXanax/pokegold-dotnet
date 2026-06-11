@@ -16,11 +16,12 @@ open PokeGold.Game.Overworld.Script
 let ``the baked map scripts hold a stable command total`` () =
     // Matches the M9.6 runtime sweep: drift here means generation went stale.
     // (Increased from 20612 when trainer macro expansion started preserving the
-    // GSC post-battle after-script jump path.)
+    // GSC post-battle after-script jump path; from 20932 when hiddenitem
+    // expansion gained its event-flag gate — 87 hidden items × 4 commands.)
     let total =
         MapsData.all |> Seq.sumBy (fun kv -> kv.Value.Script.Commands.Length)
 
-    Assert.Equal(20932, total)
+    Assert.Equal(21280, total)
 
 [<Fact>]
 let ``generated script IR contains no generic Unsupported commands`` () =

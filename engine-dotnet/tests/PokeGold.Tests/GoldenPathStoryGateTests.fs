@@ -369,6 +369,204 @@ let private blackthornLeagueGate () =
         Assert.Equal("SPECIALCALL_SSTICKET", World.getBuffer "__special_phone_call" s.World)
         s
 
+// ---------------------------------------------------------------------------
+//  Kanto (post-Hall-of-Fame). Source of truth per script named below.
+// ---------------------------------------------------------------------------
+
+let private kantoArrivalGate () =
+    blackthornLeagueGate ()
+    // ElmsLab: Elm hands over the S.S. TICKET after the Hall of Fame.
+    |> runMapScript "ElmsLab" "ElmGiveTicketScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(1, Bag.count "S_S_TICKET" s.Player.Bag)
+        s
+    // Boarding scene: clears the arrival flag and stages the worried-grandpa cutscene.
+    |> runMapScript "FastShip1F" "FastShip1FEnterShipScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.False(World.hasEvent "EVENT_FAST_SHIP_HAS_ARRIVED" s.World)
+        Assert.Equal(2, World.getScene "FastShip1F" s.World)
+        s
+    |> runMapScript "FastShip1F" "WorriedGrandpaSceneLeft"
+    |> roundTrip
+    // Captain's cabin: finding the granddaughter gives METAL_COAT and docks the ship.
+    |> runMapScript "FastShipCabins_SE_SSE_CaptainsCabin" "SSAquaGranddaughterBefore"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(1, Bag.count "METAL_COAT" s.Player.Bag)
+        Assert.True(World.hasEvent "EVENT_FAST_SHIP_HAS_ARRIVED" s.World)
+        Assert.True(World.hasEvent "EVENT_FAST_SHIP_FOUND_GIRL" s.World)
+        Assert.True(World.hasEvent "EVENT_VERMILION_PORT_SAILOR_AT_GANGWAY" s.World)
+        s
+    // Sailor lets the player off in Vermilion: explicit warp + port leave-ship scene.
+    |> runMapScript "FastShip1F" "FastShip1FSailor1Script"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal("VermilionPort", s.MapId)
+        Assert.Equal(1, World.getScene "VERMILION_PORT" s.World)
+        s
+    |> runMapScript "VermilionPort" "VermilionPortLeaveShipScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_FAST_SHIP_FIRST_TIME" s.World)
+        Assert.Equal(0, World.getScene "VermilionPort" s.World)
+        s
+
+let private surgeSabrinaGate () =
+    kantoArrivalGate ()
+    |> runMapScript "VermilionGym" "VermilionGymSurgeScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_LTSURGE" s.World)
+        Assert.True(World.hasFlag "ENGINE_THUNDERBADGE" s.World)
+        s
+    |> runMapScript "SaffronGym" "SaffronGymSabrinaScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_SABRINA" s.World)
+        Assert.True(World.hasFlag "ENGINE_MARSHBADGE" s.World)
+        s
+
+let private machinePartMistyGate () =
+    surgeSabrinaGate ()
+    // Power Plant manager kicks off the machine-part quest.
+    |> runMapScript "PowerPlant" "PowerPlantManager"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_MET_MANAGER_AT_POWER_PLANT" s.World)
+        Assert.False(World.hasEvent "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM" s.World)
+        Assert.Equal(1, World.getScene "CERULEAN_GYM" s.World)
+        Assert.Equal(1, World.getScene "PowerPlant" s.World)
+        s
+    // The grunt flees the Cerulean Gym, staging the Route 24/25 chain.
+    |> runMapScript "CeruleanGym" "CeruleanGymGruntRunsOutScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_MET_ROCKET_GRUNT_AT_CERULEAN_GYM" s.World)
+        Assert.Equal(1, World.getScene "ROUTE_25" s.World)
+        Assert.Equal(0, World.getScene "POWER_PLANT" s.World)
+        s
+    |> runMapScript "Route24" "Route24RocketScript"
+    |> roundTrip
+    // Misty's interrupted date sends her back to the gym.
+    |> runMapScript "Route25" "Route25MistyDate1Script"
+    |> roundTrip
+    |> fun s ->
+        Assert.False(World.hasEvent "EVENT_TRAINERS_IN_CERULEAN_GYM" s.World)
+        Assert.Equal(0, World.getScene "Route25" s.World)
+        s
+    // The hidden machine part in the gym: collectable exactly once.
+    |> runMapScript "CeruleanGym" "CeruleanGymHiddenMachinePart"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(1, Bag.count "MACHINE_PART" s.Player.Bag)
+        Assert.True(World.hasEvent "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM" s.World)
+        s
+    |> runMapScript "CeruleanGym" "CeruleanGymHiddenMachinePart"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(1, Bag.count "MACHINE_PART" s.Player.Bag)
+        s
+    // Returning the part restores power to Kanto and earns TM07.
+    |> runMapScript "PowerPlant" "PowerPlantManager"
+    |> roundTrip
+    |> fun s ->
+        Assert.Equal(0, Bag.count "MACHINE_PART" s.Player.Bag)
+        Assert.True(World.hasEvent "EVENT_RETURNED_MACHINE_PART" s.World)
+        Assert.True(World.hasEvent "EVENT_RESTORED_POWER_TO_KANTO" s.World)
+        Assert.Equal(1, Bag.count "TM_ZAP_CANNON" s.Player.Bag)
+        s
+    // The Lavender radio director hands over the EXPN CARD.
+    |> runMapScript "LavRadioTower1F" "LavRadioTower1FGentlemanScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasFlag "ENGINE_EXPN_CARD" s.World)
+        s
+    |> runMapScript "CeruleanGym" "CeruleanGymMistyScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_MISTY" s.World)
+        Assert.True(World.hasFlag "ENGINE_CASCADEBADGE" s.World)
+        s
+
+let private snorlaxPewterGate () =
+    machinePartMistyGate ()
+    // Snorlax won't budge until the radio is tuned to the Poké Flute channel.
+    |> runMapScript "VermilionCity" "VermilionSnorlax"
+    |> roundTrip
+    |> fun s ->
+        Assert.False(World.hasEvent "EVENT_FOUGHT_SNORLAX" s.World)
+        Assert.Contains("VermilionCitySnorlaxSleepingText", s.Texts)
+        // Tune the Pokégear radio (the overworld writes this buffer on tune).
+        { s with World = World.setBuffer "__radio_station" "POKE_FLUTE" s.World }
+    |> runMapScript "VermilionCity" "VermilionSnorlax"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_FOUGHT_SNORLAX" s.World)
+        Assert.Contains("VermilionCityRadioNearSnorlaxText", s.Texts)
+        s
+    |> runMapScript "PewterGym" "PewterGymBrockScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_BROCK" s.World)
+        Assert.True(World.hasFlag "ENGINE_BOULDERBADGE" s.World)
+        s
+
+let private southKantoGate () =
+    snorlaxPewterGate ()
+    |> runMapScript "CeladonGym" "CeladonGymErikaScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_ERIKA" s.World)
+        Assert.True(World.hasFlag "ENGINE_RAINBOWBADGE" s.World)
+        Assert.Equal(1, Bag.count "TM_GIGA_DRAIN" s.Player.Bag)
+        s
+    |> runMapScript "FuchsiaGym" "FuchsiaGymJanineScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_JANINE" s.World)
+        Assert.True(World.hasFlag "ENGINE_SOULBADGE" s.World)
+        Assert.Equal(1, Bag.count "TM_TOXIC" s.Player.Bag)
+        s
+    |> fun s ->
+        // Blue starts hidden in his gym (set by InitializeEventsScript)…
+        Assert.True(World.hasEvent "EVENT_VIRIDIAN_GYM_BLUE" s.World)
+        s
+    |> runMapScript "CinnabarIsland" "CinnabarIslandBlue"
+    |> roundTrip
+    |> fun s ->
+        // …and meeting him on Cinnabar sends him back to it.
+        Assert.False(World.hasEvent "EVENT_VIRIDIAN_GYM_BLUE" s.World)
+        s
+    |> runMapScript "SeafoamGym" "SeafoamGymBlaineScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_BLAINE" s.World)
+        Assert.True(World.hasFlag "ENGINE_VOLCANOBADGE" s.World)
+        s
+    |> runMapScript "ViridianGym" "ViridianGymBlueScript"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_BEAT_BLUE" s.World)
+        Assert.True(World.hasFlag "ENGINE_EARTHBADGE" s.World)
+        s
+
+let private mtSilverRedGate () =
+    southKantoGate ()
+    // Oak counts all 16 badges (readvar VAR_BADGES) and opens Mt. Silver.
+    |> runMapScript "OaksLab" "Oak"
+    |> roundTrip
+    |> fun s ->
+        Assert.True(World.hasEvent "EVENT_OPENED_MT_SILVER" s.World)
+        s
+    |> runMapScript "SilverCaveRoom3" "Red"
+    |> roundTrip
+    |> fun s ->
+        Assert.Contains("RedSeenText", s.Texts)
+        Assert.Contains("RedLeavesText", s.Texts)
+        s
+
 [<Fact>]
 let ``G1 known good through New Bark starter unlock`` () =
     newBarkPrologue () |> ignore
@@ -400,3 +598,27 @@ let ``G7 known good through Mahogany and Radio Tower`` () =
 [<Fact>]
 let ``G8 known good through Blackthorn and Hall of Fame`` () =
     blackthornLeagueGate () |> ignore
+
+[<Fact>]
+let ``G9 known good through SS Aqua arrival in Vermilion`` () =
+    kantoArrivalGate () |> ignore
+
+[<Fact>]
+let ``G10 known good through Surge and Sabrina`` () =
+    surgeSabrinaGate () |> ignore
+
+[<Fact>]
+let ``G11 known good through machine part quest and Misty`` () =
+    machinePartMistyGate () |> ignore
+
+[<Fact>]
+let ``G12 known good through Snorlax wake and Brock`` () =
+    snorlaxPewterGate () |> ignore
+
+[<Fact>]
+let ``G13 known good through Erika Janine Blaine and Blue`` () =
+    southKantoGate () |> ignore
+
+[<Fact>]
+let ``G14 known good through Mt Silver unlock and Red`` () =
+    mtSilverRedGate () |> ignore

@@ -120,7 +120,9 @@ module ConformanceLedger =
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
               "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MoveDeletion"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectApricornForKurt"; "SelectRandomBugContestContestants"
-              "SlotMachine"; "SnorlaxAwake"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
+              "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
+
+          yield entry ScriptSpecial "SnorlaxAwake" ImplementedApproximate [ CriticalPathKanto; RequiredFor100Percent ] "Checks the tuned `__radio_station` world buffer (Poké Flute channel) written by the Pokégear radio; covered by the G12 story gate and ScriptTests."
 
           yield! many ScriptSpecial StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for cosmetic/host presentation behavior."
             [ "ClearBGPalettes"; "Diploma"; "FadeInFromBlack"; "FadeInFromWhite"; "FadeOutToBlack"; "FadeOutToWhite"; "LoadUsedSpritesGFX"

@@ -513,6 +513,20 @@ module ScriptParser =
                         | Unsupported("itemball", args) when args.Length >= 1 ->
                             let qty = if args.Length > 1 then intArg strict constants args.[1] else 1
                             commands.AddRange([| Verbosegiveitem(args.[0], qty); End |])
+                        | Unsupported("hiddenitem", args) when args.Length >= 2 ->
+                            // hiddenitem ITEM, EVENT_FLAG (macros/scripts/maps.asm l.165-169):
+                            // the engine gives the item once, gated by the event flag, and only
+                            // sets the flag when the item actually fit in the bag.
+                            let doneLabel = qualify lastGlobal ".hiddenItemDone"
+                            commands.AddRange(
+                                [| Checkevent args.[1]
+                                   Iftrue doneLabel
+                                   Verbosegiveitem(args.[0], 1)
+                                   Iffalse doneLabel
+                                   Setevent args.[1] |])
+                            if not (labels.ContainsKey doneLabel) then
+                                labels.[doneLabel] <- commands.Count
+                            commands.Add End
                         | Unsupported("hiddenitem", args) when args.Length >= 1 ->
                             commands.AddRange([| Verbosegiveitem(args.[0], 1); End |])
                         | Unsupported("fruittree", _) ->
