@@ -3,6 +3,10 @@
 This is the actionable plan: ordered milestones, each with concrete deliverables, measurable
 acceptance criteria, dependencies, and risks. The vision and principles live in `README.md`.
 
+> **Status: all milestones below (M0–M25) have landed.** The remaining work between
+> "milestones complete" and a playable all-badges run is captured — in handoff-ready
+> detail — in **[`victory-plan.md`](victory-plan.md)**. Start there.
+
 Target: **Pokémon Gold** (international English, game ID `AAUE`, SHA1
 `d8b8a3600a465308c9953dfa04f0081c05bdcb94`) reimplemented in **F#** on **MonoGame** (DesktopGL).
 Reference source is the `pret/pokegold` disassembly in this repo and the analysis in `docs/recon/`.
