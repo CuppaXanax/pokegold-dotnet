@@ -375,6 +375,18 @@ module Script =
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
+            // engine/events/specials.asm: ScriptVar = 1 iff the party holds the
+            // species staged by the preceding `setval`. The YourTrainerID variant's
+            // OT check is unmodelled — every party mon belongs to the player here.
+            | Special "FindPartyMonThatSpecies"
+            | Special "FindPartyMonThatSpeciesYourTrainerID" ->
+                let species =
+                    Species.all
+                    |> Map.tryPick (fun name stats -> if stats.Dex = vm.ScriptVar then Some name else None)
+
+                match species with
+                | Some name -> suspend next world (CheckPoke name)
+                | None -> run world { next with ScriptVar = 0 }
             // engine/events/specials.asm SnorlaxAwake: ScriptVar = 1 iff the radio
             // is tuned to the Poké Flute channel next to Snorlax (proximity is the
             // caller's concern — the script only runs from the Snorlax object).

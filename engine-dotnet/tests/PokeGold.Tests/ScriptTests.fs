@@ -1316,3 +1316,59 @@ let ``trainer macro expands to TalkToTrainerScript: already beaten shows after t
             Assert.Equal("BennyAfterText", label)
         | other -> Assert.Fail($"expected after text, got {other}")
     | other -> Assert.Fail($"expected FacePlayer first, got {other}")
+
+[<Fact>]
+let ``FindPartyMonThatSpecies suspends on a CheckPoke for the setval species`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tsetval 175\n\
+             \tspecial FindPartyMonThatSpeciesYourTrainerID\n\
+             \tiftrue .Found\n\
+             \tend\n\
+             .Found:\n\
+             \tjumptext FoundText\n"
+
+    match Script.start "S" World.empty prog "" with
+    | { World = world; Outcome = Suspended(vm, CheckPoke "TOGEPI") } ->
+        match Script.resume (Some 1) world vm with
+        | { Outcome = Suspended(_, ShowText("FoundText", _)) } -> ()
+        | other -> Assert.Fail($"expected FoundText after party hit, got {other}")
+    | other -> Assert.Fail($"expected CheckPoke TOGEPI, got {other}")
+
+[<Fact>]
+let ``SnorlaxAwake reads the tuned radio station buffer`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial SnorlaxAwake\n\
+             \tiftrue .Awake\n\
+             \tjumptext SleepingText\n\
+             .Awake:\n\
+             \tjumptext AwakeText\n"
+
+    match Script.start "S" World.empty prog "" with
+    | { Outcome = Suspended(_, ShowText("SleepingText", _)) } -> ()
+    | other -> Assert.Fail($"expected sleeping branch with no radio, got {other}")
+
+    let tuned = World.setBuffer "__radio_station" "POKE_FLUTE" World.empty
+    match Script.start "S" tuned prog "" with
+    | { Outcome = Suspended(_, ShowText("AwakeText", _)) } -> ()
+    | other -> Assert.Fail($"expected awake branch on the flute channel, got {other}")
+
+[<Fact>]
+let ``hiddenitem expands to an event-gated one-time give`` () =
+    let prog =
+        parse
+            "HiddenSpot:\n\
+             \thiddenitem MACHINE_PART, EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Checkevent "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM"
+          Iftrue "HiddenSpot.hiddenItemDone"
+          Verbosegiveitem("MACHINE_PART", 1)
+          Iffalse "HiddenSpot.hiddenItemDone"
+          Setevent "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM"
+          End ],
+        ScriptProgram.blockAt "HiddenSpot" prog
+    )
