@@ -138,6 +138,8 @@ type BattleMon =
       Moves: MoveData list
       /// Current PP for each move, parallel to Moves. Init from MoveData.Pp.
       Pp: int list
+      /// Held item constant from the party model, if any.
+      HeldItem: string option
       /// Non-volatile status condition.
       Status: StatusCondition
       AtkStage: int
@@ -269,6 +271,7 @@ module BattleMon =
           SpDefense = calcStat species.SpDefense level
           Moves = moves
           Pp = moves |> List.map (fun m -> m.Pp)
+          HeldItem = None
           Status = Healthy
           AtkStage = 0
           DefStage = 0

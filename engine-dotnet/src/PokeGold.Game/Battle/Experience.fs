@@ -14,6 +14,9 @@ module Experience =
     let moneyEarned (baseReward: int) (lastMonLevel: int) : int =
         baseReward * lastMonLevel
 
+    let applyAmuletCoin (hasAmuletCoin: bool) (reward: int) : int =
+        if hasAmuletCoin then reward * 2 else reward
+
     let private clampExp value = if value < 0 then 0 else value
 
     /// Total EXP needed to reach the given level for a growth rate (0-5).

@@ -76,7 +76,9 @@ module PartyMon =
                 Moves.tryByIndex moveId)
             |> List.truncate 4
         let bm = BattleMon.ofSpecies species mon.Level moveDatas
-        { bm with Hp = min mon.Hp bm.MaxHp }
+        { bm with
+            Hp = min mon.Hp bm.MaxHp
+            HeldItem = mon.HeldItem }
 
     /// Extract individual DVs from the packed int.
     /// Format: bits 15-12 = Atk, 11-8 = Def, 7-4 = Spd, 3-0 = Spc

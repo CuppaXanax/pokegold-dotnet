@@ -58,6 +58,17 @@ module Battle =
 
     let isOver (s: BattleState) : bool = s.Outcome.IsSome
 
+    let private heldItemData (m: BattleMon) =
+        m.HeldItem |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId)
+
+    let private heldEffect effect (m: BattleMon) =
+        heldItemData m |> Option.exists (fun item -> item.HeldEffect = effect)
+
+    let private heldParam effect (m: BattleMon) =
+        heldItemData m
+        |> Option.filter (fun item -> item.HeldEffect = effect)
+        |> Option.map (fun item -> item.Param)
+
     // -----------------------------------------------------------------------
     //  Turn phases (faithful to effect_commands.asm DoMove/DoTurn ordering)
     //
@@ -313,7 +324,7 @@ module Battle =
     ///   2. Weather (sandstorm chip, timer)      — stub (M13.8)
     ///   3. Wrap/Bind/Clamp chip                 — stub (M13.4)
     ///   4. Perish Song countdown                — stub (M13.8)
-    ///   5. Leftovers / items                    — stub (items scope)
+    ///   5. Leftovers / items                    — LEFTOVERS filled
     ///   6. Defrost (10% random thaw per turn)   — FILLED (M13.3)
     ///   7. Poison/Toxic tick (player then enemy) — FILLED (M13.3)
     ///   8. Burn tick (player then enemy)         — FILLED (M13.3)
@@ -367,6 +378,48 @@ module Battle =
             else
                 (m, [], rng')
         | _ -> (m, [], rng)
+
+    let private applyHeldItemResidual (m: BattleMon) : BattleMon * string list =
+        if BattleMon.isFainted m then (m, [])
+        else
+            match m.HeldItem with
+            | Some itemId ->
+                match Items.byId |> Map.tryFind itemId with
+                | Some item ->
+                    let consumeWith updated =
+                        { updated with HeldItem = None }, [ $"{m.Species.Name} ate {item.Name}!" ]
+
+                    match item.HeldEffect, m.Status, m.Volatile.Confusion with
+                    | "HELD_HEAL_POISON", Poison, _
+                    | "HELD_HEAL_POISON", BadPoison _, _ ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_PARALYZE", Paralysis, _ ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_BURN", Burn, _ ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_FREEZE", Freeze, _ ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_SLEEP", Sleep _, _ ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_CONFUSION", _, Some _ ->
+                        consumeWith { m with Volatile = { m.Volatile with Confusion = None } }
+                    | "HELD_HEAL_STATUS", status, _ when status <> Healthy ->
+                        consumeWith { m with Status = Healthy }
+                    | "HELD_HEAL_STATUS", _, Some _ ->
+                        consumeWith { m with Volatile = { m.Volatile with Confusion = None } }
+                    | _ ->
+                        match item.HeldEffect with
+                        | "HELD_LEFTOVERS" when m.Hp < m.MaxHp ->
+                            let heal = max 1 (m.MaxHp / 16)
+                            let healed = min m.MaxHp (m.Hp + heal)
+                            { m with Hp = healed }, [ $"{m.Species.Name} restored HP with {item.Name}!" ]
+                        | "HELD_BERRY" when m.Hp <= m.MaxHp / 2 ->
+                            let heal = max 1 item.Param
+                            let healed = min m.MaxHp (m.Hp + heal)
+                            { m with Hp = healed; HeldItem = None }, [ $"{m.Species.Name} ate {item.Name}!" ]
+                        | _ -> m, []
+                | _ -> m, []
+            | None -> m, []
 
     /// Future Sight payoff: countdown at end-of-turn and damage the foe on expiry.
     let private applyFutureSight (m: BattleMon) (other: BattleMon) : BattleMon * BattleMon * string list =
@@ -492,7 +545,11 @@ module Battle =
         ps <- { ps with PerishCounter = if pPer.IsSome && pPer.Value > 0 then pPer else None }
         es <- { es with PerishCounter = if ePer.IsSome && ePer.Value > 0 then ePer else None }
 
-        // Slot 5: Leftovers / items — stub (items scope)
+        // Slot 5: Leftovers / items.
+        let p', pItemMsgs = applyHeldItemResidual p
+        p <- p'; msgs <- msgs @ pItemMsgs
+        let e', eItemMsgs = applyHeldItemResidual e
+        e <- e'; msgs <- msgs @ eItemMsgs
 
         // Slot 6: Defrost.
         let p', pDefMsgs, r' = applyDefrost p r
@@ -657,10 +714,6 @@ module Battle =
             [ if playerStruggle then $"{s.Player.Species.Name} has no moves left!"
               if enemyStruggle then $"{s.Enemy.Species.Name} has no moves left!" ]
 
-        // Faster mon acts first; ties favour the player.
-        let playerFirst =
-            BattleMon.effectiveSpeed s.Player >= BattleMon.effectiveSpeed s.Enemy
-
         let mutable player = s.Player
         let mutable enemy = s.Enemy
         let mutable playerTeam = s.PlayerTeam
@@ -672,6 +725,37 @@ module Battle =
         let mutable enemySide = s.EnemySide
         let mutable msgs: string list = struggleMsgs
         let mutable outcome: Outcome option = None
+
+        let priorityOf (move: MoveData) =
+            if move.Effect = "EFFECT_PRIORITY_HIT" then 1 else 0
+
+        let quickClawCheck (mon: BattleMon) (rng: Rng) =
+            match heldParam "HELD_QUICK_CLAW" mon with
+            | Some chance ->
+                let roll, rng' = Rng.next rng
+                roll < chance, rng'
+            | None -> false, rng
+
+        let playerFirst =
+            let playerPriority = priorityOf playerMv
+            let enemyPriority = priorityOf enemyMv
+
+            if playerPriority <> enemyPriority then
+                playerPriority > enemyPriority
+            else
+                match heldEffect "HELD_QUICK_CLAW" player, heldEffect "HELD_QUICK_CLAW" enemy with
+                | true, false ->
+                    let activated, rng' = quickClawCheck player rng
+                    rng <- rng'
+                    if activated then msgs <- msgs @ [ $"{player.Species.Name}'s QUICK CLAW let it move first!" ]
+                    if activated then true else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
+                | false, true ->
+                    let activated, rng' = quickClawCheck enemy rng
+                    rng <- rng'
+                    if activated then msgs <- msgs @ [ $"{enemy.Species.Name}'s QUICK CLAW let it move first!" ]
+                    if activated then false else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
+                | _ ->
+                    BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
 
         // Run one side's action (pre-move gate -> execute -> PP deduct -> mid-turn faint check).
         let act (playerIsUser: bool) : bool =

@@ -98,6 +98,11 @@ let ``EXP gained from trainer battle has 1.5x multiplier`` () =
 let ``money earned from trainer`` () =
     Assert.Equal(25 * 20, Experience.moneyEarned 25 20)
 
+[<Fact>]
+let ``Amulet Coin doubles trainer reward`` () =
+    Assert.Equal(1000, Experience.applyAmuletCoin true (Experience.moneyEarned 25 20))
+    Assert.Equal(500, Experience.applyAmuletCoin false (Experience.moneyEarned 25 20))
+
 // --- Damage formula: worked examples (no crit, fixed roll) --------------------
 
 let private ty = TypeChart.value
@@ -133,6 +138,7 @@ let private mon name t1 t2 level hp atk def spd : BattleMon =
       SpDefense = def
       Moves = []
       Pp = []
+      HeldItem = None
       Status = Healthy
       AtkStage = 0
       DefStage = 0
@@ -206,6 +212,92 @@ let ``AI avoids immune moves`` () =
     let target = BattleMon.ofSpecies ghost 10 [ tackle ]
     Assert.True(BattleAI.scoreMove user target tackle < 0)
 
+[<Fact>]
+let ``PartyMon conversion preserves held item for battle`` () =
+    let partyMon = { PokeGold.Game.Player.PartyMon.create 155 10 with HeldItem = Some "LEFTOVERS" }
+    let battleMon = PokeGold.Game.Player.PartyMon.toBattleMon partyMon
+
+    Assert.Equal(Some "LEFTOVERS", battleMon.HeldItem)
+
+[<Fact>]
+let ``Leftovers heals at end of turn without being consumed`` () =
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "SNORLAX") 50 [ splash ] with
+            Hp = 80
+            MaxHp = 160
+            HeldItem = Some "LEFTOVERS" }
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(90, after.Player.Hp)
+    Assert.Equal(Some "LEFTOVERS", after.Player.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("LEFTOVERS"))
+
+[<Fact>]
+let ``Berry heals at half HP and is consumed`` () =
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ splash ] with
+            Hp = 40
+            MaxHp = 100
+            HeldItem = Some "BERRY" }
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(50, after.Player.Hp)
+    Assert.Equal(None, after.Player.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("ate BERRY"))
+
+[<Fact>]
+let ``status cure berry cures poison before residual damage and is consumed`` () =
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ splash ] with
+            Hp = 100
+            MaxHp = 100
+            Status = Poison
+            HeldItem = Some "PSNCUREBERRY" }
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(Healthy, after.Player.Status)
+    Assert.Equal(100, after.Player.Hp)
+    Assert.Equal(None, after.Player.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("PSNCUREBERRY"))
+
+[<Fact>]
+let ``Bitter Berry cures confusion and is consumed`` () =
+    let splash = Moves.byName "SPLASH"
+    let confused = { VolatileStatus.empty with Confusion = Some 3 }
+    let player =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 50 [ splash ] with
+            Volatile = confused
+            HeldItem = Some "BITTER_BERRY" }
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(None, after.Player.Volatile.Confusion)
+    Assert.Equal(None, after.Player.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("BITTER BERRY"))
+
+[<Fact>]
+let ``type boosting held item increases matching move damage`` () =
+    let ember = Moves.byName "EMBER"
+    let splash = Moves.byName "SPLASH"
+    let basePlayer = { mon "PLAYER" (ty "FIRE") (ty "FIRE") 30 300 80 80 100 with Moves = [ ember ]; Pp = [ ember.Pp ] }
+    let boostedPlayer = { basePlayer with HeldItem = Some "CHARCOAL" }
+    let enemy = { mon "ENEMY" (ty "GRASS") (ty "GRASS") 30 500 80 80 1 with Moves = [ splash ]; Pp = [ splash.Pp ] }
+
+    let normal = Battle.create basePlayer enemy 0u |> Battle.chooseMove 0
+    let boosted = Battle.create boostedPlayer enemy 0u |> Battle.chooseMove 0
+
+    Assert.True(boosted.Enemy.Hp < normal.Enemy.Hp, $"expected CHARCOAL to increase damage: normal hp={normal.Enemy.Hp}, boosted hp={boosted.Enemy.Hp}")
+
 // --- Turn loop ----------------------------------------------------------------
 
 let private strongHit = move "TACKLE" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
@@ -222,12 +314,55 @@ let ``the faster mon acts first`` () =
     Assert.Contains("FAST used", firstUse)
 
 [<Fact>]
+let ``Quick Claw lets a slower holder move first on a successful roll`` () =
+    let slow =
+        { mon "SLOW" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 10 with
+            Moves = [ strongHit ]
+            HeldItem = Some "QUICK_CLAW" }
+    let fast = { mon "FAST" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 99 with Moves = [ strongHit ] }
+    let state = Battle.create slow fast 0u
+    let after = Battle.chooseMove 0 state
+
+    Assert.Contains(after.Messages, fun m -> m.Contains("QUICK CLAW"))
+    let firstUse = after.Messages |> List.find (fun m -> m.Contains "used")
+    Assert.Contains("SLOW used", firstUse)
+
+[<Fact>]
+let ``priority moves act before Quick Claw checks`` () =
+    let quickAttack = { strongHit with Name = "QUICK_ATTACK"; Effect = "EFFECT_PRIORITY_HIT" }
+    let slow =
+        { mon "SLOW" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 10 with
+            Moves = [ quickAttack ] }
+    let fast =
+        { mon "FAST" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 99 with
+            Moves = [ strongHit ]
+            HeldItem = Some "QUICK_CLAW" }
+    let state = Battle.create slow fast 0u
+    let after = Battle.chooseMove 0 state
+
+    let firstUse = after.Messages |> List.find (fun m -> m.Contains "used")
+    Assert.Contains("SLOW used", firstUse)
+
+[<Fact>]
 let ``a lethal hit faints the enemy and wins the battle`` () =
     let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 200 200 200 with Moves = [ strongHit ] }
     let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 2 1 1 1 1 with Moves = [ strongHit ] }
     let after = Battle.create player enemy 7u |> Battle.chooseMove 0
     Assert.Equal(Some Win, after.Outcome)
     Assert.Contains(after.Messages, fun m -> m.Contains "fainted")
+
+[<Fact>]
+let ``Focus Band can leave the holder at 1 HP against lethal damage`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 200 200 200 with Moves = [ strongHit ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 2 10 1 1 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            HeldItem = Some "FOCUS_BAND" }
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(1, after.Enemy.Hp)
+    Assert.True(after.Outcome.IsNone)
+    Assert.Contains(after.Messages, fun m -> m.Contains("FOCUS BAND"))
 
 [<Fact>]
 let ``a stat-down move lowers the target's stage`` () =

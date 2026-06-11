@@ -64,6 +64,44 @@ module Effects =
         let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
         defenderSide.SafeguardTimer.IsSome && defenderSide.SafeguardTimer.Value > 0
 
+    let private heldTypeBoosts =
+        Map.ofList
+            [ "HELD_NORMAL_BOOST", "NORMAL"
+              "HELD_FIRE_BOOST", "FIRE"
+              "HELD_WATER_BOOST", "WATER"
+              "HELD_ELECTRIC_BOOST", "ELECTRIC"
+              "HELD_GRASS_BOOST", "GRASS"
+              "HELD_ICE_BOOST", "ICE"
+              "HELD_FIGHTING_BOOST", "FIGHTING"
+              "HELD_POISON_BOOST", "POISON"
+              "HELD_GROUND_BOOST", "GROUND"
+              "HELD_FLYING_BOOST", "FLYING"
+              "HELD_PSYCHIC_BOOST", "PSYCHIC"
+              "HELD_BUG_BOOST", "BUG"
+              "HELD_ROCK_BOOST", "ROCK"
+              "HELD_GHOST_BOOST", "GHOST"
+              "HELD_DRAGON_BOOST", "DRAGON"
+              "HELD_DARK_BOOST", "DARK"
+              "HELD_STEEL_BOOST", "STEEL" ]
+
+    let private applyHeldTypeBoost (ctx: MoveContext) (damage: int) =
+        if damage <= 0 then damage
+        else
+            match ctx.User.HeldItem |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId) with
+            | Some item ->
+                match Map.tryFind item.HeldEffect heldTypeBoosts with
+                | Some typeName when ctx.Move.Type = TypeChart.value typeName ->
+                    let pct = if item.Param > 0 then item.Param else 10
+                    max 1 (damage + damage * pct / 100)
+                | _ -> damage
+            | None -> damage
+
+    let private heldParam effect (m: BattleMon) =
+        m.HeldItem
+        |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId)
+        |> Option.filter (fun item -> item.HeldEffect = effect)
+        |> Option.map (fun item -> item.Param)
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -228,20 +266,29 @@ module Effects =
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
+            let dmg = applyHeldTypeBoost ctx dmg
             let dmg = damageToUserSide ctx dmg
             // Substitute absorbs damage (effect_commands.asm CheckSubstitute).
-            let foe, subBroke =
+            let foe, subBroke, focusMsgs, rng =
                 match ctx.Foe.Volatile.Substitute with
                 | Some subHp ->
                     let remaining = subHp - dmg
                     if remaining <= 0 then
                         let vol = { ctx.Foe.Volatile with Substitute = None }
-                        { ctx.Foe with Volatile = vol }, true
+                        { ctx.Foe with Volatile = vol }, true, [], ctx.Rng
                     else
                         let vol = { ctx.Foe.Volatile with Substitute = Some remaining }
-                        { ctx.Foe with Volatile = vol }, false
+                        { ctx.Foe with Volatile = vol }, false, [], ctx.Rng
                 | None ->
-                    { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false
+                    match heldParam "HELD_FOCUS_BAND" ctx.Foe with
+                    | Some chance when ctx.Foe.Hp > 1 && dmg >= ctx.Foe.Hp ->
+                        let roll, rng' = Rng.next ctx.Rng
+                        if roll < chance then
+                            { ctx.Foe with Hp = 1 }, false, [ $"{ctx.Foe.Species.Name} hung on with FOCUS BAND!" ], rng'
+                        else
+                            { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], rng'
+                    | _ ->
+                        { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], ctx.Rng
 
             let notes =
                 [ if ctx.Crit then "A critical hit!"
@@ -253,7 +300,7 @@ module Effects =
                       | _ -> ()
                   if subBroke then $"{foe.Species.Name}'s substitute faded!" ]
 
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+            { ctx with Foe = foe; Messages = ctx.Messages @ notes @ focusMsgs; LastDamage = dmg; Rng = rng }
 
         | Recoil ->
             // Recoil = 1/4 of damage dealt, min 1 HP.
