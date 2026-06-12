@@ -86,6 +86,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// Active `follow follower, leader` relationship.
     let mutable followPair: (ActorId * ActorId) option = None
     let mutable lastText: (string * string) option = None
+    let mutable hallOfFameCreditsShown = false
     let mutable askPhoneResult = 1
     let mutable menuResult = 0
     let mutable apricornResult: string option = None
@@ -991,11 +992,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
                     | HallOfFame ->
                         let hallOfFameCount = World.getVar "__hall_of_fame_count" world
+                        let allowCreditsSkip = hallOfFameCount > 0
                         world <-
                             world
                             |> World.setEvent "EVENT_BEAT_ELITE_FOUR"
                             |> World.setVar "__hall_of_fame_count" (hallOfFameCount + 1)
                             |> World.setVar "__credits_rolled" 1
+                            |> World.setVar "__hall_of_fame_credits_skip" (if allowCreditsSkip then 1 else 0)
                             |> World.setBuffer "__post_credits_spawn" "NewBarkTown"
                         player <- { player with Party = Heal.healParty player.Party }
                         pending <- Some(vm, effect)
@@ -1003,6 +1006,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let rendered = "Congratulations! You are the new Champion!<DONE>"
                         lastText <- Some("HallOfFame", rendered)
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
+                    | RollCredits ->
+                        world <- World.setVar "__credits_rolled" 1 world
+                        pending <- Some(vm, effect)
+                        let allowSkip = World.hasEvent "EVENT_BEAT_ELITE_FOUR" world
+                        stop (Push(CreditsScene(content, allowSkip) :> Scene))
                     | AskYesNo ->
                         pending <- Some(vm, effect)
                         stop (Push(YesNoScene(content.Font, fun r -> yesNoResult <- r) :> Scene))
@@ -1720,136 +1728,144 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 prevA <- buttons.A
                 prevStart <- buttons.Start
 
-                let value =
-                    match effect with
-                    | AskYesNo -> Some yesNoResult
-                    | OpenScriptMenu _ -> Some menuResult
-                    | SelectApricornForKurt ->
-                        match apricornResult with
-                        | Some apricorn ->
-                            this.RemoveItem apricorn 1
-                            Some(Apricorns.itemId apricorn)
-                        | None -> Some 0
-                    | DayCareResident _ -> dayCareResult
-                    | DayCareManOutside -> dayCareResult
-                    | DayCareMon _ -> None
-                    | MoveDeletion -> None
-                    | Haircut _ -> Some haircutResult
-                    | BillsGrandfather -> Some billsGrandfatherResult
-                    | CheckMagikarpLength -> Some magikarpLengthResult
-                    | MagikarpHouseSign -> None
-                    | UnownPuzzle _ -> Some unownPuzzleResult
-                    | UnownPrinter -> None
-                    | AskPhoneNumber phone ->
-                        if askPhoneResult = 0 then
-                            Some 2
-                        elif Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
-                            player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
-                            Some 0
-                        else
-                            Some 1
-                    | HallOfFame -> None
-                    | StartBattle ->
-                        let won = lastBattleOutcome = Some Win
-                        let isTrainer = stagedTrainer.IsSome
+                match effect with
+                | HallOfFame when not hallOfFameCreditsShown ->
+                    hallOfFameCreditsShown <- true
+                    pending <- Some(vm, effect)
+                    let allowSkip = World.getVar "__hall_of_fame_credits_skip" world <> 0
+                    Push(CreditsScene(content, allowSkip) :> Scene)
+                | _ ->
+                    let value =
+                        match effect with
+                        | RollCredits -> None
+                        | HallOfFame -> None
+                        | AskYesNo -> Some yesNoResult
+                        | OpenScriptMenu _ -> Some menuResult
+                        | SelectApricornForKurt ->
+                            match apricornResult with
+                            | Some apricorn ->
+                                this.RemoveItem apricorn 1
+                                Some(Apricorns.itemId apricorn)
+                            | None -> Some 0
+                        | DayCareResident _ -> dayCareResult
+                        | DayCareManOutside -> dayCareResult
+                        | DayCareMon _ -> None
+                        | MoveDeletion -> None
+                        | Haircut _ -> Some haircutResult
+                        | BillsGrandfather -> Some billsGrandfatherResult
+                        | CheckMagikarpLength -> Some magikarpLengthResult
+                        | MagikarpHouseSign -> None
+                        | UnownPuzzle _ -> Some unownPuzzleResult
+                        | UnownPrinter -> None
+                        | AskPhoneNumber phone ->
+                            if askPhoneResult = 0 then
+                                Some 2
+                            elif Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
+                                player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
+                                Some 0
+                            else
+                                Some 1
+                        | StartBattle ->
+                            let won = lastBattleOutcome = Some Win
+                            let isTrainer = stagedTrainer.IsSome
 
-                        if won then
-                            match player.Party with
-                            | lead :: rest when lead.Hp > 0 ->
-                                let enemyBaseExp, enemyLevel =
-                                    match stagedWild with
-                                    | Some(species, level) ->
-                                        let baseExp =
-                                            Species.all
-                                            |> Map.tryFind species
-                                            |> Option.map (fun stats -> stats.BaseExp)
-                                            |> Option.defaultValue 64
-                                        (baseExp, level)
-                                    | None ->
-                                        match stagedTrainer with
-                                        | Some(group, id) ->
-                                            match Trainers.lookupByName group id with
-                                            | Some trainer ->
-                                                let leadMon = trainer.Party |> List.tryHead
-                                                let baseExp =
-                                                    leadMon
-                                                    |> Option.bind (fun mon -> Map.tryFind mon.Species Species.all)
-                                                    |> Option.map (fun stats -> stats.BaseExp)
-                                                    |> Option.defaultValue 64
-                                                (baseExp, leadMon |> Option.map (fun mon -> mon.Level) |> Option.defaultValue 5)
+                            if won then
+                                match player.Party with
+                                | lead :: rest when lead.Hp > 0 ->
+                                    let enemyBaseExp, enemyLevel =
+                                        match stagedWild with
+                                        | Some(species, level) ->
+                                            let baseExp =
+                                                Species.all
+                                                |> Map.tryFind species
+                                                |> Option.map (fun stats -> stats.BaseExp)
+                                                |> Option.defaultValue 64
+                                            (baseExp, level)
+                                        | None ->
+                                            match stagedTrainer with
+                                            | Some(group, id) ->
+                                                match Trainers.lookupByName group id with
+                                                | Some trainer ->
+                                                    let leadMon = trainer.Party |> List.tryHead
+                                                    let baseExp =
+                                                        leadMon
+                                                        |> Option.bind (fun mon -> Map.tryFind mon.Species Species.all)
+                                                        |> Option.map (fun stats -> stats.BaseExp)
+                                                        |> Option.defaultValue 64
+                                                    (baseExp, leadMon |> Option.map (fun mon -> mon.Level) |> Option.defaultValue 5)
+                                                | None ->
+                                                    (64, match player.Party with h :: _ -> h.Level | [] -> 5)
                                             | None ->
                                                 (64, match player.Party with h :: _ -> h.Level | [] -> 5)
-                                        | None ->
-                                            (64, match player.Party with h :: _ -> h.Level | [] -> 5)
 
-                                let exp = Experience.expGained enemyBaseExp enemyLevel isTrainer
-                                let growthRate =
-                                    Species.all
-                                    |> Map.tryPick (fun _ stats -> if stats.Dex = lead.SpeciesId then Some stats.GrowthRate else None)
-                                    |> Option.defaultValue 0
-                                let newLevel, newExp = Experience.levelAfterExp growthRate lead.Level lead.Exp exp
-                                let newMaxHp = PartyMon.deriveMaxHp lead.SpeciesId newLevel
-                                let hpGain = newMaxHp - lead.MaxHp
-                                let updatedLead =
-                                    { lead with
-                                        Level = newLevel
-                                        Exp = newExp
-                                        MaxHp = newMaxHp
-                                        Hp = lead.Hp + hpGain }
+                                    let exp = Experience.expGained enemyBaseExp enemyLevel isTrainer
+                                    let growthRate =
+                                        Species.all
+                                        |> Map.tryPick (fun _ stats -> if stats.Dex = lead.SpeciesId then Some stats.GrowthRate else None)
+                                        |> Option.defaultValue 0
+                                    let newLevel, newExp = Experience.levelAfterExp growthRate lead.Level lead.Exp exp
+                                    let newMaxHp = PartyMon.deriveMaxHp lead.SpeciesId newLevel
+                                    let hpGain = newMaxHp - lead.MaxHp
+                                    let updatedLead =
+                                        { lead with
+                                            Level = newLevel
+                                            Exp = newExp
+                                            MaxHp = newMaxHp
+                                            Hp = lead.Hp + hpGain }
 
-                                let evolvedLead =
-                                    if newLevel > lead.Level then
-                                        match Evolution.checkLevelEvolution updatedLead with
-                                        | Some target ->
-                                            Evolution.applyEvolution target updatedLead
-                                        | None -> updatedLead
-                                    else updatedLead
+                                    let evolvedLead =
+                                        if newLevel > lead.Level then
+                                            match Evolution.checkLevelEvolution updatedLead with
+                                            | Some target ->
+                                                Evolution.applyEvolution target updatedLead
+                                            | None -> updatedLead
+                                        else updatedLead
 
-                                let learnedLead =
-                                    if newLevel > lead.Level then
-                                        MoveLearn.learnMovesForLevel evolvedLead
-                                    else
-                                        evolvedLead
+                                    let learnedLead =
+                                        if newLevel > lead.Level then
+                                            MoveLearn.learnMovesForLevel evolvedLead
+                                        else
+                                            evolvedLead
 
-                                player <- { player with Party = learnedLead :: rest }
+                                    player <- { player with Party = learnedLead :: rest }
 
-                                if isTrainer then
-                                    let baseReward =
-                                        match stagedTrainer with
-                                        | Some(group, id) ->
-                                            match Trainers.lookupByName group id with
-                                            | Some trainer ->
-                                                let lastMonLevel =
-                                                    trainer.Party
-                                                    |> List.tryLast
-                                                    |> Option.map (fun mon -> mon.Level)
-                                                    |> Option.defaultValue enemyLevel
-                                                Experience.moneyEarned trainer.BaseReward lastMonLevel
-                                            | None -> Experience.moneyEarned 25 enemyLevel
-                                        | None -> 0
+                                    if isTrainer then
+                                        let baseReward =
+                                            match stagedTrainer with
+                                            | Some(group, id) ->
+                                                match Trainers.lookupByName group id with
+                                                | Some trainer ->
+                                                    let lastMonLevel =
+                                                        trainer.Party
+                                                        |> List.tryLast
+                                                        |> Option.map (fun mon -> mon.Level)
+                                                        |> Option.defaultValue enemyLevel
+                                                    Experience.moneyEarned trainer.BaseReward lastMonLevel
+                                                | None -> Experience.moneyEarned 25 enemyLevel
+                                            | None -> 0
 
-                                    let hasAmuletCoin =
-                                        player.Party
-                                        |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
-                                    let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
-                                    player <- { player with Money = Money.give player.Money reward }
-                            | _ -> ()
-                        else
-                            // Lost: heal party, deduct half money
-                            player <- { player with
-                                            Party = Heal.healParty player.Party
-                                            Money = player.Money / 2 }
+                                        let hasAmuletCoin =
+                                            player.Party
+                                            |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
+                                        let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
+                                        player <- { player with Money = Money.give player.Money reward }
+                                | _ -> ()
+                            else
+                                // Lost: heal party, deduct half money
+                                player <- { player with
+                                                Party = Heal.healParty player.Party
+                                                Money = player.Money / 2 }
 
-                        stagedWild <- None
-                        stagedTrainer <- None
-                        stagedWinText <- ""
-                        stagedLossText <- ""
-                        lastBattleOutcome <- None
-                        Some (if won then 1 else 0)
-                    | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
-                    | _ -> None
+                            stagedWild <- None
+                            stagedTrainer <- None
+                            stagedWinText <- ""
+                            stagedLossText <- ""
+                            lastBattleOutcome <- None
+                            Some (if won then 1 else 0)
+                        | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
+                        | _ -> None
 
-                this.Drive(Script.resume value world vm)
+                    this.Drive(Script.resume value world vm)
             | None ->
                 let aPressed = buttons.A && not prevA
                 let startPressed = buttons.Start && not prevStart

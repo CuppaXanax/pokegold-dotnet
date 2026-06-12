@@ -76,6 +76,7 @@ let private tickSceneStackUntil (stack: ResizeArray<Scene>) maxFrames predicate 
         let buttons =
             match top.GetType().Name with
             | "BattleScene"
+            | "CreditsScene"
             | "TextBoxScene"
             | "YesNoScene" when frame % 2 = 0 -> press "a"
             | _ -> Buttons.none

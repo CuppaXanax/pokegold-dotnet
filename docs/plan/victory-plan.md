@@ -317,7 +317,7 @@ over `constants/collision_constants.asm`, text control codes, and trainer AI lay
 
 | Item | Now | Target |
 |---|---|---|
-| Credits | `Credits` command ends the script silently | a scrolling-text `CreditsScene` (data: `data/credits_*.asm`, sequencing: `engine/movie/credits.asm`); Red's battle and HoF both reach it |
+| ✅ Credits | `Credits` command ends the script silently | a scrolling-text `CreditsScene` (data: `data/credits_*.asm`, sequencing: `engine/movie/credits.asm`); Red's battle and HoF both reach it |
 | Battle move animations | none (instant resolution) | M25 in `plan.md` — parse `anim_*` scripts, ~30 primitives; biggest "feel" win for GitHub |
 | Screen fades | no-ops | palette lerp in scene shell (also closes the Fade* specials) |
 | Pokémon cries | silent | pitch/length-modulated base cry through the existing 4-channel synth (`audio/cries.asm`) |

@@ -16,6 +16,10 @@
     <EmbeddedResource Include="..\..\..\audio\drumkits.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\audio\notes.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\audio\wave_samples.asm" LinkBase="assets\audio" />
+    <EmbeddedResource Include="..\..\..\constants\credits_constants.asm" LinkBase="assets\constants" />
+    <EmbeddedResource Include="..\..\..\data\credits_script.asm" LinkBase="assets\data" />
+    <EmbeddedResource Include="..\..\..\data\credits_strings.asm" LinkBase="assets\data" />
+    <EmbeddedResource Include="..\..\..\data\credits_strings_pointers.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
     <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
   </ItemGroup>
@@ -175,6 +179,7 @@
     <Compile Include="Scenes\MainMenuScene.fs" />
     <Compile Include="Scenes\NamingScene.fs" />
     <Compile Include="Scenes\TitleScene.fs" />
+    <Compile Include="Scenes\CreditsScene.fs" />
     <Compile Include="Scenes\OverworldScene.fs" />
     <!-- Debug command pipe (T1): inspect/poke a running instance. -->
     <Compile Include="Debug\DebugChannel.fs" />

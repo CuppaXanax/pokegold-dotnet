@@ -2,6 +2,8 @@ module PokeGold.Tests.UiTests
 
 open Xunit
 open PokeGold.Game.Core
+open PokeGold.Game.Data
+open PokeGold.Game.Scenes
 open PokeGold.Game.Ui
 
 // ── MenuList ──────────────────────────────────────────────────────────────────
@@ -12,6 +14,24 @@ let ``MenuList create Count=0 yields cursor 0 top 0`` () =
     Assert.Equal(0, ml.Count)
     Assert.Equal(0, ml.Cursor)
     Assert.Equal(0, ml.Top)
+
+[<Fact>]
+let ``Credits script is parsed from the disassembly data`` () =
+    let pages = CreditsScript.pages.Value
+
+    Assert.True(pages.Length > 20)
+    Assert.Contains(pages.Head.Lines, fun line -> line.Contains("GOLD VERSION"))
+    Assert.Contains(pages, fun page -> page.TheEnd)
+
+[<Fact>]
+let ``Credits scene runs through the parsed script and exits on A after The End`` () =
+    let scene = CreditsScene(Content(), allowSkip = false) :> Scene
+    let totalFrames = CreditsScript.pages.Value |> List.sumBy (fun page -> page.Duration)
+
+    for _ in 1 .. totalFrames do
+        Assert.Equal(Stay, scene.Update Buttons.none)
+
+    Assert.Equal(Pop, scene.Update { Buttons.none with A = true })
 
 [<Fact>]
 let ``MenuList create Count<=Visible cursor stays at 0`` () =

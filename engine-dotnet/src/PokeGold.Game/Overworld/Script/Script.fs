@@ -165,6 +165,8 @@ type ScriptEffect =
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
+    /// The credits sequence, shared by Hall of Fame and Red's post-battle script.
+    | RollCredits
 
 /// The suspended state of a running script: where execution is paused and the
 /// call/return stack and scratch var that survive across a `resume`. Opaque to
@@ -556,7 +558,7 @@ module Script =
             | Halloffame ->
                 let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                 suspend (endLike vm) w HallOfFame
-            | Credits -> run (World.setVar "__credits_rolled" 1 world) (endLike vm)
+            | Credits -> suspend (endLike vm) (World.setVar "__credits_rolled" 1 world) RollCredits
             | Givemoney args -> suspend next world (GiveMoney(intArg args))
             | Takemoney args -> suspend next world (TakeMoney(intArg args))
             | Blackoutmod map ->
