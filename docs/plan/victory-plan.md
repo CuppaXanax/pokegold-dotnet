@@ -121,7 +121,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 
 | # | Leg | Key gates to assert |
 |---|---|---|
-| A1 | PlayersHouse2F → New Bark → Route 29 → Cherrygrove | bedroom→downstairs warp; Elm intro coord trigger; connection streaming both ways |
+| ✅ A1 | PlayersHouse2F → New Bark → Route 29 → Cherrygrove | bedroom→downstairs warp; Elm intro coord trigger; connection streaming both ways |
 | A2 | Cherrygrove → Route 30/31 → Violet City | Mr. Pokémon house warp; rival coord event on return |
 | A3 | Violet Gym → Falkner | gym warp; trainer sight-line battles; badge + TM31 |
 | A4 | Route 32 → Union Cave → Route 33 → Azalea | cave darkness not required (no Flash gate); Slowpoke Well grunt blocking |
