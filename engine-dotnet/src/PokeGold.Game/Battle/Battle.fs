@@ -372,6 +372,13 @@ module Battle =
             runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_METRONOME" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_MIMIC" && not isStruggle then
+            let hit, rng = checkHit user foe move rng battle.WeatherType
+            if hit then
+                runHit false Damage.MaxRoll rng
+            else
+                let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
         elif move.Effect = "EFFECT_CONVERSION2" && not isStruggle then
             let hit, rng = checkHit user foe move rng battle.WeatherType
             if hit then
@@ -1324,6 +1331,7 @@ module Battle =
                             if hit then
                                 match moveToUse.Effect with
                                 | "EFFECT_SKETCH"
+                                | "EFFECT_MIMIC"
                                 | "EFFECT_TRANSFORM" -> ()
                                 | "EFFECT_SLEEP_TALK"
                                 | "EFFECT_METRONOME" ->
@@ -1349,7 +1357,7 @@ module Battle =
                                         playerDamageTaken <- lastDamage
 
                             let user =
-                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" && moveToUse.Effect <> "EFFECT_METRONOME" && moveToUse.Effect <> "EFFECT_TRANSFORM" then
+                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_MIMIC" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" && moveToUse.Effect <> "EFFECT_METRONOME" && moveToUse.Effect <> "EFFECT_TRANSFORM" then
                                     { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
                                 else
                                     user
@@ -1363,7 +1371,13 @@ module Battle =
                             // Phase: deduct PP (Struggle does not consume PP --
                             // effect_commands.asm l.974: cp STRUGGLE; ret z)
                             let user =
-                                if isStruggle || (moveToUse.Effect = "EFFECT_SKETCH" && hit) || (moveToUse.Effect = "EFFECT_TRANSFORM" && user.Volatile.Transformed) then user
+                                let mimicSucceeded =
+                                    hit
+                                    && moveToUse.Effect = "EFFECT_MIMIC"
+                                    && mvIndexToUse < user.Moves.Length
+                                    && user.Moves.[mvIndexToUse].Name <> moveToUse.Name
+
+                                if isStruggle || (moveToUse.Effect = "EFFECT_SKETCH" && hit) || mimicSucceeded || (moveToUse.Effect = "EFFECT_TRANSFORM" && user.Volatile.Transformed) then user
                                 else BattleMon.deductPp mvIndexToUse user
                             let user, ppMsgs = restoreHeldPp user
                             msgs <- msgs @ ppMsgs

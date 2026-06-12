@@ -1068,11 +1068,18 @@ module Effects =
                     { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType resistantType} type!" ] }
 
         | MimicTargetMove ->
-            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Name <> ctx.Move.Name) with
-            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | Some copied ->
-                let user = replaceMove ctx.Move.Name copied ctx.User
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with LastMove = None; LastCounterMove = None } }
+            let fail () =
+                { ctx with User = user; Messages = ctx.Messages @ [ "But it failed!" ] }
+
+            match ctx.Foe.Volatile.LastCounterMove with
+            | Some copied
+                when not (isHiddenByCharging ctx.Foe)
+                     && copied.Name <> "STRUGGLE"
+                     && not (user.Moves |> List.exists (fun move -> move.Name = copied.Name)) ->
+                let user = replaceMove ctx.Move.Name copied user
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} learned {copied.Name} with Mimic!" ] }
+            | _ -> fail ()
 
         | SketchTargetMove ->
             let fail () =

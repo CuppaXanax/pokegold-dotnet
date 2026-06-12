@@ -287,6 +287,7 @@ Progress:
 - ✅ C1 batch 38: `EFFECT_CONVERSION2`.
 - ✅ C1 batch 39: `EFFECT_FORCE_SWITCH`.
 - ✅ C1 batch 40: `EFFECT_METRONOME`.
+- ✅ C1 batch 41: `EFFECT_MIMIC`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

@@ -407,7 +407,9 @@ let ``Mimic copies a target move into the user's move list with 5 PP`` () =
     let mimic = Moves.byName "MIMIC"
     let ember = Moves.byName "EMBER"
     let user = { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ mimic ] with Pp = [ 10 ] }
-    let foe = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 20 [ ember ]
+    let foe =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 20 [ ember ] with
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some ember } }
     let ctx =
         { User = user
           Foe = foe
@@ -4694,6 +4696,57 @@ let ``C40 Metronome records the sampled move instead of Metronome`` () =
     Assert.NotEqual<string>("METRONOME", after.Player.Volatile.LastMove.Value.Name)
     Assert.Equal(after.Player.Volatile.LastMove.Value.Name, after.Player.Volatile.LastCounterMove.Value.Name)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("Metronome called"))
+
+[<Fact>]
+let ``C41 Mimic copies the opponent last counter move with 5 PP and clears last-move state`` () =
+    let mimic = Moves.byName "MIMIC"
+    let tailWhip = Moves.byName "TAIL_WHIP"
+    let ember = Moves.byName "EMBER"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 300 120 100 200 with
+            Moves = [ mimic; tailWhip ]
+            Pp = [ mimic.Pp; tailWhip.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some mimic; LastCounterMove = Some mimic } }
+    let enemy =
+        { mon "ENEMY" (ty "FIRE") (ty "FIRE") 50 300 100 100 1 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some ember } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 0u)
+
+    Assert.Equal<string list>([ "EMBER"; "TAIL_WHIP" ], after.Player.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ 5; tailWhip.Pp ], after.Player.Pp)
+    Assert.True(after.Player.Volatile.LastMove.IsNone)
+    Assert.True(after.Player.Volatile.LastCounterMove.IsNone)
+
+[<Fact>]
+let ``C41 Mimic fails against hidden or already-known last counter moves`` () =
+    let mimic = Moves.byName "MIMIC"
+    let ember = Moves.byName "EMBER"
+    let fly = Moves.byName "FLY"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 300 120 100 200 with
+            Moves = [ mimic ]
+            Pp = [ mimic.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some mimic; LastCounterMove = Some mimic } }
+    let hiddenEnemy =
+        { mon "ENEMY" (ty "FIRE") (ty "FIRE") 50 300 100 100 1 with
+            Moves = [ fly; ember ]
+            Pp = [ fly.Pp; ember.Pp ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some ember; Charging = Some 1; ChargingMove = Some fly } }
+    let duplicatePlayer = { player with Moves = [ mimic; ember ]; Pp = [ mimic.Pp; ember.Pp ] }
+    let duplicateEnemy = { hiddenEnemy with Volatile = { VolatileStatus.empty with LastCounterMove = Some ember } }
+
+    let afterHidden = Battle.chooseMove 0 (Battle.create player hiddenEnemy 0u)
+    let afterDuplicate = Battle.chooseMove 0 (Battle.create duplicatePlayer duplicateEnemy 0u)
+
+    Assert.Equal<string list>([ "MIMIC" ], afterHidden.Player.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ mimic.Pp - 1 ], afterHidden.Player.Pp)
+    Assert.True(afterHidden.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Equal<string list>([ "MIMIC"; "EMBER" ], afterDuplicate.Player.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ mimic.Pp - 1; ember.Pp ], afterDuplicate.Player.Pp)
+    Assert.True(afterDuplicate.Player.Volatile.LastCounterMove.IsNone)
 
 [<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
