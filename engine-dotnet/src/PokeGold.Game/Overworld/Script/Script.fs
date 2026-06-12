@@ -134,6 +134,9 @@ type ScriptEffect =
     | MoveDeletion
     /// `special InitRoamMons` — seed the roaming beasts' persistent map state.
     | InitRoamMons
+    /// Haircut brothers' party picker/happiness special. Resume: 0 cancel, 1 egg,
+    /// 2/3/4 for slightly happier / happier / much happier.
+    | Haircut of brother: string
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
@@ -389,6 +392,8 @@ module Script =
             | Special "CheckFirstMonIsEgg" -> suspend next world CheckFirstMonIsEgg
             | Special "MoveDeletion" -> suspend next world MoveDeletion
             | Special "InitRoamMons" -> suspend next world InitRoamMons
+            | Special "OlderHaircutBrother" -> suspend next world (Haircut "OLDER")
+            | Special "YoungerHaircutBrother" -> suspend next world (Haircut "YOUNGER")
             | Special "MagnetTrain" ->
                 let destination =
                     if vm.ScriptVar = 0 then "SaffronMagnetTrainStation"

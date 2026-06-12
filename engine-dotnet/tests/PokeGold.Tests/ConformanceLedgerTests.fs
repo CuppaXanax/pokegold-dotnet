@@ -122,6 +122,9 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "MagnetTrain" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B5 tests cover script-var direction routing and PASS-gated Saffron-to-Goldenrod runtime travel through the station officer script."
 
+          yield! many ScriptSpecial FaithfulTested [ SideSystem; RequiredFor100Percent ] "B6 tests cover day-gated Goldenrod Underground runtime scripts, party selection, symbolic price parsing, money deduction, and friendship gains for both haircut brothers."
+            [ "OlderHaircutBrother"; "YoungerHaircutBrother" ]
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -133,9 +136,9 @@ module ConformanceLedger =
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
-              "MagikarpHouseSign"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
+              "MagikarpHouseSign"; "MrChrono"; "NameRater"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
-              "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
+              "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 

@@ -90,6 +90,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable menuResult = 0
     let mutable apricornResult: string option = None
     let mutable dayCareResult: int option = None
+    let mutable haircutResult = 0
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -615,6 +616,36 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             |> setIf "ENGINE_DAY_CARE_MAN_HAS_MON" player.DayCare.Mon1.IsSome
             |> setIf "ENGINE_DAY_CARE_LADY_HAS_MON" player.DayCare.Mon2.IsSome
 
+    member private _.ApplyHaircut (brother: string) (partyIndex: int) =
+        let mon = List.item partyIndex player.Party
+
+        if Breeding.isEgg mon then
+            haircutResult <- 1
+        else
+            let roll = encounterRng.Next(100)
+
+            let result, deltas =
+                match brother with
+                | "YOUNGER" when roll < 60 -> 2, (1, 1, 1)
+                | "YOUNGER" when roll < 90 -> 3, (3, 3, 1)
+                | "YOUNGER" -> 4, (10, 10, 4)
+                | _ when roll < 30 -> 2, (1, 1, 1)
+                | _ when roll < 80 -> 3, (3, 3, 1)
+                | _ -> 4, (5, 5, 2)
+
+            let delta =
+                let low, mid, high = deltas
+                if mon.Friendship < 100 then low
+                elif mon.Friendship < 200 then mid
+                else high
+
+            let updated = { mon with Friendship = min 255 (mon.Friendship + delta) }
+            let party =
+                player.Party
+                |> List.mapi (fun i existing -> if i = partyIndex then updated else existing)
+            player <- { player with Party = party }
+            haircutResult <- result
+
     member private _.SyncBattleParty (battle: BattleState) =
         lastBattleOutcome <- battle.Outcome
         let statusCode (status: StatusCondition) : string =
@@ -884,6 +915,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | MoveDeletion ->
                         pending <- Some(vm, effect)
                         stop (Push(MoveDeletionScene(content, player, fun p -> player <- p) :> Scene))
+                    | Haircut brother ->
+                        pending <- Some(vm, effect)
+                        haircutResult <- 0
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onSelect = (fun idx ->
+                                        this.ApplyHaircut brother idx
+                                        Pop)) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -1412,6 +1455,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | DayCareManOutside -> dayCareResult
                     | DayCareMon _ -> None
                     | MoveDeletion -> None
+                    | Haircut _ -> Some haircutResult
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

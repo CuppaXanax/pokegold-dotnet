@@ -325,3 +325,53 @@ let ``magnet train officer gates on pass and warps Saffron to Goldenrod`` () =
         tickStack stack buttons
 
     Assert.True(completed (), "PASS-holder boarding in Saffron should arrive at Goldenrod Magnet Train Station.")
+
+let private runHaircutBrother x y weekday initialMoney expectedMoney =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "GoldenrodUnderground" x y Left)
+
+    let cyndaquil = { PartyMon.create 155 10 with Friendship = 70 }
+    let world = World.empty |> World.setVar "VAR_WEEKDAY" weekday
+    let player =
+        { PlayerStateOps.initial with
+            Money = initialMoney
+            Party = [ cyndaquil ] }
+
+    overworld.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        stack.Count = 1
+        && overworld.CanCapture
+        && World.hasFlag "ENGINE_GOLDENROD_UNDERGROUND_GOT_HAIRCUT" overworld.DebugWorld
+        && overworld.DebugPlayer.Money = expectedMoney
+        && overworld.DebugPlayer.Party.Head.Friendship > 70
+
+    let mutable frame = 0
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene"
+            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "Haircut brother should complete one paid haircut and increase friendship.")
+
+[<Fact>]
+let ``older haircut brother charges money and raises selected mon friendship`` () =
+    runHaircutBrother 8 14 2 1000 500
+
+[<Fact>]
+let ``younger haircut brother charges money and raises selected mon friendship`` () =
+    runHaircutBrother 8 15 3 1000 700

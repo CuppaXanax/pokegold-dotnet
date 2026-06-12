@@ -85,6 +85,25 @@ let ``strict parser resolves symbolic numeric constants and scene ids`` () =
     )
 
 [<Fact>]
+let ``parser resolves symbolic money amounts`` () =
+    let prog =
+        ScriptParser.parseTextWithConstants
+            Map.empty
+            "DEF TEST_PRICE EQU 500\n\
+             \n\
+             S:\n\
+             \tcheckmoney YOUR_MONEY, TEST_PRICE\n\
+             \ttakemoney YOUR_MONEY, TEST_PRICE\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Checkmoney [ "YOUR_MONEY"; "500" ]
+          Takemoney [ "YOUR_MONEY"; "500" ]
+          End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
 let ``strict parser skips macro definitions instead of parsing their bodies`` () =
     let prog =
         ScriptParser.parseTextWithConstants
@@ -728,6 +747,19 @@ let ``MagnetTrain routes by script var direction`` () =
 
     Assert.Equal<ScriptEffect list>([ ScriptEffect.Warp("SaffronMagnetTrainStation", 11, 6, Some "UP") ], toSaffron)
     Assert.Equal<ScriptEffect list>([ ScriptEffect.Warp("GoldenrodMagnetTrainStation", 11, 6, Some "UP") ], toGoldenrod)
+
+[<Fact>]
+let ``haircut brother specials emit party picker effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial OlderHaircutBrother\n\
+             \tspecial YoungerHaircutBrother\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>([ Haircut "OLDER"; Haircut "YOUNGER" ], effects)
 
 [<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =

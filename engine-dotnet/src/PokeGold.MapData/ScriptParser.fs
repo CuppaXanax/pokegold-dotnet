@@ -160,6 +160,11 @@ module ScriptParser =
         let arg n = List.tryItem n args |> Option.defaultValue ""
         let lbl n = qualify g (arg n)
         let i n = intArg strict constants (arg n)
+        let moneyArgs () =
+            match args with
+            | [] -> [ "0" ]
+            | [ _ ] -> [ string (i 0) ]
+            | account :: _ -> [ account; string (i (args.Length - 1)) ]
 
         match mn with
         // control flow
@@ -203,9 +208,9 @@ module ScriptParser =
         | "writecmdqueue" -> Some(Writecmdqueue args)
         | "conditional_event" -> Some(ConditionalEvent args)
         | "endifjustbattled" -> Some Endifjustbattled
-        | "checkmoney" -> Some(Checkmoney args)
-        | "takemoney" -> Some(Takemoney args)
-        | "givemoney" -> Some(Givemoney args)
+        | "checkmoney" -> Some(Checkmoney(moneyArgs ()))
+        | "takemoney" -> Some(Takemoney(moneyArgs ()))
+        | "givemoney" -> Some(Givemoney(moneyArgs ()))
         | "checkcoins" -> Some(Checkcoins(if args.Length > 0 then Some(i 0) else None))
         | "takecoins" -> Some(Takecoins(if args.Length > 0 then Some(i 0) else None))
         | "givecoins" -> Some(Givecoins(if args.Length > 0 then Some(i 0) else None))
