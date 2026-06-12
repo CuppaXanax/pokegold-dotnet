@@ -321,3 +321,101 @@ let ``A3 Falkner gives ZephyrBadge and TM31 after battle`` () =
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE",
                 "ZEPHYRBADGE should be set")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A4 — Route 32 → Union Cave → Route 33 → Azalea
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A4 Route32 south warp enters UnionCave1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route32 warp 4 at (6,79) leads to UnionCave1F warp 4 at (17,3).
+    driver.Apply(Warp("Route32", 6, 78, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "UnionCave1F"), 100)
+
+    Assert.Equal("UnionCave1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A4 UnionCave1F south exit reaches Route33`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // UnionCave1F warp 3 at (17,31) leads to Route33 warp 1 at (11,9).
+    driver.Apply(Warp("UnionCave1F", 17, 30, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "Route33"), 100)
+
+    Assert.Equal("Route33", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A4 Route33 west connection enters AzaleaTown`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route33 is 20×18 cells. AzaleaTown is WEST of Route33 (offset 0).
+    // Probe several y values to find the walkable path at the west edge.
+    let mutable crossed = false
+    for tryY in [ 10; 11; 12; 13; 14; 15; 8; 9; 6; 7 ] do
+        if not crossed then
+            let d = GameDriver()
+            d.Apply(StartNewGame "A")
+            d.Apply(Warp("Route33", 2, tryY, Some Left))
+            for _ in 1 .. 6 do d.Step Left
+            if owMap d.Snapshot = "AzaleaTown" then
+                crossed <- true
+                d.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route33 west edge into AzaleaTown at any tested y")
+
+[<Fact>]
+let ``A4 AzaleaTown Slowpoke Well warp loads SlowpokeWellB1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // AzaleaTown warp 6 at (31,7) leads to SlowpokeWellB1F warp 1.
+    driver.Apply(Warp("AzaleaTown", 31, 8, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "SlowpokeWellB1F"), 100)
+
+    Assert.Equal("SlowpokeWellB1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A4 Slowpoke Well rocket grunts are present before well is cleared`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Grunt objects use SPRITE_ROCKET, gated by EVENT_SLOWPOKE_WELL_ROCKETS.
+    // On fresh save the event is clear → grunts should be visible.
+    driver.Apply(Warp("SlowpokeWellB1F", 10, 10, Some Down))
+
+    let ow = owOf driver.Snapshot
+    let visibleGrunts =
+        ow.Actors |> List.filter (fun a -> a.Visible && a.Sprite.Contains("ROCKET"))
+
+    Assert.True(visibleGrunts.Length >= 2,
+        sprintf "Expected ≥2 visible grunts, found %d. Actors: %s"
+            visibleGrunts.Length
+            (ow.Actors |> List.map (fun a -> sprintf "%s(vis=%b)" a.Sprite a.Visible) |> String.concat ", "))
+
+    // After clearing the well, grunts should disappear on a fresh load
+    let d2 = GameDriver()
+    d2.Apply(StartNewGame "A")
+    d2.Apply(SetEvent("EVENT_SLOWPOKE_WELL_ROCKETS", true))
+    d2.Apply(Warp("SlowpokeWellB1F", 10, 10, Some Down))
+
+    let ow2 = owOf d2.Snapshot
+    let visibleGruntsAfter =
+        ow2.Actors |> List.filter (fun a -> a.Visible && a.Sprite.Contains("ROCKET"))
+
+    Assert.Equal(0, visibleGruntsAfter.Length)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
