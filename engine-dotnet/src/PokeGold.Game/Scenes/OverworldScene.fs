@@ -303,6 +303,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
         state.Player.CellX + dx, state.Player.CellY + dy
 
+    member private _.PlayerTerrainWalkable (cx: int) (cy: int) =
+        let footWalkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors cx cy
+        if footWalkable then
+            true
+        elif World.getVar "__surfing" world = 1 then
+            MapConnections.collisionId state.Map state.Collision state.Neighbors cx cy
+            |> FieldMoves.isSurfWater
+        else
+            false
+
     member private this.UseFieldMove(moveName: string) : Transition =
         let x, y = this.FacingCell()
         let targetColl = MapConnections.collisionId state.Map state.Collision state.Neighbors x y
@@ -1389,7 +1399,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     let playerBefore = state.Player
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCell leader)
-                    state <- OverworldState.tick (fun i _ -> isObjectPresent i) buttons state
+                    state <- OverworldState.tickWithPlayerWalkable (Some this.PlayerTerrainWalkable) (fun i _ -> isObjectPresent i) buttons state
                     let after = state.Player.CellX, state.Player.CellY
                     let completedTranslation =
                         match playerBefore.Motion with

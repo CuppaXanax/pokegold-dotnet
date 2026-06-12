@@ -107,7 +107,7 @@ module FieldMoves =
     let private isCutTree collId =
         collId = CollCutTree || collId = CollCutTree1A
 
-    let private isSurfWater collId =
+    let isSurfWater collId =
         [ CollSurf; CollWater21; CollWhirlpool; CollWhirlpool2C; CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]
         |> List.contains collId
 

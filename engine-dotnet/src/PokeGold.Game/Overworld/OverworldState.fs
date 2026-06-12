@@ -199,8 +199,14 @@ module OverworldState =
     /// `visible` reports whether an object is currently present (event-flag gated):
     /// only visible objects are solid, wander, and animate — a hidden object neither
     /// renders (scene-side) nor blocks the player, so there are no invisible walls.
-    let tick (visible: int -> NpcObject -> bool) (buttons: Buttons) (s: OverworldState) : OverworldState =
+    let tickWithPlayerWalkable
+        (playerTerrainWalkable: (int -> int -> bool) option)
+        (visible: int -> NpcObject -> bool)
+        (buttons: Buttons)
+        (s: OverworldState)
+        : OverworldState =
         let walkable = MapConnections.cellWalkable s.Map s.Collision s.Neighbors
+        let playerTerrainWalkable = playerTerrainWalkable |> Option.defaultValue walkable
         let collId = MapConnections.collisionId s.Map s.Collision s.Neighbors
 
         // Only present objects participate in collision and stepping. Hidden ones are
@@ -211,7 +217,7 @@ module OverworldState =
         // (or is stepping out of). Ledge hops still don't re-validate the landing,
         // matching GSC — an NPC on a ledge-landing cell won't stop a jump.
         let npcCells = ObjectStep.occupiedCells activeNpcs
-        let playerWalkable cx cy = walkable cx cy && not (Set.contains (struct (cx, cy)) npcCells)
+        let playerWalkable cx cy = playerTerrainWalkable cx cy && not (Set.contains (struct (cx, cy)) npcCells)
 
         let player = Movement.stepWith playerWalkable collId buttons s.Player
         let camX, camY = Camera.followExt s.Map s.Neighbors player
@@ -249,6 +255,9 @@ module OverworldState =
             CamX = camX
             CamY = camY
             Npcs = npcs }
+
+    let tick (visible: int -> NpcObject -> bool) (buttons: Buttons) (s: OverworldState) : OverworldState =
+        tickWithPlayerWalkable None visible buttons s
 
     /// If the player has walked off the current map into a connected neighbour,
     /// rebuild the overworld as that neighbour with the player rebased to the

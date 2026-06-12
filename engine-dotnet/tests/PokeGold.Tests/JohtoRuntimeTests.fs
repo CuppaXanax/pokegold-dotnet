@@ -1,16 +1,44 @@
 module PokeGold.Tests.JohtoRuntimeTests
 
 open Xunit
+open PokeGold.Game.Audio
 open PokeGold.Game.Core
+open PokeGold.Game.Data
 open PokeGold.Game.Debug
+open PokeGold.Game.Overworld
+open PokeGold.Game.Player
+open PokeGold.Game.Scenes
 open PokeGold.Tests.GameDriver
 open PokeGold.Tests.RuntimeInvariants
+
+module ScriptWorld = PokeGold.Game.Overworld.Script.World
+
+type private SilentSound() =
+    interface ISoundBoard with
+        member _.PlayMusic _ = ()
+        member _.PlaySfx _ = ()
+        member _.PlayJingle _ = ()
+        member _.StopMusic() = ()
 
 let private press button =
     match button with
     | "a" -> { Buttons.none with A = true }
     | "b" -> { Buttons.none with B = true }
     | _ -> Buttons.none
+
+let private directionButton direction =
+    match direction with
+    | Up -> { Buttons.none with Up = true }
+    | Down -> { Buttons.none with Down = true }
+    | Left -> { Buttons.none with Left = true }
+    | Right -> { Buttons.none with Right = true }
+
+let private directionDelta direction =
+    match direction with
+    | Up -> 0, -1
+    | Down -> 0, 1
+    | Left -> -1, 0
+    | Right -> 1, 0
 
 [<Fact>]
 let ``Goldenrod Flower Shop runtime gate gives SquirtBottle after PlainBadge`` () =
@@ -717,3 +745,166 @@ let ``A8 EcruteakCity Burned Tower warp loads BurnedTower1F`` () =
 
     Assert.Equal("BurnedTower1F", owMap snap)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A9 — Morty; Routes 38/39; Olivine lighthouse climb; Surf to Cianwood
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A9 Route38 west connection enters Route39`` () =
+    let mutable crossed = false
+
+    for tryY in [ 8; 9; 10; 11; 12 ] do
+        if not crossed then
+            let driver = GameDriver()
+            driver.Apply(StartNewGame "A")
+            driver.Apply(Warp("Route38", 2, tryY, Some Left))
+
+            for _ in 1 .. 6 do
+                driver.Step Left
+
+            if owMap driver.Snapshot = "Route39" then
+                crossed <- true
+                driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route38 west edge into Route39")
+
+[<Fact>]
+let ``A9 Route39 south connection enters OlivineCity`` () =
+    let mutable crossed = false
+
+    for tryY in [ 31; 32; 33; 34 ] do
+        for tryX in [ 0 .. 19 ] do
+            if not crossed then
+                let driver = GameDriver()
+                driver.Apply(StartNewGame "A")
+                driver.Apply(Warp("Route39", tryX, tryY, Some Down))
+
+                for _ in 1 .. 8 do
+                    driver.Step Down
+
+                if owMap driver.Snapshot = "OlivineCity" then
+                    crossed <- true
+                    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route39 south edge into OlivineCity")
+
+[<Fact>]
+let ``A9 OlivineCity lighthouse door loads OlivineLighthouse1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // OlivineCity warp 9 at (29,27) -> OlivineLighthouse1F.
+    driver.Apply(Warp("OlivineCity", 29, 26, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "OlivineLighthouse1F"), 100)
+
+    Assert.Equal("OlivineLighthouse1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A9 Olivine lighthouse stair chain reaches 6F`` () =
+    let assertWarp fromMap startX startY dir expectedMap =
+        let driver = GameDriver()
+        driver.Apply(StartNewGame "A")
+        driver.Apply(Warp(fromMap, startX, startY, Some dir))
+        driver.Step dir
+
+        let snap =
+            driver.RunUntil((fun s -> owMap s = expectedMap), 100)
+
+        Assert.Equal(expectedMap, owMap snap)
+        driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    assertWarp "OlivineLighthouse1F" 3 12 Up "OlivineLighthouse2F"
+    assertWarp "OlivineLighthouse2F" 5 4 Up "OlivineLighthouse3F"
+    assertWarp "OlivineLighthouse3F" 13 4 Up "OlivineLighthouse4F"
+    assertWarp "OlivineLighthouse4F" 3 6 Up "OlivineLighthouse5F"
+    assertWarp "OlivineLighthouse5F" 9 14 Down "OlivineLighthouse6F"
+
+[<Fact>]
+let ``A9 Route40 water blocks walking until Surf is used`` () =
+    let content = Content()
+    let probe = OverworldState.loadById content "Route40"
+    let directions = [ Down; Up; Left; Right ]
+    let npcAt cx cy =
+        probe.Npcs |> Array.exists (fun npc -> npc.CellX = cx && npc.CellY = cy)
+
+    let x, y, facing =
+        seq {
+            for cy in 0 .. probe.Map.Height * 2 - 1 do
+                for cx in 0 .. probe.Map.Width * 2 - 1 do
+                    if Movement.cellWalkable probe.Map probe.Collision cx cy && not (npcAt cx cy) then
+                        for dir in directions do
+                            let dx, dy = directionDelta dir
+                            let coll = Movement.collisionIdAtCell probe.Map probe.Collision (cx + dx) (cy + dy)
+
+                            if FieldMoves.isSurfWater coll && not (npcAt (cx + dx) (cy + dy)) then
+                                yield cx, cy, dir
+        }
+        |> Seq.tryHead
+        |> Option.defaultWith (fun () -> failwith "expected Route40 to have land facing surf water")
+
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "Route40" x y facing)
+
+    let mon =
+        { PartyMon.create 155 10 with
+            Moves = MoveLearn.tryLearnMove "SURF" [] }
+
+    let player = { PlayerStateOps.initial with Party = [ mon ] }
+    let world = ScriptWorld.empty |> ScriptWorld.setFlag "ENGINE_FOGBADGE"
+    scene.Restore(world, player)
+
+    let buttons = directionButton facing
+    let visible _ _ = true
+    let route40 = OverworldState.loadByIdAt content "Route40" x y facing
+
+    let blockedState =
+        (route40, [ 1 .. 16 ])
+        ||> List.fold (fun state _ -> OverworldState.tickWithPlayerWalkable None visible buttons state)
+
+    Assert.Equal((x, y), (blockedState.Player.CellX, blockedState.Player.CellY))
+
+    match (scene :> Scene).Update { Buttons.none with A = true } with
+    | Push (:? TextBoxScene) -> ()
+    | other -> failwithf "expected Surf prompt text, got %A" other
+
+    Assert.Equal(1, ScriptWorld.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal("SURF", ScriptWorld.getBuffer "__last_field_move" scene.DebugWorld)
+
+    let surfWalkable cx cy =
+        if MapConnections.cellWalkable route40.Map route40.Collision route40.Neighbors cx cy then
+            true
+        else
+            MapConnections.collisionId route40.Map route40.Collision route40.Neighbors cx cy
+            |> FieldMoves.isSurfWater
+
+    let surfedState =
+        (route40, [ 1 .. 16 ])
+        ||> List.fold (fun state _ -> OverworldState.tickWithPlayerWalkable (Some surfWalkable) visible buttons state)
+
+    let dx, dy = directionDelta facing
+    Assert.Equal((x + dx, y + dy), (surfedState.Player.CellX, surfedState.Player.CellY))
+
+[<Fact>]
+let ``A9 Route41 west connection enters CianwoodCity while surfing`` () =
+    let mutable crossed = false
+
+    for tryY in [ 20; 24; 28; 32; 36; 40; 44 ] do
+        if not crossed then
+            let driver = GameDriver()
+            driver.Apply(StartNewGame "A")
+            driver.Apply(SetVar("__surfing", 1))
+            driver.Apply(Warp("Route41", 2, tryY, Some Left))
+
+            for _ in 1 .. 8 do
+                driver.Step Left
+
+            if owMap driver.Snapshot = "CianwoodCity" then
+                crossed <- true
+                driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route41 west edge into CianwoodCity while surfing")
