@@ -7,6 +7,7 @@ open PokeGold.Game.Data
 open PokeGold.Game.Debug
 open PokeGold.Game.Overworld
 open PokeGold.Game.Player
+open PokeGold.Game.Save
 open PokeGold.Game.Scenes
 open PokeGold.Tests.GameDriver
 open PokeGold.Tests.RuntimeInvariants
@@ -1236,4 +1237,226 @@ let ``A10 MahoganyMart1F Lance scene uncovers Rocket staircase`` () =
     Assert.True(ow.Events |> List.contains "EVENT_UNCOVERED_STAIRCASE_IN_MAHOGANY_MART",
                 "Mahogany Mart Lance scene should uncover the Rocket staircase")
     Assert.Equal(Some 0, ow.Scenes |> Map.tryFind "MAHOGANY_MART_1F")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A11 — Rocket Hideout B1-B2; Pryce; Radio Tower takeover
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A11 MahoganyMart hidden stairs load TeamRocketBaseB1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_UNCOVERED_STAIRCASE_IN_MAHOGANY_MART", true))
+    // MahoganyMart1F hidden-stair warp at (7,3) -> TeamRocketBaseB1F.
+    driver.Apply(Warp("MahoganyMart1F", 7, 4, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "TeamRocketBaseB1F"), 100)
+
+    Assert.Equal("TeamRocketBaseB1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 TeamRocketBaseB1F stairs load TeamRocketBaseB2F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // TeamRocketBaseB1F warp 2 at (3,14) -> TeamRocketBaseB2F.
+    driver.Apply(Warp("TeamRocketBaseB1F", 3, 15, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "TeamRocketBaseB2F"), 100)
+
+    Assert.Equal("TeamRocketBaseB2F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 TeamRocketBaseB1F security camera starts Rocket battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("TeamRocketBaseB1F", 0))
+    driver.Apply(SetEvent("EVENT_SECURITY_CAMERA_1", false))
+    driver.Apply(SetEvent("EVENT_TEAM_ROCKET_BASE_POPULATION", false))
+    // SecurityCamera1a coord event at (24,2); step in from the west.
+    driver.Apply(Warp("TeamRocketBaseB1F", 23, 2, Some Right))
+
+    driver.Step Right
+
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+
+    while frame < 3000 && not sawBattle do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Security camera should alert before the Rocket battle")
+    Assert.True(sawBattle, "Security camera should start a Rocket battle")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 TeamRocketBaseB2F Lance heal coord sets Rocket boss scene`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("TeamRocketBaseB2F", 0))
+    driver.Apply(SetEvent("EVENT_LANCE_HEALED_YOU_IN_TEAM_ROCKET_BASE", false))
+    driver.Apply(SetEvent("EVENT_TEAM_ROCKET_BASE_B2F_LANCE", false))
+    // LanceHealsScript1 coord event at (5,14); step in from the west.
+    driver.Apply(Warp("TeamRocketBaseB2F", 4, 14, Some Right))
+
+    driver.Step Right
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_LANCE_HEALED_YOU_IN_TEAM_ROCKET_BASE"
+            && (ow.Scenes |> Map.tryFind "TEAM_ROCKET_BASE_B2F" = Some 1)
+        | None -> false
+
+    advanceRuntimeUntil driver 3000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_LANCE_HEALED_YOU_IN_TEAM_ROCKET_BASE",
+                "Lance should heal the player at the B2F coord event")
+    Assert.Equal(Some 1, ow.Scenes |> Map.tryFind "TEAM_ROCKET_BASE_B2F")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 TeamRocketBaseB2F Electrode starts battle in transmitter room`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("TeamRocketBaseB2F", 2))
+    driver.Apply(SetEvent("EVENT_TEAM_ROCKET_BASE_B2F_ELECTRODE_1", false))
+    // Electrode 1 at (7,5); stand south facing up.
+    driver.Apply(Warp("TeamRocketBaseB2F", 7, 6, Some Up))
+
+    driver.Talk()
+
+    let mutable sawBattle = false
+    let mutable frame = 0
+
+    while frame < 2000 && not sawBattle do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" when frame % 2 = 0 -> press "a"
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawBattle, "Electrode should start a battle in the transmitter room")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 Rocket Base mid-arc save round-trip preserves B2F scene and flags`` () =
+    let content = Content()
+    let state = OverworldState.loadByIdAt content "TeamRocketBaseB2F" 14 11 Down
+
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setScene "TeamRocketBaseB2F" 2
+        |> ScriptWorld.setEvent "EVENT_BEAT_ROCKET_EXECUTIVEF_2"
+        |> ScriptWorld.setEvent "EVENT_TEAM_ROCKET_BASE_B2F_ELECTRODE_1"
+        |> ScriptWorld.setFlag "ENGINE_ROCKET_SIGNAL_ON_CH20"
+
+    let player = { PlayerStateOps.initial with Name = "GOLD" }
+
+    let save =
+        SaveData.captureWith state world player
+        |> SaveFile.serialize
+        |> SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "Rocket Base checkpoint save should deserialize")
+
+    let restored = SaveData.apply content save
+    let restoredWorld = SaveData.worldOf save
+
+    Assert.Equal("TeamRocketBaseB2F", restored.MapId)
+    Assert.Equal((14, 11), (restored.Player.CellX, restored.Player.CellY))
+    Assert.Equal(Down, restored.Player.Facing)
+    Assert.Equal(2, ScriptWorld.getScene "TeamRocketBaseB2F" restoredWorld)
+    Assert.True(ScriptWorld.hasEvent "EVENT_BEAT_ROCKET_EXECUTIVEF_2" restoredWorld)
+    Assert.True(ScriptWorld.hasEvent "EVENT_TEAM_ROCKET_BASE_B2F_ELECTRODE_1" restoredWorld)
+    Assert.True(ScriptWorld.hasFlag "ENGINE_ROCKET_SIGNAL_ON_CH20" restoredWorld)
+    Assert.Equal("GOLD", (SaveData.playerOf save).Name)
+
+[<Fact>]
+let ``A11 Pryce gives GlacierBadge and TM16 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_BEAT_PRYCE", true))
+    driver.Apply(SetFlag("ENGINE_GLACIERBADGE", true))
+    // Pryce at (5,3); stand south facing up.
+    driver.Apply(Warp("MahoganyGym", 5, 4, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM16_ICY_WIND"
+        | None -> false
+
+    advanceRuntimeUntil driver 2000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_GLACIERBADGE",
+                "GLACIERBADGE should be set after Pryce")
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM16_ICY_WIND",
+                "Pryce should give TM16 ICY WIND after the badge")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A11 RadioTower5F Rocket boss coord starts takeover battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetFlag("ENGINE_ROCKETS_IN_RADIO_TOWER", true))
+    driver.Apply(SetEvent("EVENT_RADIO_TOWER_ROCKET_TAKEOVER", false))
+    driver.Apply(SetScene("RadioTower5F", 1))
+    // RadioTower5F boss coord event at (16,5); step in from the south.
+    driver.Apply(Warp("RadioTower5F", 16, 6, Some Up))
+
+    driver.Step Up
+
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+
+    while frame < 3000 && not sawBattle do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Radio Tower boss coord should show takeover text before battle")
+    Assert.True(sawBattle, "Radio Tower boss coord should start the takeover battle")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
