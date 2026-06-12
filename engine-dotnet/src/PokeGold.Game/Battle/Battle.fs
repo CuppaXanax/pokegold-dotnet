@@ -569,15 +569,16 @@ module Battle =
             let other' = { other with Hp = healed }
             (seeded', other', [ $"{seeded.Species.Name}'s health is sapped by Leech Seed!" ])
 
-    let private applyRampage (m: BattleMon) : BattleMon * string list =
+    let private applyRampage (m: BattleMon) (rng: Rng) : BattleMon * string list * Rng =
         match m.Volatile.Rampage with
         | Some turns when turns > 1 ->
             let vol = { m.Volatile with Rampage = Some (turns - 1) }
-            ({ m with Volatile = vol }, [ $"{m.Species.Name} is still rampaging!" ])
+            ({ m with Volatile = vol }, [ $"{m.Species.Name} is still rampaging!" ], rng)
         | Some _ ->
-            let vol = { m.Volatile with Rampage = None; Confusion = Some 2 }
-            ({ m with Volatile = vol }, [ $"{m.Species.Name} became confused after rampaging!" ])
-        | None -> (m, [])
+            let roll, rng = Rng.next rng
+            let vol = { m.Volatile with Rampage = None; Confusion = Some (2 + (roll &&& 1)) }
+            ({ m with Volatile = vol }, [ $"{m.Species.Name} became confused after rampaging!" ], rng)
+        | None -> (m, [], rng)
 
     let private applyWeather (m: BattleMon) : BattleMon * string list =
         if BattleMon.isFainted m then (m, [])
@@ -669,10 +670,10 @@ module Battle =
         p <- p'; e <- e'; msgs <- msgs @ eSeedMsgs
 
         // Slot 9: Rampage auto-confuse.
-        let p', pRampMsgs = applyRampage p
-        p <- p'; msgs <- msgs @ pRampMsgs
-        let e', eRampMsgs = applyRampage e
-        e <- e'; msgs <- msgs @ eRampMsgs
+        let p', pRampMsgs, r' = applyRampage p r
+        p <- p'; r <- r'; msgs <- msgs @ pRampMsgs
+        let e', eRampMsgs, r' = applyRampage e r
+        e <- e'; r <- r'; msgs <- msgs @ eRampMsgs
 
         // Slot 10: Nightmare — chips sleeping targets MaxHP/4 per turn.
         if p.Volatile.Nightmare then
@@ -958,6 +959,9 @@ module Battle =
                 let forcedMoveIndex =
                     match if playerIsUser then forcedPlayerMoveIndex else forcedEnemyMoveIndex with
                     | Some index -> Some index
+                    | None when user.Volatile.Rampage.IsSome ->
+                        user.Volatile.LastMove
+                        |> Option.bind (fun lastMove -> user.Moves |> List.tryFindIndex (fun candidate -> candidate.Name = lastMove.Name))
                     | None when user.Volatile.EncoreTimer.IsSome -> user.Volatile.EncoreMoveIndex
                     | None -> None
 

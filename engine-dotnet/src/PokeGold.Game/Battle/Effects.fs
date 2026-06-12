@@ -1123,8 +1123,13 @@ module Effects =
             { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} must recharge!" ] }
 
         | BeginRampage ->
-            let user = { ctx.User with Volatile = { ctx.User.Volatile with Rampage = Some 2 } }
-            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} is locked into a rampage!" ] }
+            if ctx.User.Volatile.Rampage.IsSome || ctx.User.Status <> Healthy then
+                ctx
+            else
+                let roll, rng = Rng.next ctx.Rng
+                let turns = (roll &&& 1) + 2
+                let user = { ctx.User with Volatile = { ctx.User.Volatile with Rampage = Some turns } }
+                { ctx with User = user; Rng = rng; Messages = ctx.Messages @ [ $"{user.Species.Name} is locked into a rampage!" ] }
 
         | BeginFutureSight ->
             if ctx.User.Volatile.FutureSightCounter.IsSome then

@@ -282,9 +282,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C27 BattleTests audit OHKO's lower-level failure, type-immunity failure, modified accuracy, and runtime command-owned hit logic against BattleCommand_OHKO."
             [ "EFFECT_OHKO" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C28 BattleTests audit Rampage's random lock duration, forced locked move, no-reset locked turns, and two-or-three-turn confusion expiry against BattleCommand_CheckRampage and BattleCommand_Rampage."
+            [ "EFFECT_RAMPAGE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_RAMPAGE"
-              "EFFECT_SKETCH"
+            [ "EFFECT_SKETCH"
               "EFFECT_SLEEP_TALK"; "EFFECT_SPITE"
               "EFFECT_TELEPORT"; "EFFECT_THIEF"
               "EFFECT_TRANSFORM"

@@ -4029,6 +4029,46 @@ let ``C27 OHKO runtime bypasses generic accuracy and lets OHKO command own hit l
     Assert.Contains(after.Messages, fun msg -> msg.Contains("one-hit KO"))
 
 [<Fact>]
+let ``C28 Rampage forces the locked move on later turns`` () =
+    let thrash = { Moves.byName "THRASH" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 200 with
+            Moves = [ thrash; splash ]
+            Pp = [ thrash.Pp; splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let afterFirst = Battle.chooseMove 0 (Battle.create player enemy 61u)
+    let enemyHpAfterFirst = afterFirst.Enemy.Hp
+    let afterSecond = Battle.chooseMove 1 afterFirst
+
+    Assert.Contains(afterSecond.Messages, fun msg -> msg.Contains("PLAYER used THRASH"))
+    Assert.True(afterSecond.Enemy.Hp < enemyHpAfterFirst)
+
+[<Fact>]
+let ``C28 Rampage expires into two-or-three-turn confusion without restarting`` () =
+    let thrash = { Moves.byName "THRASH" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 200 with
+            Moves = [ thrash; splash ]
+            Pp = [ thrash.Pp; splash.Pp ]
+            Volatile = { VolatileStatus.empty with Rampage = Some 1; LastMove = Some thrash } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let after = Battle.chooseMove 1 (Battle.create player enemy 67u)
+
+    Assert.True(after.Player.Volatile.Rampage.IsNone)
+    Assert.True(after.Player.Volatile.Confusion.Value = 2 || after.Player.Volatile.Confusion.Value = 3)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("became confused after rampaging"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50
