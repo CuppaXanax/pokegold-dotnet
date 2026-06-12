@@ -366,6 +366,8 @@ module Battle =
             runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_OHKO" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_TRANSFORM" && not isStruggle then
+            runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType
@@ -1246,7 +1248,8 @@ module Battle =
 
                             if hit then
                                 match moveToUse.Effect with
-                                | "EFFECT_SKETCH" -> ()
+                                | "EFFECT_SKETCH"
+                                | "EFFECT_TRANSFORM" -> ()
                                 | "EFFECT_SLEEP_TALK" ->
                                     match user.Volatile.LastCounterMove with
                                     | Some called ->
@@ -1270,7 +1273,7 @@ module Battle =
                                         playerDamageTaken <- lastDamage
 
                             let user =
-                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" then
+                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" && moveToUse.Effect <> "EFFECT_TRANSFORM" then
                                     { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
                                 else
                                     user
@@ -1284,7 +1287,7 @@ module Battle =
                             // Phase: deduct PP (Struggle does not consume PP --
                             // effect_commands.asm l.974: cp STRUGGLE; ret z)
                             let user =
-                                if isStruggle || (moveToUse.Effect = "EFFECT_SKETCH" && hit) then user
+                                if isStruggle || (moveToUse.Effect = "EFFECT_SKETCH" && hit) || (moveToUse.Effect = "EFFECT_TRANSFORM" && user.Volatile.Transformed) then user
                                 else BattleMon.deductPp mvIndexToUse user
                             let user, ppMsgs = restoreHeldPp user
                             msgs <- msgs @ ppMsgs

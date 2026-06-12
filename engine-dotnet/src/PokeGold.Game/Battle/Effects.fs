@@ -215,6 +215,11 @@ module Effects =
           "MIRAGE_MAIL" ]
         |> Set.ofList
 
+    let private isHiddenByCharging (m: BattleMon) =
+        m.Volatile.Charging.IsSome
+        && (m.Volatile.ChargingMove
+            |> Option.exists (fun move -> move.Effect = "EFFECT_FLY" || move.Effect = "EFFECT_DIG"))
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -966,26 +971,34 @@ module Effects =
             { ctx with Foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with Foresight = true } }; Messages = ctx.Messages @ [ "was identified!" ] }
 
         | TransformIntoTarget ->
-            let transformed =
-                { ctx.User with
-                    Species = ctx.Foe.Species
-                    Attack = ctx.Foe.Attack
-                    Defense = ctx.Foe.Defense
-                    Speed = ctx.Foe.Speed
-                    SpAttack = ctx.Foe.SpAttack
-                    SpDefense = ctx.Foe.SpDefense
-                    Moves = ctx.Foe.Moves
-                    Pp = ctx.Foe.Moves |> List.map (fun _ -> 5)
-                    AtkStage = ctx.Foe.AtkStage
-                    DefStage = ctx.Foe.DefStage
-                    SpdStage = ctx.Foe.SpdStage
-                    SpAtkStage = ctx.Foe.SpAtkStage
-                    SpDefStage = ctx.Foe.SpDefStage
-                    AccStage = ctx.Foe.AccStage
-                    EvaStage = ctx.Foe.EvaStage
-                    Volatile = { ctx.User.Volatile with Transformed = true } }
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with LastMove = None; LastCounterMove = None } }
+            if ctx.Foe.Volatile.Transformed || isHiddenByCharging ctx.Foe then
+                { ctx with User = user; Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let transformed =
+                    { user with
+                        Species = ctx.Foe.Species
+                        Attack = ctx.Foe.Attack
+                        Defense = ctx.Foe.Defense
+                        Speed = ctx.Foe.Speed
+                        SpAttack = ctx.Foe.SpAttack
+                        SpDefense = ctx.Foe.SpDefense
+                        Moves = ctx.Foe.Moves
+                        Pp = ctx.Foe.Moves |> List.map (fun move -> if move.Name = "SKETCH" then 1 else 5)
+                        AtkStage = ctx.Foe.AtkStage
+                        DefStage = ctx.Foe.DefStage
+                        SpdStage = ctx.Foe.SpdStage
+                        SpAtkStage = ctx.Foe.SpAtkStage
+                        SpDefStage = ctx.Foe.SpDefStage
+                        AccStage = ctx.Foe.AccStage
+                        EvaStage = ctx.Foe.EvaStage
+                        Volatile =
+                            { user.Volatile with
+                                Transformed = true
+                                DisableTimer = None
+                                DisabledMoveIndex = None } }
 
-            { ctx with User = transformed; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} transformed into {ctx.Foe.Species.Name}!" ] }
+                { ctx with User = transformed; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} transformed into {ctx.Foe.Species.Name}!" ] }
 
         | StartBide ->
             if ctx.User.Volatile.BideTurns.IsSome then

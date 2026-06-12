@@ -300,9 +300,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C33 BattleTests audit Thief's post-damage held-item transfer, user-already-holding gate, target-no-item gate, and mail exclusion against BattleCommand_Thief and ItemIsMail."
             [ "EFFECT_THIEF" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C34 BattleTests audit Transform's target-transformed/hidden failure gates, ClearLastMove behavior, Disable reset, stat/stage/move copy, and Sketch-vs-other copied PP initialization against BattleCommand_Transform."
+            [ "EFFECT_TRANSFORM" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_TRANSFORM"
-              "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
+            [ "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
 
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."

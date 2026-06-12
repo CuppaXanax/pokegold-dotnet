@@ -4346,6 +4346,75 @@ let ``C33 Thief does not steal mail or when the user already holds an item`` () 
     Assert.Equal(Some "GOLD_BERRY", afterAlreadyHolding.Enemy.HeldItem)
 
 [<Fact>]
+let ``C34 Transform copies target data clears Disable and initializes copied PP`` () =
+    let transform = Moves.byName "TRANSFORM"
+    let sketch = Moves.byName "SKETCH"
+    let tackle = Moves.byName "TACKLE"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "DITTO") 30 [ transform; splash ] with
+            Speed = 200
+            Volatile =
+                { VolatileStatus.empty with
+                    DisableTimer = Some 4
+                    DisabledMoveIndex = Some 1
+                    LastMove = Some transform
+                    LastCounterMove = Some transform } }
+    let enemy =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 12 [ sketch; tackle ] with
+            Speed = 1
+            AtkStage = 2
+            DefStage = 1
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 139u)
+
+    Assert.Equal("CYNDAQUIL", after.Player.Species.Name)
+    Assert.Equal<string>([ "SKETCH"; "TACKLE" ], after.Player.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int>([ 1; 5 ], after.Player.Pp)
+    Assert.True(after.Player.Volatile.Transformed)
+    Assert.True(after.Player.Volatile.DisableTimer.IsNone)
+    Assert.True(after.Player.Volatile.DisabledMoveIndex.IsNone)
+    Assert.True(after.Player.Volatile.LastMove.IsNone)
+    Assert.True(after.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Equal(2, after.Player.AtkStage)
+    Assert.Equal(1, after.Player.DefStage)
+
+[<Fact>]
+let ``C34 Transform fails against transformed or hidden targets and clears last move`` () =
+    let transform = Moves.byName "TRANSFORM"
+    let fly = Moves.byName "FLY"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "DITTO") 30 [ transform ] with
+            Speed = 200
+            Volatile = { VolatileStatus.empty with LastMove = Some transform; LastCounterMove = Some transform } }
+    let transformedEnemy =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 12 [ Moves.byName "TACKLE" ] with
+            Speed = 1
+            Status = Sleep 2
+            Volatile = { VolatileStatus.empty with Transformed = true } }
+
+    let afterTransformed = Battle.chooseMove 0 (Battle.create player transformedEnemy 149u)
+    Assert.Equal("DITTO", afterTransformed.Player.Species.Name)
+    Assert.False(afterTransformed.Player.Volatile.Transformed)
+    Assert.True(afterTransformed.Player.Volatile.LastMove.IsNone)
+    Assert.True(afterTransformed.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Equal(transform.Pp - 1, afterTransformed.Player.Pp.[0])
+
+    let hiddenEnemy =
+        { transformedEnemy with
+            Moves = [ fly ]
+            Pp = [ fly.Pp ]
+            Volatile = { VolatileStatus.empty with Charging = Some 1; ChargingMove = Some fly } }
+
+    let afterHidden = Battle.chooseMove 0 (Battle.create player hiddenEnemy 151u)
+    Assert.Equal("DITTO", afterHidden.Player.Species.Name)
+    Assert.False(afterHidden.Player.Volatile.Transformed)
+    Assert.True(afterHidden.Player.Volatile.LastMove.IsNone)
+    Assert.True(afterHidden.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Contains(afterHidden.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

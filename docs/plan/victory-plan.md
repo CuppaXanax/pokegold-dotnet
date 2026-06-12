@@ -280,6 +280,7 @@ Progress:
 - ✅ C1 batch 31: `EFFECT_SPITE`.
 - ✅ C1 batch 32: `EFFECT_TELEPORT`.
 - ✅ C1 batch 33: `EFFECT_THIEF`.
+- ✅ C1 batch 34: `EFFECT_TRANSFORM`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 
