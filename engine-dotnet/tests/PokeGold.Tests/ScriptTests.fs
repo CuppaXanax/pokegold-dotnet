@@ -782,6 +782,28 @@ let ``game corner specials emit game and prize dex effects`` () =
         effects)
 
 [<Fact>]
+let ``bug contest specials emit contest effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial GiveParkBalls\n\
+             \tspecial ContestDropOffMons\n\
+             \tspecial BugContestJudging\n\
+             \tspecial ContestReturnMons\n\
+             \tspecial CheckPartyFullAfterContest\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ GiveParkBalls
+          ContestDropOffMons
+          BugContestJudging
+          ContestReturnMons
+          CheckPartyFullAfterContest ],
+        effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

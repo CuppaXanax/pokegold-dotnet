@@ -171,6 +171,86 @@ let ``checkcoins returns HAVE_LESS for insufficient coins`` () =
     Assert.Equal(50, scene.DebugPlayer.Coins)
 
 [<Fact>]
+let ``contest drop off masks party to lead mon`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ContestDropOffScene"
+            [| Special "ContestDropOffMons"; End |]
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 155 10; PartyMon.create 158 10 ] }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    Assert.Equal<int list>([ 155 ], scene.DebugPlayer.Party |> List.map (fun mon -> mon.SpeciesId))
+
+[<Fact>]
+let ``bug contest judging gives first place for Scyther or Pinsir`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ContestJudgingScene"
+            [| Special "BugContestJudging"
+               Ifequal(1, "Won")
+               End
+               Setevent "EVENT_TEST_BUG_CONTEST_WIN"
+               End |]
+
+    let state =
+        { state with
+            Script = { state.Script with Labels = Map.add "Won" 3 state.Script.Labels } }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty |> World.setVar "__bug_contest_caught_species" 123, PlayerStateOps.initial)
+
+    Assert.True(World.hasEvent "EVENT_TEST_BUG_CONTEST_WIN" scene.DebugWorld)
+
+[<Fact>]
+let ``check party full after contest reports caught mon and removes park balls`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ContestCaughtScene"
+            [| Special "CheckPartyFullAfterContest"
+               Ifequal(0, "Caught")
+               End
+               Setevent "EVENT_TEST_CONTEST_CAUGHT"
+               End |]
+
+    let state =
+        { state with
+            Script = { state.Script with Labels = Map.add "Caught" 3 state.Script.Labels } }
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 123 14 ]
+            Bag = Bag.add "PARK_BALL" 20 PlayerStateOps.initial.Bag }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty |> World.setVar "__bug_contest_caught_species" 123, player)
+
+    Assert.True(World.hasEvent "EVENT_TEST_CONTEST_CAUGHT" scene.DebugWorld)
+    Assert.Equal(0, Bag.count "PARK_BALL" scene.DebugPlayer.Bag)
+
+[<Fact>]
 let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
     let content = Content()
     let state =

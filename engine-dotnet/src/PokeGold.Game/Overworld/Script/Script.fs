@@ -146,6 +146,12 @@ type ScriptEffect =
     | NameRival
     /// `special NameRater` — pick an owned party mon and rename it.
     | NameRater
+    /// Bug-Catching Contest setup/result helpers.
+    | GiveParkBalls
+    | ContestDropOffMons
+    | ContestReturnMons
+    | BugContestJudging
+    | CheckPartyFullAfterContest
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -232,6 +238,18 @@ module Script =
           "ENGINE_MARSHBADGE"
           "ENGINE_VOLCANOBADGE"
           "ENGINE_EARTHBADGE" ]
+
+    let private bugContestantFlags =
+        [ "EVENT_BUG_CATCHING_CONTESTANT_1A"
+          "EVENT_BUG_CATCHING_CONTESTANT_2A"
+          "EVENT_BUG_CATCHING_CONTESTANT_3A"
+          "EVENT_BUG_CATCHING_CONTESTANT_4A"
+          "EVENT_BUG_CATCHING_CONTESTANT_5A"
+          "EVENT_BUG_CATCHING_CONTESTANT_6A"
+          "EVENT_BUG_CATCHING_CONTESTANT_7A"
+          "EVENT_BUG_CATCHING_CONTESTANT_8A"
+          "EVENT_BUG_CATCHING_CONTESTANT_9A"
+          "EVENT_BUG_CATCHING_CONTESTANT_10A" ]
 
     let private readVar (name: string) (world: World) =
         match name with
@@ -386,6 +404,22 @@ module Script =
             | Special "PokemonCenterPC" -> suspend next world OpenPc
             | Special "NameRival" -> suspend next world NameRival
             | Special "NameRater" -> suspend next world NameRater
+            | Special "GiveParkBalls" -> suspend next world GiveParkBalls
+            | Special "ContestDropOffMons" -> suspend next world ContestDropOffMons
+            | Special "ContestReturnMons" -> suspend next world ContestReturnMons
+            | Special "BugContestJudging" -> suspend next world BugContestJudging
+            | Special "CheckPartyFullAfterContest" -> suspend next world CheckPartyFullAfterContest
+            | Special "SelectRandomBugContestContestants" ->
+                let cleared =
+                    bugContestantFlags
+                    |> List.fold (fun w flag -> World.clearEvent flag w) world
+
+                let selected =
+                    bugContestantFlags
+                    |> List.truncate 5
+                    |> List.fold (fun w flag -> World.setEvent flag w) cleared
+
+                run selected next
             | Special "SetDayOfWeek" -> suspend next world SetDayOfWeek
             | Special "InitialSetDSTFlag" -> suspend next world (SetDstFlag true)
             | Special "InitialClearDSTFlag" -> suspend next world (SetDstFlag false)

@@ -91,6 +91,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable apricornResult: string option = None
     let mutable dayCareResult: int option = None
     let mutable haircutResult = 0
+    let mutable contestPartyBackup: PartyMon list option = None
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -698,6 +699,44 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             player <- { player with Party = party }
 
+    member private _.GiveParkBallsForContest() =
+        world <-
+            world
+            |> World.setVar "wParkBallsRemaining" 20
+            |> World.setVar "__bug_contest_caught_species" 0
+        player <- { player with Bag = Bag.add "PARK_BALL" 20 player.Bag }
+
+    member private _.ContestDropOffMons() =
+        match player.Party with
+        | lead :: rest when lead.Hp > 0 ->
+            contestPartyBackup <- Some rest
+            player <- { player with Party = [ lead ] }
+            0
+        | _ -> 1
+
+    member private _.ContestReturnMons() =
+        match contestPartyBackup with
+        | Some rest ->
+            player <- { player with Party = (player.Party @ rest) |> List.truncate BoxOps.partyLength }
+            contestPartyBackup <- None
+        | None -> ()
+
+    member private _.BugContestJudgingResult() =
+        match World.getVar "__bug_contest_caught_species" world with
+        | 123
+        | 127 -> 1
+        | species when species > 0 -> 3
+        | _ -> 0
+
+    member private _.CheckPartyFullAfterContest() =
+        player <- { player with Bag = Bag.remove "PARK_BALL" 99 player.Bag }
+
+        match World.getVar "__bug_contest_caught_species" world with
+        | 0 -> 2
+        | species ->
+            if player.Party |> List.exists (fun mon -> mon.SpeciesId = species) then 0
+            else 1
+
     member private _.SyncBattleParty (battle: BattleState) =
         lastBattleOutcome <- battle.Outcome
         let statusCode (status: StatusCondition) : string =
@@ -758,6 +797,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             { player with
                 DexSeen = Set.add mon.Species.Dex player.DexSeen
                 DexOwn = Set.add mon.Species.Dex player.DexOwn }
+
+        if World.hasFlag "ENGINE_BUG_CONTEST_TIMER" world then
+            world <- World.setVar "__bug_contest_caught_species" mon.Species.Dex world
 
         if updatedPlayer.Party.Length < BoxOps.partyLength then
             player <- { updatedPlayer with Party = updatedPlayer.Party @ [ captured ] }
@@ -1043,6 +1085,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | RegisterPrizeDex dex ->
                         this.RegisterPrizeDex dex
                         resume None vm
+                    | GiveParkBalls ->
+                        this.GiveParkBallsForContest()
+                        resume None vm
+                    | ContestDropOffMons ->
+                        resume (Some(this.ContestDropOffMons())) vm
+                    | ContestReturnMons ->
+                        this.ContestReturnMons()
+                        resume None vm
+                    | BugContestJudging ->
+                        resume (Some(this.BugContestJudgingResult())) vm
+                    | CheckPartyFullAfterContest ->
+                        resume (Some(this.CheckPartyFullAfterContest())) vm
                     | AddPhoneContact phone ->
                         if Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
                             player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }
