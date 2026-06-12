@@ -82,6 +82,20 @@ let private tickSceneStackUntil (stack: ResizeArray<Scene>) maxFrames predicate 
 
         top.Update buttons |> applyTransition stack
 
+let private holdSceneStack (stack: ResizeArray<Scene>) buttons frames =
+    for _ in 1..frames do
+        let top = stack.[stack.Count - 1]
+        top.Update buttons |> applyTransition stack
+
+let private sceneStackAt mapId x y facing world player =
+    let content = Content()
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content mapId x y facing)
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    scene, stack
+
 [<Fact>]
 let ``Goldenrod Flower Shop runtime gate gives SquirtBottle after PlainBadge`` () =
     let driver = GameDriver()
@@ -2051,3 +2065,155 @@ let ``A14 HallOfFame scene heals party rolls credits marker and persists post-ga
     Assert.Equal("NewBarkTown", ScriptWorld.getBuffer "__post_credits_spawn" savedWorld)
     Assert.Equal(injured.MaxHp, savedLead.Hp)
     Assert.Equal("", savedLead.Status)
+
+[<Fact>]
+let ``A15 Elm awards SS Ticket after HallOfFame`` () =
+    let postHallOfFameWorld =
+        ScriptWorld.empty
+        |> ScriptWorld.setEvent "EVENT_BEAT_ELITE_FOUR"
+        |> ScriptWorld.setEvent "EVENT_COP_IN_ELMS_LAB"
+        |> ScriptWorld.setScene "ElmsLab" 2
+
+    let scene, stack =
+        sceneStackAt "ElmsLab" 5 3 Up postHallOfFameWorld PlayerStateOps.initial
+
+    // ElmsLab.asm: ProfElmScript jumps to ElmGiveTicketScript after EVENT_BEAT_ELITE_FOUR.
+    holdSceneStack stack (press "a") 2
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && ScriptWorld.hasEvent "EVENT_GOT_SS_TICKET_FROM_ELM" scene.DebugWorld
+        && Bag.count "S_S_TICKET" scene.DebugPlayer.Bag = 1
+
+    tickSceneStackUntil stack 3000 completed
+
+    Assert.True(completed (), "Elm should give S.S.TICKET after Hall of Fame and set EVENT_GOT_SS_TICKET_FROM_ELM")
+
+[<Fact>]
+let ``A15 Olivine Port sailor blocks gangway without SS Ticket`` () =
+    let postHallOfFamePortWorld =
+        ScriptWorld.empty
+        |> ScriptWorld.setEvent "EVENT_BEAT_ELITE_FOUR"
+        |> ScriptWorld.setEvent "EVENT_OLIVINE_PORT_SPRITES_BEFORE_HALL_OF_FAME"
+        |> ScriptWorld.clearEvent "EVENT_OLIVINE_PORT_SPRITES_AFTER_HALL_OF_FAME"
+
+    let scene, stack =
+        sceneStackAt
+            "OlivinePort"
+            7
+            14
+            Down
+            postHallOfFamePortWorld
+            PlayerStateOps.initial
+
+    // OlivinePort.asm: coord_event 7,15 asks for the S.S.TICKET before the gangway warp.
+    holdSceneStack stack (directionButton Down) 20
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && scene.DebugState.MapId = "OlivinePort"
+        && scene.DebugState.Player.CellX = 8
+        && scene.DebugState.Player.CellY = 15
+
+    tickSceneStackUntil stack 3000 completed
+
+    Assert.True(completed (), "Sailor should move the player away instead of boarding without S.S.TICKET")
+    Assert.Equal(0, Bag.count "S_S_TICKET" scene.DebugPlayer.Bag)
+
+[<Fact>]
+let ``A15 Olivine Port ticket path boards first Fast Ship trip`` () =
+    let postHallOfFamePortWorld =
+        ScriptWorld.empty
+        |> ScriptWorld.setEvent "EVENT_BEAT_ELITE_FOUR"
+        |> ScriptWorld.setEvent "EVENT_OLIVINE_PORT_SPRITES_BEFORE_HALL_OF_FAME"
+        |> ScriptWorld.clearEvent "EVENT_OLIVINE_PORT_SPRITES_AFTER_HALL_OF_FAME"
+
+    let ticketedPlayer =
+        { PlayerStateOps.initial with
+            Bag = Bag.add "S_S_TICKET" 1 PlayerStateOps.initial.Bag }
+
+    let scene, stack =
+        sceneStackAt
+            "OlivinePort"
+            7
+            14
+            Down
+            postHallOfFamePortWorld
+            ticketedPlayer
+
+    holdSceneStack stack (directionButton Down) 20
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && scene.DebugState.MapId = "FastShip1F"
+        && ScriptWorld.getScene "FastShip1F" scene.DebugWorld = 2
+
+    tickSceneStackUntil stack 8000 completed
+
+    Assert.True(completed (), "Ticketed Olivine boarding should warp to FastShip1F and advance to the meet-grandpa scene")
+    Assert.True(ScriptWorld.hasEvent "EVENT_FAST_SHIP_HAS_ARRIVED" scene.DebugWorld |> not)
+    Assert.Equal(1, Bag.count "S_S_TICKET" scene.DebugPlayer.Bag)
+
+[<Fact>]
+let ``A15 granddaughter quest awards Metal Coat and docks at Vermilion`` () =
+    let shipQuestWorld =
+         ScriptWorld.empty
+        |> ScriptWorld.setScene "FastShip1F" 2
+        |> ScriptWorld.setEvent "EVENT_FAST_SHIP_CABINS_SE_SSE_GENTLEMAN"
+        |> ScriptWorld.setEvent "EVENT_FAST_SHIP_CABINS_SE_SSE_CAPTAINS_CABIN_TWIN_1"
+        |> ScriptWorld.clearEvent "EVENT_FAST_SHIP_CABINS_SE_SSE_CAPTAINS_CABIN_TWIN_2"
+
+    let scene, stack =
+        sceneStackAt
+            "FastShipCabins_SE_SSE_CaptainsCabin"
+            2
+            26
+            Up
+            shipQuestWorld
+            PlayerStateOps.initial
+
+    // CaptainsCabin.asm: granddaughter at 2,25 walks the player back to grandpa and docks.
+    holdSceneStack stack (press "a") 2
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && ScriptWorld.hasEvent "EVENT_GOT_METAL_COAT_FROM_GRANDPA_ON_SS_AQUA" scene.DebugWorld
+        && ScriptWorld.hasEvent "EVENT_FAST_SHIP_HAS_ARRIVED" scene.DebugWorld
+        && ScriptWorld.hasEvent "EVENT_FAST_SHIP_FOUND_GIRL" scene.DebugWorld
+
+    tickSceneStackUntil stack 12000 completed
+
+    Assert.True(completed (), "Granddaughter script should award Metal Coat and mark the S.S.Aqua arrived")
+    Assert.Equal(1, Bag.count "METAL_COAT" scene.DebugPlayer.Bag)
+    Assert.True(ScriptWorld.hasEvent "EVENT_VERMILION_PORT_SAILOR_AT_GANGWAY" scene.DebugWorld)
+    Assert.Equal(0, ScriptWorld.getScene "FastShip1F" scene.DebugWorld)
+
+[<Fact>]
+let ``A15 arrived Fast Ship exits to Vermilion Port`` () =
+    let arrivedAtVermilionWorld =
+        ScriptWorld.empty
+        |> ScriptWorld.setEvent "EVENT_FAST_SHIP_HAS_ARRIVED"
+        |> ScriptWorld.clearEvent "EVENT_FAST_SHIP_DESTINATION_OLIVINE"
+
+    let scene, stack =
+        sceneStackAt "FastShip1F" 25 3 Up arrivedAtVermilionWorld PlayerStateOps.initial
+
+    holdSceneStack stack (press "a") 2
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && scene.DebugState.MapId = "VermilionPort"
+        && scene.DebugState.Player.CellX = 7
+        && scene.DebugState.Player.CellY = 16
+        && ScriptWorld.hasFlag "ENGINE_FLYPOINT_VERMILION" scene.DebugWorld
+        && ScriptWorld.hasEvent "EVENT_FAST_SHIP_FIRST_TIME" scene.DebugWorld
+        && ScriptWorld.getScene "VermilionPort" scene.DebugWorld = 0
+
+    tickSceneStackUntil stack 12000 completed
+
+    Assert.True(completed (), "FastShip1F sailor should exit an arrived eastbound ship onto Vermilion Port")
