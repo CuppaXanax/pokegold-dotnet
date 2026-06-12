@@ -152,6 +152,31 @@ let private owMap (s: RuntimeSnapshot) =
 let private owOf (s: RuntimeSnapshot) =
     s.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
 
+let private settleUntilCapture (driver: GameDriver) maxFrames =
+    driver.RunUntil(
+        (fun s ->
+            match s.Overworld with
+            | Some ow -> ow.CanCapture
+            | None -> false),
+        maxFrames)
+    |> ignore
+
+let private stepAndSettle (driver: GameDriver) direction =
+    driver.Step direction
+    settleUntilCapture driver 300
+
+let private talkUntilLastText (driver: GameDriver) expectedLabel =
+    driver.Talk()
+    advanceRuntimeUntil
+        driver
+        2000
+        (fun s ->
+            match s.Overworld with
+            | Some ow -> ow.CanCapture && ow.LastTextLabel = Some expectedLabel
+            | None -> false)
+
+    Assert.Equal(Some expectedLabel, (owOf driver.Snapshot).LastTextLabel)
+
 [<Fact>]
 let ``A1 bedroom stairs warp loads PlayersHouse1F`` () =
     let driver = GameDriver()
@@ -2217,3 +2242,179 @@ let ``A15 arrived Fast Ship exits to Vermilion Port`` () =
     tickSceneStackUntil stack 12000 completed
 
     Assert.True(completed (), "FastShip1F sailor should exit an arrived eastbound ship onto Vermilion Port")
+
+[<Fact>]
+let ``A16 Vermilion Port passage and gym door load Vermilion City and Gym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+
+    // VermilionPort.asm: warp_event 9,5, VERMILION_PORT_PASSAGE, 5.
+    driver.Apply(Warp("VermilionPort", 9, 6, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("VermilionPortPassage", owMap driver.Snapshot)
+
+    // VermilionPortPassage.asm: warp_event 15,0, VERMILION_CITY, 8.
+    driver.Apply(Warp("VermilionPortPassage", 15, 1, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("VermilionCity", owMap driver.Snapshot)
+    Assert.True((owOf driver.Snapshot).EngineFlags |> List.contains "ENGINE_FLYPOINT_VERMILION")
+
+    // VermilionCity.asm: warp_event 10,19, VERMILION_GYM, 1.
+    driver.Apply(Warp("VermilionCity", 10, 20, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("VermilionGym", owMap driver.Snapshot)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A16 Surge awards ThunderBadge after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // VermilionGym.asm: Surge stands at 5,2.
+    driver.Apply(Warp("VermilionGym", 5, 3, Some Up))
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_LTSURGE"
+                && ow.EngineFlags |> List.contains "ENGINE_THUNDERBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_LTSURGE", "Surge battle should set EVENT_BEAT_LTSURGE")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_THUNDERBADGE", "Surge battle should set THUNDERBADGE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A16 Saffron gate warps stay open before and after Machine Part`` () =
+    let cases =
+        [ ("Route5SaffronGate", 4, 6, Down)
+          ("Route6SaffronGate", 4, 1, Up)
+          ("Route7SaffronGate", 8, 4, Right)
+          ("Route8SaffronGate", 1, 4, Left) ]
+
+    for returnedMachinePart in [ false; true ] do
+        for gateMap, x, y, direction in cases do
+            let driver = GameDriver()
+            driver.Apply(StartNewGame "A")
+
+            if returnedMachinePart then
+                driver.Apply(SetEvent("EVENT_RETURNED_MACHINE_PART", true))
+
+            driver.Apply(Warp(gateMap, x, y, Some direction))
+            stepAndSettle driver direction
+
+            Assert.True(
+                owMap driver.Snapshot = "SaffronCity",
+                $"{gateMap} should warp into SaffronCity with EVENT_RETURNED_MACHINE_PART={returnedMachinePart}")
+
+            driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A16 Route6 and Route7 Saffron guard text reflects Machine Part state`` () =
+    let assertGuardText returnedMachinePart gateMap x y facing expectedLabel =
+        let driver = GameDriver()
+        driver.Apply(StartNewGame "A")
+
+        if returnedMachinePart then
+            driver.Apply(SetEvent("EVENT_RETURNED_MACHINE_PART", true))
+
+        driver.Apply(Warp(gateMap, x, y, Some facing))
+        talkUntilLastText driver expectedLabel
+        driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    // Route6SaffronGate.asm and Route7SaffronGate.asm branch on EVENT_RETURNED_MACHINE_PART.
+    assertGuardText false "Route6SaffronGate" 1 4 Left "Route6SaffronGuardWelcomeText"
+    assertGuardText true "Route6SaffronGate" 1 4 Left "Route6SaffronGuardMagnetTrainText"
+    assertGuardText false "Route7SaffronGate" 5 3 Up "Route7SaffronGuardPowerPlantText"
+    assertGuardText true "Route7SaffronGate" 5 3 Up "Route7SaffronGuardSeriousText"
+
+[<Fact>]
+let ``A16 Route5 and Route8 Saffron guard text is static per disassembly`` () =
+    let assertStaticGuardText returnedMachinePart gateMap x y facing expectedLabel =
+        let driver = GameDriver()
+        driver.Apply(StartNewGame "A")
+
+        if returnedMachinePart then
+            driver.Apply(SetEvent("EVENT_RETURNED_MACHINE_PART", true))
+
+        driver.Apply(Warp(gateMap, x, y, Some facing))
+        talkUntilLastText driver expectedLabel
+        driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    // Route5SaffronGate.asm and Route8SaffronGate.asm use jumptextfaceplayer without an event check.
+    assertStaticGuardText false "Route5SaffronGate" 1 4 Left "Route5SaffronGateOfficerText"
+    assertStaticGuardText true "Route5SaffronGate" 1 4 Left "Route5SaffronGateOfficerText"
+    assertStaticGuardText false "Route8SaffronGate" 5 3 Up "Route8SaffronGateOfficerText"
+    assertStaticGuardText true "Route8SaffronGate" 5 3 Up "Route8SaffronGateOfficerText"
+
+[<Fact>]
+let ``A16 Saffron Gym teleport path reaches Sabrina and awards MarshBadge`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+
+    // SaffronCity.asm: warp_event 34,3, SAFFRON_GYM, 1.
+    driver.Apply(Warp("SaffronCity", 34, 4, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("SaffronGym", owMap driver.Snapshot)
+
+    // SaffronGym.asm pad chain from the entrance-side pad at 11,15 to Sabrina's room.
+    driver.Apply(Warp("SaffronGym", 11, 16, Some Up))
+
+    let stepOntoPad direction expectedX expectedY =
+        driver.Step direction
+
+        driver.RunUntil(
+            (fun s ->
+                match s.Overworld with
+                | Some ow ->
+                    ow.CanCapture
+                    && ow.MapId = "SaffronGym"
+                    && ow.Player.CellX = expectedX
+                    && ow.Player.CellY = expectedY
+                | None -> false),
+            500)
+        |> ignore
+
+    stepOntoPad Up 19 17
+    stepAndSettle driver Up
+    stepOntoPad Up 19 9
+    stepAndSettle driver Down
+    stepOntoPad Down 1 9
+    stepAndSettle driver Down
+    stepOntoPad Down 5 5
+    stepAndSettle driver Left
+    stepAndSettle driver Left
+    stepAndSettle driver Left
+    stepOntoPad Left 11 9
+    stepAndSettle driver Left
+    stepAndSettle driver Left
+    stepAndSettle driver Up
+
+    let owAtSabrinaRoom = owOf driver.Snapshot
+    Assert.Equal("SaffronGym", owAtSabrinaRoom.MapId)
+    Assert.Equal(9, owAtSabrinaRoom.Player.CellX)
+    Assert.Equal(9, owAtSabrinaRoom.Player.CellY)
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_SABRINA"
+                && ow.EngineFlags |> List.contains "ENGINE_MARSHBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_SABRINA", "Sabrina battle should set EVENT_BEAT_SABRINA")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_MARSHBADGE", "Sabrina battle should set MARSHBADGE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
