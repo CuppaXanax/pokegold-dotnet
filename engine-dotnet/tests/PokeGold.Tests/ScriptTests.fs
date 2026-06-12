@@ -804,6 +804,33 @@ let ``bug contest specials emit contest effects`` () =
         effects)
 
 [<Fact>]
+let ``BillsGrandfather special returns selected party species to script var`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial BillsGrandfather\n\
+             \tifequal 108, .Lickitung\n\
+             \twritetext Wrong\n\
+             \tend\n\
+             .Lickitung:\n\
+             \twritetext Correct\n\
+             \tend\n"
+
+    let _, effects =
+        drive
+            (function
+             | BillsGrandfather -> Some 108
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ BillsGrandfather
+          ShowText("Correct", false) ],
+        effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

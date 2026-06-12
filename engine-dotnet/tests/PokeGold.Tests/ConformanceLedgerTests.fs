@@ -135,6 +135,8 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B9 tests cover Park Ball setup, party drop-off/return seams, deterministic contestant selection, Scyther/Pinsir first-place judging, and caught-mon result cleanup; exact timed contest UI and NPC score randomization remain future polish."
             [ "BugContestJudging"; "CheckPartyFullAfterContest"; "ContestDropOffMons"; "ContestReturnMons"; "GiveParkBalls"; "SelectRandomBugContestContestants" ]
 
+          yield entry ScriptSpecial "BillsGrandfather" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B10 tests cover party selection returning the selected species id and BillsHouse reward/reject branches with the species-name text buffer."
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -142,7 +144,7 @@ module ConformanceLedger =
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
-            [ "BillsGrandfather"; "CheckForLuckyNumberWinners"
+            [ "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPokerus"
               "DaisysGrooming"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"

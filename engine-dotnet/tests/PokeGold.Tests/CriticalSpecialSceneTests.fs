@@ -461,3 +461,56 @@ let ``name rater renames selected owned party mon`` () =
         tickStack stack Buttons.none
 
     Assert.Equal("AAA", overworld.DebugPlayer.Party.Head.Nickname)
+
+let private runBillsGrandpa (initialParty: PartyMon list) (completed: ResizeArray<Scene> -> OverworldScene -> bool) =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "BillsHouse" 2 4 Up)
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = initialParty }
+
+    overworld.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let mutable frame = 0
+    while frame < 6000 && not (completed stack overworld) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene"
+            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed stack overworld, "Bill's grandfather script should reach the expected branch.")
+
+[<Fact>]
+let ``Bills grandfather rewards Everstone for showing Lickitung`` () =
+    runBillsGrandpa
+        [ PartyMon.create 108 10 ]
+        (fun stack overworld ->
+            stack.Count = 1
+            && Bag.count "EVERSTONE" overworld.DebugPlayer.Bag = 1
+            && World.hasEvent "EVENT_SHOWED_LICKITUNG_TO_BILLS_GRANDPA" overworld.DebugWorld
+            && World.hasEvent "EVENT_GOT_EVERSTONE_FROM_BILLS_GRANDPA" overworld.DebugWorld)
+
+[<Fact>]
+let ``Bills grandfather rejects the wrong shown Pokemon`` () =
+    runBillsGrandpa
+        [ PartyMon.create 155 10 ]
+        (fun stack overworld ->
+            let snapshot = overworld.RuntimeSnapshot
+            stack.Count = 1
+            && snapshot.LastTextLabel = Some "BillsGrandpaWrongPokemonText"
+            && Bag.count "EVERSTONE" overworld.DebugPlayer.Bag = 0
+            && not (World.hasEvent "EVENT_SHOWED_LICKITUNG_TO_BILLS_GRANDPA" overworld.DebugWorld))

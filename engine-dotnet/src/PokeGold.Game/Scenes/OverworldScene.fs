@@ -91,6 +91,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable apricornResult: string option = None
     let mutable dayCareResult: int option = None
     let mutable haircutResult = 0
+    let mutable billsGrandfatherResult = 0
     let mutable contestPartyBackup: PartyMon list option = None
     let mutable prevA = false
     let mutable prevStart = false
@@ -662,6 +663,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             player <- { player with Party = party }
             haircutResult <- result
 
+    member private _.SelectBillsGrandfatherMon (partyIndex: int) =
+        let mon = List.item partyIndex player.Party
+        let speciesName =
+            Species.all
+            |> Map.tryPick (fun key stats -> if stats.Dex = mon.SpeciesId then Some key else None)
+            |> Option.defaultValue mon.Nickname
+        billsGrandfatherResult <- mon.SpeciesId
+        world <- World.setBuffer "STRING_BUFFER_3" speciesName world
+
     member private _.PlayGameCornerGame (game: string) (lucky: bool) =
         if Bag.count "COIN_CASE" player.Bag > 0 && player.Coins >= 3 then
             let win =
@@ -1039,6 +1049,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     (fun p -> player <- p),
                                     onSelect = (fun idx ->
                                         this.ApplyHaircut brother idx
+                                        Pop)) :> Scene))
+                    | BillsGrandfather ->
+                        pending <- Some(vm, effect)
+                        billsGrandfatherResult <- 0
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onSelect = (fun idx ->
+                                        this.SelectBillsGrandfatherMon idx
                                         Pop)) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
@@ -1587,6 +1609,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | DayCareMon _ -> None
                     | MoveDeletion -> None
                     | Haircut _ -> Some haircutResult
+                    | BillsGrandfather -> Some billsGrandfatherResult
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

@@ -152,6 +152,8 @@ type ScriptEffect =
     | ContestReturnMons
     | BugContestJudging
     | CheckPartyFullAfterContest
+    /// `special BillsGrandfather` — pick a party mon and resume with its species id.
+    | BillsGrandfather
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -409,6 +411,7 @@ module Script =
             | Special "ContestReturnMons" -> suspend next world ContestReturnMons
             | Special "BugContestJudging" -> suspend next world BugContestJudging
             | Special "CheckPartyFullAfterContest" -> suspend next world CheckPartyFullAfterContest
+            | Special "BillsGrandfather" -> suspend next world BillsGrandfather
             | Special "SelectRandomBugContestContestants" ->
                 let cleared =
                     bugContestantFlags
