@@ -831,6 +831,33 @@ let ``BillsGrandfather special returns selected party species to script var`` ()
         effects)
 
 [<Fact>]
+let ``Magikarp length specials emit measurement and sign effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial CheckMagikarpLength\n\
+             \tifequal 3, .Record\n\
+             \twritetext TooShort\n\
+             \tend\n\
+             .Record:\n\
+             \tspecial MagikarpHouseSign\n\
+             \tend\n"
+
+    let _, effects =
+        drive
+            (function
+             | CheckMagikarpLength -> Some 3
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ CheckMagikarpLength
+          MagikarpHouseSign ],
+        effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

@@ -154,6 +154,10 @@ type ScriptEffect =
     | CheckPartyFullAfterContest
     /// `special BillsGrandfather` — pick a party mon and resume with its species id.
     | BillsGrandfather
+    /// `special CheckMagikarpLength` — pick a party mon, measure MAGIKARP, and resume with MAGIKARPLENGTH_*.
+    | CheckMagikarpLength
+    /// `special MagikarpHouseSign` — print the current longest-Magikarp record.
+    | MagikarpHouseSign
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -412,6 +416,8 @@ module Script =
             | Special "BugContestJudging" -> suspend next world BugContestJudging
             | Special "CheckPartyFullAfterContest" -> suspend next world CheckPartyFullAfterContest
             | Special "BillsGrandfather" -> suspend next world BillsGrandfather
+            | Special "CheckMagikarpLength" -> suspend next world CheckMagikarpLength
+            | Special "MagikarpHouseSign" -> suspend next world MagikarpHouseSign
             | Special "SelectRandomBugContestContestants" ->
                 let cleared =
                     bugContestantFlags

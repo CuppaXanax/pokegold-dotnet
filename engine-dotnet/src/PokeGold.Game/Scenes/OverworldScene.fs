@@ -92,6 +92,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable dayCareResult: int option = None
     let mutable haircutResult = 0
     let mutable billsGrandfatherResult = 0
+    let mutable magikarpLengthResult = 1
     let mutable contestPartyBackup: PartyMon list option = None
     let mutable prevA = false
     let mutable prevStart = false
@@ -672,6 +673,84 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         billsGrandfatherResult <- mon.SpeciesId
         world <- World.setBuffer "STRING_BUFFER_3" speciesName world
 
+    member private _.FormatMagikarpLength (feet: int, inches: int) =
+        sprintf "%d'%d\"" feet inches
+
+    member private _.CalcMagikarpLength (mon: PartyMon) =
+        let rrc8 count value =
+            let v = value &&& 0xff
+            ((v >>> count) ||| (v <<< (8 - count))) &&& 0xff
+
+        let dvHigh = (mon.Dvs >>> 8) &&& 0xff
+        let dvLow = mon.Dvs &&& 0xff
+        let idHigh = (mon.OtId >>> 8) &&& 0xff
+        let idLow = mon.OtId &&& 0xff
+        let b = (rrc8 2 dvHigh) ^^^ (rrc8 1 idHigh)
+        let c = (rrc8 2 dvLow) ^^^ (rrc8 1 idLow)
+        let bc = (b <<< 8) ||| c
+
+        let rawMillimeters =
+            if b = 0 && c < 10 then
+                bc + 190
+            else
+                let table =
+                    [| 110, 1, 2
+                       310, 2, 3
+                       710, 4, 4
+                       2710, 20, 5
+                       7710, 50, 6
+                       17710, 100, 7
+                       32710, 150, 8
+                       47710, 150, 9
+                       57710, 100, 10
+                       62710, 50, 11
+                       64710, 20, 12
+                       65210, 5, 13
+                       65410, 2, 14
+                       65510, 1, 15 |]
+
+                match table |> Array.tryFind (fun (threshold, _, _) -> b < ((threshold >>> 8) &&& 0xff)) with
+                | Some(threshold, divisor, hundreds) ->
+                    let quotientLowByte = (((bc - threshold) &&& 0xffff) / divisor) &&& 0xff
+                    hundreds * 100 + quotientLowByte
+                | None ->
+                    1600 + ((bc - 65510) &&& 0xffff)
+
+        let totalInches = (rawMillimeters * 10) / 254
+        totalInches / 12, totalInches % 12
+
+    member private this.RecordMagikarpLength (mon: PartyMon) =
+        let feet, inches = this.CalcMagikarpLength mon
+        let renderedLength = this.FormatMagikarpLength(feet, inches)
+        world <- World.setBuffer "STRING_BUFFER_1" renderedLength world
+
+        let bestFeet = World.getVar "__best_magikarp_length_feet" world
+        let bestInches = World.getVar "__best_magikarp_length_inches" world
+        let beatsRecord = feet > bestFeet || (feet = bestFeet && inches > bestInches)
+
+        if beatsRecord then
+            world <-
+                world
+                |> World.setVar "__best_magikarp_length_feet" feet
+                |> World.setVar "__best_magikarp_length_inches" inches
+                |> World.setBuffer "__magikarp_record_holder" mon.OtName
+            magikarpLengthResult <- 3
+        else
+            magikarpLengthResult <- 2
+
+        sprintf "Let me measure<LINE>that MAGIKARP.<PARA>...Hm, it measures<LINE>%s.<PROMPT>" renderedLength
+
+    member private this.MagikarpRecordText() =
+        let feet = World.getVar "__best_magikarp_length_feet" world
+        let inches = World.getVar "__best_magikarp_length_inches" world
+        let holder =
+            match World.getBuffer "__magikarp_record_holder" world with
+            | "" -> player.Name
+            | name -> name
+        let renderedLength = this.FormatMagikarpLength(feet, inches)
+        world <- World.setBuffer "STRING_BUFFER_1" renderedLength world
+        sprintf "CURRENT RECORD<PARA>%s caught by<LINE>%s<PROMPT>" renderedLength holder
+
     member private _.PlayGameCornerGame (game: string) (lucky: bool) =
         if Bag.count "COIN_CASE" player.Bag > 0 && player.Coins >= 3 then
             let win =
@@ -1062,6 +1141,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     onSelect = (fun idx ->
                                         this.SelectBillsGrandfatherMon idx
                                         Pop)) :> Scene))
+                    | CheckMagikarpLength ->
+                        pending <- Some(vm, effect)
+                        magikarpLengthResult <- 1
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onSelect = (fun idx ->
+                                        let mon = List.item idx player.Party
+                                        if mon.SpeciesId = 129 then
+                                            let rendered = this.RecordMagikarpLength mon
+                                            lastText <- Some("MagikarpGuruMeasureText", rendered)
+                                            Replace(TextBoxScene.Of(content, rendered) :> Scene)
+                                        else
+                                            magikarpLengthResult <- 0
+                                            Pop)) :> Scene))
+                    | MagikarpHouseSign ->
+                        pending <- Some(vm, effect)
+                        let rendered = this.MagikarpRecordText()
+                        lastText <- Some("KarpGuruRecordText", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -1610,6 +1712,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | MoveDeletion -> None
                     | Haircut _ -> Some haircutResult
                     | BillsGrandfather -> Some billsGrandfatherResult
+                    | CheckMagikarpLength -> Some magikarpLengthResult
+                    | MagikarpHouseSign -> None
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

@@ -137,6 +137,9 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "BillsGrandfather" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B10 tests cover party selection returning the selected species id and BillsHouse reward/reject branches with the species-name text buffer."
 
+          yield! many ScriptSpecial FaithfulTested [ SideSystem; RequiredFor100Percent ] "B11 tests cover the disassembly DV/OT-id Magikarp length formula, new-record reward, too-short branch, and current-record sign text."
+            [ "CheckMagikarpLength"; "MagikarpHouseSign" ]
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -145,10 +148,10 @@ module ConformanceLedger =
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "CheckForLuckyNumberWinners"
-              "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPokerus"
+              "CheckLuckyNumberShowFlag"; "CheckMysteryGift"; "CheckPokerus"
               "DaisysGrooming"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"
-              "MagikarpHouseSign"; "MrChrono"; "PhotoStudio"
+              "MrChrono"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"
               "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 

@@ -514,3 +514,112 @@ let ``Bills grandfather rejects the wrong shown Pokemon`` () =
             && snapshot.LastTextLabel = Some "BillsGrandpaWrongPokemonText"
             && Bag.count "EVERSTONE" overworld.DebugPlayer.Bag = 0
             && not (World.hasEvent "EVENT_SHOWED_LICKITUNG_TO_BILLS_GRANDPA" overworld.DebugWorld))
+
+let private runMagikarpGuru (world: World) (player: PlayerState) (completed: ResizeArray<Scene> -> OverworldScene -> bool) =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "LakeOfRageMagikarpHouse" 2 4 Up)
+
+    overworld.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let mutable frame = 0
+    while frame < 6000 && not (completed stack overworld) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed stack overworld, "Magikarp guru script should reach the expected length branch.")
+
+[<Fact>]
+let ``Magikarp guru rewards a new length record`` () =
+    let magikarp = PartyMon.create 129 10
+    let world =
+        World.empty
+        |> World.setEvent "EVENT_CLEARED_ROCKET_HIDEOUT"
+        |> World.setEvent "EVENT_LAKE_OF_RAGE_ASKED_FOR_MAGIKARP"
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ magikarp ] }
+
+    runMagikarpGuru
+        world
+        player
+        (fun stack overworld ->
+            stack.Count = 1
+            && Bag.count "ETHER" overworld.DebugPlayer.Bag = 1
+            && (World.getVar "__best_magikarp_length_feet" overworld.DebugWorld > 0
+                || World.getVar "__best_magikarp_length_inches" overworld.DebugWorld > 0))
+
+[<Fact>]
+let ``Magikarp guru rejects records that are too short`` () =
+    let magikarp = PartyMon.create 129 10
+    let world =
+        World.empty
+        |> World.setEvent "EVENT_CLEARED_ROCKET_HIDEOUT"
+        |> World.setEvent "EVENT_LAKE_OF_RAGE_ASKED_FOR_MAGIKARP"
+        |> World.setVar "__best_magikarp_length_feet" 99
+        |> World.setVar "__best_magikarp_length_inches" 11
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ magikarp ] }
+
+    runMagikarpGuru
+        world
+        player
+        (fun stack overworld ->
+            let snapshot = overworld.RuntimeSnapshot
+            stack.Count = 1
+            && snapshot.LastTextLabel = Some "MagikarpLengthRaterText_TooShort"
+            && Bag.count "ETHER" overworld.DebugPlayer.Bag = 0
+            && World.getVar "__best_magikarp_length_feet" overworld.DebugWorld = 99)
+
+[<Fact>]
+let ``Magikarp house sign prints the current record`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "LakeOfRage" 25 32 Up)
+    let world =
+        World.empty
+        |> World.setEvent "EVENT_CLEARED_ROCKET_HIDEOUT"
+        |> World.setVar "__best_magikarp_length_feet" 6
+        |> World.setVar "__best_magikarp_length_inches" 8
+        |> World.setBuffer "__magikarp_record_holder" "GURU"
+
+    overworld.Restore(world, PlayerStateOps.initial)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        let snapshot = overworld.RuntimeSnapshot
+        stack.Count = 1
+        && snapshot.LastTextLabel = Some "KarpGuruRecordText"
+        && snapshot.LastRenderedText |> Option.exists (fun text -> text.Contains("6'8\"") && text.Contains("GURU"))
+
+    let mutable frame = 0
+    while frame < 4000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "Magikarp house sign should print the stored length record.")
