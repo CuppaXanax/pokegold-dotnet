@@ -779,7 +779,8 @@ module Effects =
             | Sleep _ ->
                 let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
                 let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-                { ctx with Foe = foe; Messages = ctx.Messages @ [ "It was asleep!" ]; LastDamage = dmg }
+                let after = { ctx with Foe = foe; Messages = ctx.Messages @ [ "It was asleep!" ]; LastDamage = dmg }
+                applyCtx after (EffectChance SetFlinch)
             | _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | SetEncore ->
@@ -1258,19 +1259,18 @@ module Effects =
 
         | FuryCutterDamage ->
             // BattleCommand_FuryCutter (move_effects/fury_cutter.asm).
-            // Power doubles per consecutive hit, max 5 turns (16x).
+            // Damage doubles per consecutive hit after STAB/type, before variation.
             // Counter is 1-indexed: first use = count 1.
             let count = min 5 (ctx.FuryCutterCount + 1)
-            let mutable power = ctx.Move.Power
+            let mutable dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit Damage.MaxRoll ctx.IsStruggle
             for _ in 2 .. count do
-                power <- power * 2
-            let m = { ctx.Move with Power = power }
-            let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
+                dmg <- min 65535 (dmg * 2)
+            let dmg = dmg * ctx.Roll / Damage.MaxRoll
             let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
-                      match Damage.effectivenessTimesTen m foe with
+                      match Damage.effectivenessTimesTen ctx.Move foe with
                       | 0 -> $"It doesn't affect {foe.Species.Name}..."
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."

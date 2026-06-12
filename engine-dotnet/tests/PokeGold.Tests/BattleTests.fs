@@ -2474,6 +2474,45 @@ let ``C13 Stomp doubles only against Minimize not ordinary evasion boosts`` () =
     Assert.Equal(45, stompNormalEvasion.LastDamage)
     Assert.Equal(90, stompMinimized.LastDamage)
 
+[<Fact>]
+let ``C14 audited Fury Cutter and Snore effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_FURY_CUTTER", [ FuryCutterDamage ]
+          "EFFECT_SNORE", [ SnoreDamage ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C14 Fury Cutter doubles damage after STAB and type before variation`` () =
+    let furyCutter = Moves.byName "FURY_CUTTER"
+    let user = mon "USER" (ty "BUG") (ty "BUG") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+
+    let thirdHit =
+        Effects.applyCtx { mkCtx user foe furyCutter with FuryCutterCount = 2 } FuryCutterDamage
+
+    Assert.Equal(36, thirdHit.LastDamage)
+    Assert.Equal(164, thirdHit.Foe.Hp)
+    Assert.Equal(3, thirdHit.FuryCutterCount)
+
+[<Fact>]
+let ``C14 Snore only works while asleep and applies its flinch secondary`` () =
+    let snore = { Moves.byName "SNORE" with EffectChance = 255 }
+    let sleepingUser = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100 with Status = Sleep 2 }
+    let awakeUser = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+
+    let asleep = Effects.applyCtx (mkCtx sleepingUser foe snore) SnoreDamage
+    let awake = Effects.applyCtx (mkCtx awakeUser foe snore) SnoreDamage
+
+    Assert.True(asleep.LastDamage > 0)
+    Assert.True(asleep.Foe.Volatile.Flinch)
+    Assert.Equal(0, awake.LastDamage)
+    Assert.Equal(foe.Hp, awake.Foe.Hp)
+    Assert.False(awake.Foe.Volatile.Flinch)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

@@ -256,6 +256,7 @@ Progress:
 - ✅ C1 batch 12: `EFFECT_DESTINY_BOND`, `EFFECT_SWAGGER`.
 - ✅ C1 batch 13: `EFFECT_EARTHQUAKE`, `EFFECT_GUST`, `EFFECT_STOMP`,
   `EFFECT_TWISTER`.
+- ✅ C1 batch 14: `EFFECT_FURY_CUTTER`, `EFFECT_SNORE`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

@@ -240,12 +240,15 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C13 BattleTests audit Gust, Earthquake, Twister, and Stomp conditional double-damage substatus checks plus Twister/Stomp flinch secondaries."
             [ "EFFECT_EARTHQUAKE"; "EFFECT_GUST"; "EFFECT_STOMP"; "EFFECT_TWISTER" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C14 BattleTests audit Fury Cutter's post-STAB damage ramp and Snore's sleep gate plus flinch secondary against the move-effect scripts."
+            [ "EFFECT_FURY_CUTTER"; "EFFECT_SNORE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
               "EFFECT_DISABLE"
               "EFFECT_ENCORE"; "EFFECT_ENDURE"; "EFFECT_FLAME_WHEEL"
               "EFFECT_FLY"; "EFFECT_FORESIGHT"
-              "EFFECT_FURY_CUTTER"; "EFFECT_FUTURE_SIGHT"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
+              "EFFECT_FUTURE_SIGHT"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
               "EFFECT_LOCK_ON"; "EFFECT_MIRROR_COAT"; "EFFECT_MOONLIGHT"
               "EFFECT_MORNING_SUN"; "EFFECT_NIGHTMARE"; "EFFECT_OHKO"
               "EFFECT_PERISH_SONG"
@@ -253,7 +256,7 @@ module ConformanceLedger =
               "EFFECT_RAGE"; "EFFECT_RAMPAGE"; "EFFECT_RAZOR_WIND"
               "EFFECT_SACRED_FIRE"
               "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
-              "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"; "EFFECT_SPITE"
+              "EFFECT_SLEEP_TALK"; "EFFECT_SOLARBEAM"; "EFFECT_SPITE"
               "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"
               "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
