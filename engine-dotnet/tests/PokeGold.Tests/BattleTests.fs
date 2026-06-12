@@ -2820,6 +2820,63 @@ let ``C19 hitting a raging target builds Rage counter without changing Attack st
     Assert.Equal(1, after.Enemy.Volatile.RageCounter)
     Assert.Equal(0, after.Enemy.AtkStage)
 
+[<Fact>]
+let ``C21 Beat Up damage uses participant base Attack and target base Defense`` () =
+    let mv = Moves.byName "BEAT_UP"
+    let attackerSpecies = { species "ALLY" (ty "DARK") (ty "DARK") with Attack = 80 }
+    let defenderSpecies = { species "TARGET" (ty "NORMAL") (ty "NORMAL") with Defense = 50 }
+    let attacker =
+        { mon "ALLY" (ty "DARK") (ty "DARK") 20 100 999 30 200 with
+            Species = attackerSpecies }
+    let defender =
+        { mon "TARGET" (ty "NORMAL") (ty "NORMAL") 20 100 30 999 1 with
+            Species = defenderSpecies }
+    let hit = Effects.applyCtx (mkCtx attacker defender mv) BeatUpDamage
+    Assert.Equal(5, hit.LastDamage)
+    Assert.Equal(95, hit.Foe.Hp)
+
+[<Fact>]
+let ``C21 Beat Up loops over healthy unstatted party members`` () =
+    let mv = Moves.byName "BEAT_UP"
+    let splash = Moves.byName "SPLASH"
+    let activeSpecies = { species "ACTIVE" (ty "DARK") (ty "DARK") with Attack = 50 }
+    let benchSpecies = { species "BENCH" (ty "DARK") (ty "DARK") with Attack = 100 }
+    let skippedSpecies = { species "SKIPPED" (ty "DARK") (ty "DARK") with Attack = 200 }
+    let targetSpecies = { species "TARGET" (ty "NORMAL") (ty "NORMAL") with Defense = 50 }
+    let active =
+        { mon "ACTIVE" (ty "DARK") (ty "DARK") 20 100 80 50 200 with
+            Species = activeSpecies
+            Moves = [ mv ]
+            Pp = [ mv.Pp ] }
+    let bench =
+        { mon "BENCH" (ty "DARK") (ty "DARK") 20 100 80 50 100 with
+            Species = benchSpecies }
+    let skipped =
+        { mon "SKIPPED" (ty "DARK") (ty "DARK") 20 100 80 50 100 with
+            Species = skippedSpecies
+            Status = Poison }
+    let target =
+        { mon "TARGET" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with
+            Species = targetSpecies
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let seed = 5u
+    let threshold = CriticalHit.thresholds.[CriticalHit.critStage active.Volatile.FocusEnergy mv]
+    let c1, rng = Rng.next (Rng.create seed)
+    let s1, rng = Rng.next rng
+    let c2, rng = Rng.next rng
+    let s2, _ = Rng.next rng
+    let spread byte = Damage.MinRoll + byte % (Damage.MaxRoll - Damage.MinRoll + 1)
+    let expected =
+        Effects.beatUpDamage active target mv (c1 < threshold) (spread s1)
+        + Effects.beatUpDamage bench target mv (c2 < threshold) (spread s2)
+
+    let after = Battle.chooseMove 0 (Battle.createTeam [ active; bench; skipped ] [ target ] seed)
+
+    let attackMessages = after.Messages |> List.filter (fun m -> m.EndsWith("attacked!"))
+    Assert.Equal<string list>([ "ACTIVE attacked!"; "BENCH attacked!" ], attackMessages)
+    Assert.Equal(target.Hp - expected, after.Enemy.Hp)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

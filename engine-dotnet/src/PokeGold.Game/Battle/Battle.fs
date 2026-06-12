@@ -273,6 +273,39 @@ module Battle =
         : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option * int * bool =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
+        let runBeatUp rng =
+            let rawTeam = if userIsPlayer then battle.PlayerTeam else battle.EnemyTeam
+            let team = rawTeam |> List.mapi (fun i mon -> if i = 0 then user else mon)
+            let mutable foe = foe
+            let mutable rng = rng
+            let mutable msgs = [ intro ]
+            let mutable totalDamage = 0
+            let mutable hitAtLeastOnce = false
+
+            for participant in team do
+                if not (BattleMon.isFainted foe) && participant.Hp > 0 && participant.Status = Healthy then
+                    let hit, rngAfterHit = checkHit user foe move rng battle.WeatherType
+                    rng <- rngAfterHit
+                    if hit then
+                        let crit, roll, rngAfterRoll = rollHit (critStageFor user move) rng
+                        rng <- rngAfterRoll
+                        let foeAfterHit, dmg, hitMsgs = Effects.applyBeatUpHit participant foe move crit roll
+                        hitAtLeastOnce <- dmg > 0 || hitAtLeastOnce
+                        totalDamage <- totalDamage + dmg
+                        msgs <- msgs @ [ $"{participant.Species.Name} attacked!" ]
+                        if crit then msgs <- msgs @ [ "A critical hit!" ]
+                        msgs <- msgs @ hitMsgs
+                        foe <-
+                            if foe.Volatile.Rage && dmg > 0 then
+                                { foeAfterHit with Volatile = { foeAfterHit.Volatile with RageCounter = min 255 (foeAfterHit.Volatile.RageCounter + 1) } }
+                            else
+                                foeAfterHit
+
+            if not hitAtLeastOnce then
+                msgs <- msgs @ [ "But it failed!" ]
+
+            user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, totalDamage, hitAtLeastOnce
+
         let runHit crit roll rng =
             let ctx : MoveContext =
                 { User = user
@@ -309,7 +342,9 @@ module Battle =
             let ctx = { ctx with Foe = foe }
             ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType, ctx.LastDamage, true
 
-        if move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
+        if move.Effect = "EFFECT_BEAT_UP" && not isStruggle then
+            runBeatUp rng
+        elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType
             if hit then

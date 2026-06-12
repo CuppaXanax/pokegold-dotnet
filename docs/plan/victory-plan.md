@@ -267,6 +267,7 @@ Progress:
   `EFFECT_MOONLIGHT`.
 - ✅ C1 batch 19: `EFFECT_RAGE`.
 - ✅ C1 batch 20: `EFFECT_PROTECT`, `EFFECT_ENDURE`.
+- ✅ C1 batch 21: `EFFECT_BEAT_UP`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

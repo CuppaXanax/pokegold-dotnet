@@ -212,8 +212,8 @@ type EffectCommand =
     | RolloutDamage
     /// EFFECT_TRIPLE_KICK: 3 hits at escalating power (base, 2x, 3x).
     | TripleKickDamage
-    /// EFFECT_BEAT_UP: one hit per healthy party member. Simplified to a single
-    /// hit (wild battles have 1 party member) with base power = level-based.
+    /// EFFECT_BEAT_UP: one hit per healthy party member, using base Attack and
+    /// base Defense instead of battle stats.
     | BeatUpDamage
 
     /// EFFECT_LEECH_HIT: deal damage, heal user by half dealt (min 1).

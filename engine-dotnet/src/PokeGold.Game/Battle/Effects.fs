@@ -83,6 +83,27 @@ module Effects =
                 let roll, rng = nonzero ctx.Rng
                 if roll - 1 < threshold then Some rng else None
 
+    let beatUpDamage (attacker: BattleMon) (defender: BattleMon) (move: MoveData) (crit: bool) (roll: int) =
+        let defense = max 1 defender.Species.Defense
+        let mutable dmg = attacker.Level * 2 / 5 + 2
+        dmg <- dmg * move.Power
+        dmg <- dmg * attacker.Species.Attack
+        dmg <- dmg / defense
+        dmg <- dmg / 50
+        if crit then
+            dmg <- dmg * 2
+        dmg <- min 997 dmg + 2
+        dmg * roll / Damage.MaxRoll
+
+    let applyBeatUpHit (attacker: BattleMon) (defender: BattleMon) (move: MoveData) (crit: bool) (roll: int) =
+        let dmg = beatUpDamage attacker defender move crit roll
+        if defender.Volatile.Protect then
+            defender, 0, [ $"{defender.Species.Name} is protecting itself!" ]
+        elif defender.Volatile.Endure && defender.Hp > 1 && dmg >= defender.Hp then
+            { defender with Hp = 1 }, dmg, [ $"{defender.Species.Name} endured the hit!" ]
+        else
+            { defender with Hp = max 0 (defender.Hp - dmg) }, dmg, []
+
     let private safeguardBlocked (ctx: MoveContext) : bool =
         let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
         defenderSide.SafeguardTimer.IsSome && defenderSide.SafeguardTimer.Value > 0
@@ -1387,12 +1408,10 @@ module Effects =
 
         | BeatUpDamage ->
             // BattleCommand_BeatUp (move_effects/beat_up.asm).
-            // In wild battles, only the active mon participates (1 hit).
-            // Damage = (level * 2 / 5 + 2) * basePower * userBaseAtk / foeBaseDef / 50 + 2.
-            // Simplified: one hit using the normal damage formula with base power.
-            let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-            { ctx with Foe = foe; Messages = ctx.Messages; LastDamage = dmg }
+            // The full party loop is owned by Battle.executeMove; this command is
+            // the single-participant hit used by direct effect tests.
+            let foe, dmg, hitMsgs = applyBeatUpHit ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll
+            { ctx with Foe = foe; Messages = ctx.Messages @ hitMsgs; LastDamage = dmg }
 
         | DrainDamage ->
             // BattleCommand_DrainTarget / SapHealth (effect_commands.asm l.3797-3870).

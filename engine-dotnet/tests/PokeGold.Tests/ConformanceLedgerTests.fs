@@ -261,8 +261,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C20 BattleTests audit Protect and Endure through the shared ProtectChance helper, covering substitute failure, consecutive-use chance reset, opponent-went-first failure, damage blocking, and Endure's 1 HP clamp."
             [ "EFFECT_PROTECT"; "EFFECT_ENDURE" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C21 BattleTests audit Beat Up's base-stat damage formula and healthy, status-free party-member loop against BattleCommand_BeatUp."
+            [ "EFFECT_BEAT_UP" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
+            [ "EFFECT_COUNTER"
               "EFFECT_DISABLE"
               "EFFECT_ENCORE"
               "EFFECT_FUTURE_SIGHT"
