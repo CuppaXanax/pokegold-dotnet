@@ -265,3 +265,59 @@ let ``A2 Route31 gate warp reaches VioletCity`` () =
     let ow = owOf final
     Assert.Equal("VioletCity", ow.MapId)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A3 — Violet Gym → Falkner
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A3 VioletCity gym door warp loads VioletGym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // VioletCity warp 2 at (18,17) leads to VioletGym.
+    // Place one cell north and step onto the warp tile.
+    driver.Apply(Warp("VioletCity", 18, 16, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "VioletGym"), 100)
+
+    Assert.Equal("VioletGym", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A3 Falkner gives ZephyrBadge and TM31 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Pre-set: Falkner beaten and badge awarded (the battle-win path sets
+    // these; we skip the battle to test the post-battle reward script).
+    driver.Apply(SetEvent("EVENT_BEAT_FALKNER", true))
+    driver.Apply(SetFlag("ENGINE_ZEPHYRBADGE", true))
+    // Warp next to Falkner at (5,1); stand one cell south facing Up.
+    driver.Apply(Warp("VioletGym", 5, 2, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP"
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP",
+                "Falkner should give TM31 MUD-SLAP after badge")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE",
+                "ZEPHYRBADGE should be set")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)

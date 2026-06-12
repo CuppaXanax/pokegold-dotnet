@@ -123,7 +123,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 |---|---|---|
 | ✅ A1 | PlayersHouse2F → New Bark → Route 29 → Cherrygrove | bedroom→downstairs warp; Elm intro coord trigger; connection streaming both ways |
 | ✅ A2 | Cherrygrove → Route 30/31 → Violet City | Mr. Pokémon house warp; rival coord event on return |
-| A3 | Violet Gym → Falkner | gym warp; trainer sight-line battles; badge + TM31 |
+| ✅ A3 | Violet Gym → Falkner | gym warp; trainer sight-line battles; badge + TM31 |
 | A4 | Route 32 → Union Cave → Route 33 → Azalea | cave darkness not required (no Flash gate); Slowpoke Well grunt blocking |
 | A5 | Slowpoke Well B1F clear; Kurt leaves; Azalea Gym → Bugsy; rival ambush | scenes/events per `maps/AzaleaTown.asm` |
 | A6 | Ilex Forest: Farfetch'd chase; HM01; Cut tree gate on Route 34 side | the Cut tree actually blocks until Cut is used (`FieldMoves`) |
