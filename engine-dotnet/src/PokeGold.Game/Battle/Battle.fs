@@ -867,6 +867,10 @@ module Battle =
         let mutable outcome: Outcome option = None
         let mutable skipPlayerAction = false
         let mutable skipEnemyAction = false
+        let mutable playerDamageTaken = 0
+        let mutable enemyDamageTaken = 0
+        let mutable playerLastCounterMove: MoveData option = None
+        let mutable enemyLastCounterMove: MoveData option = None
 
         let priorityOf (move: MoveData) =
             if move.Effect = "EFFECT_PRIORITY_HIT" then 1 else 0
@@ -1011,9 +1015,31 @@ module Battle =
                             // ProtectChance fails if the opponent already moved.
                             let opponentWentFirst = not userMovedFirst
                             let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit =
-                                if usesProtectCounter moveToUse && opponentWentFirst then
+                                if moveToUse.Effect = "EFFECT_COUNTER" then
+                                    let lastOppMove =
+                                        if playerIsUser then enemyLastCounterMove else playerLastCounterMove
+                                    let damageTaken =
+                                        if playerIsUser then playerDamageTaken else enemyDamageTaken
+                                    let counterWorks =
+                                        match lastOppMove with
+                                        | Some lastMove ->
+                                            opponentWentFirst
+                                            && lastMove.Effect <> "EFFECT_COUNTER"
+                                            && lastMove.Power > 0
+                                            && TypeChart.isPhysical lastMove.Type
+                                            && damageTaken > 0
+                                            && Damage.effectivenessTimesTen moveToUse foe <> 0
+                                        | None -> false
+
+                                    if counterWorks then
+                                        let dmg = min 65535 (damageTaken * 2)
+                                        let foe = { foe with Hp = max 0 (foe.Hp - dmg) }
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "Countered the attack!" ], rng, playerSide, enemySide, weatherTimer, weatherType, dmg, true
+                                    else
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif usesProtectCounter moveToUse && opponentWentFirst then
                                     let user = { user with Volatile = { user.Volatile with ProtectCount = 0 } }
-                                    user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                    user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 else
                                     executeMove user foe moveToUse isStruggle rng playerIsUser s
                             rng <- rng'
@@ -1028,6 +1054,14 @@ module Battle =
                                     { foe with Volatile = { foe.Volatile with BideDamage = foe.Volatile.BideDamage + lastDamage } }
                                 else
                                     foe
+
+                            if hit then
+                                if playerIsUser then
+                                    playerLastCounterMove <- Some moveToUse
+                                    enemyDamageTaken <- lastDamage
+                                else
+                                    enemyLastCounterMove <- Some moveToUse
+                                    playerDamageTaken <- lastDamage
 
                             // Clear the charge window after the second-turn execution.
                             let user =

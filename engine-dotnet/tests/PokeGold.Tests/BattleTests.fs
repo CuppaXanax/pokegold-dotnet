@@ -2877,6 +2877,60 @@ let ``C21 Beat Up loops over healthy unstatted party members`` () =
     Assert.Equal<string list>([ "ACTIVE attacked!"; "BENCH attacked!" ], attackMessages)
     Assert.Equal(target.Hp - expected, after.Enemy.Hp)
 
+[<Fact>]
+let ``C22 Counter doubles the physical damage just taken when moving second`` () =
+    let counter = Moves.byName "COUNTER"
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "FIGHTING") (ty "FIGHTING") 50 200 100 100 1 with
+            Moves = [ counter ]
+            Pp = [ counter.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let seed = 7u
+    let critByte, rng = Rng.next (Rng.create seed)
+    let spreadByte, _ = Rng.next rng
+    let threshold = CriticalHit.thresholds.[CriticalHit.critStage enemy.Volatile.FocusEnergy tackle]
+    let spread = Damage.MinRoll + spreadByte % (Damage.MaxRoll - Damage.MinRoll + 1)
+    let incoming = Damage.calc enemy player tackle (critByte < threshold) spread false
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy seed)
+
+    Assert.Equal(player.Hp - incoming, after.Player.Hp)
+    Assert.Equal(enemy.Hp - incoming * 2, after.Enemy.Hp)
+    Assert.Contains(after.Messages, fun m -> m.Contains("Countered the attack"))
+
+[<Fact>]
+let ``C22 Counter fails for special damage or when moving first`` () =
+    let counter = Moves.byName "COUNTER"
+    let ember = { Moves.byName "EMBER" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let slowCounterUser =
+        { mon "PLAYER" (ty "FIGHTING") (ty "FIGHTING") 50 200 100 100 1 with
+            Moves = [ counter ]
+            Pp = [ counter.Pp ] }
+    let specialEnemy =
+        { mon "ENEMY" (ty "FIRE") (ty "FIRE") 50 200 100 100 200 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ] }
+    let afterSpecial = Battle.chooseMove 0 (Battle.create slowCounterUser specialEnemy 11u)
+    Assert.Equal(specialEnemy.Hp, afterSpecial.Enemy.Hp)
+    Assert.Contains(afterSpecial.Messages, fun m -> m = "But it failed!")
+
+    let fastCounterUser =
+        { slowCounterUser with
+            Speed = 200
+            Hp = slowCounterUser.MaxHp }
+    let slowEnemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let afterFirst = Battle.chooseMove 0 (Battle.create fastCounterUser slowEnemy 13u)
+    Assert.Equal(slowEnemy.Hp, afterFirst.Enemy.Hp)
+    Assert.Contains(afterFirst.Messages, fun m -> m = "But it failed!")
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

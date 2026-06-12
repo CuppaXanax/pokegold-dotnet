@@ -264,9 +264,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C21 BattleTests audit Beat Up's base-stat damage formula and healthy, status-free party-member loop against BattleCommand_BeatUp."
             [ "EFFECT_BEAT_UP" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C22 BattleTests audit Counter's opponent-went-first, physical last-move, nonzero-damage, and doubled-damage requirements against BattleCommand_Counter."
+            [ "EFFECT_COUNTER" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_COUNTER"
-              "EFFECT_DISABLE"
+            [ "EFFECT_DISABLE"
               "EFFECT_ENCORE"
               "EFFECT_FUTURE_SIGHT"
               "EFFECT_MIRROR_COAT"
