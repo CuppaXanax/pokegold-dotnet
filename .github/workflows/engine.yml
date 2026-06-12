@@ -1,0 +1,38 @@
+name: engine
+
+on:
+  push:
+    paths:
+      - "engine-dotnet/**"
+      - "maps/**"
+      - "data/**"
+      - "constants/**"
+      - "audio/**"
+      - ".github/workflows/engine.yml"
+  pull_request:
+    paths:
+      - "engine-dotnet/**"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Build projects individually: PokeGold.Host.Android needs the Android
+      # SDK and is deliberately excluded from CI.
+      - name: Build game library (bakes generated data)
+        run: dotnet build engine-dotnet/src/PokeGold.Game -c Release
+
+      - name: Build desktop host
+        run: dotnet build engine-dotnet/src/PokeGold.Host -c Release
+
+      - name: Test
+        run: dotnet test engine-dotnet/tests/PokeGold.Tests -c Release --logger "console;verbosity=minimal"

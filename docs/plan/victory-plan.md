@@ -261,6 +261,11 @@ over `constants/collision_constants.asm`, text control codes, and trainer AI lay
 3. **B1–B4** (the 100%-blocking specials), then C's first batch.
 4. Remaining B items, C long tail, D.
 
+**Tracking convention:** when a work item is complete (implemented + tested + ledger
+updated), prefix its `#` cell in the table above with ✅ in the same commit. Blocked items
+get ⚠️ plus a one-line note in the row. Agents: your kickoff prompt is
+[`agent-prompt.md`](agent-prompt.md) — it enforces this loop.
+
 **Victory check** (automatable end-state): one mega-test that chains all runtime legs with
 no `Apply(SetFlag …)` shortcuts — every flag earned by play — from `StartNewGame` to the
 Red credits, with `RuntimeInvariants.assertHold` on every frame. When that passes, tag a
