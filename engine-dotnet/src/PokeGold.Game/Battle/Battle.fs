@@ -370,6 +370,13 @@ module Battle =
             runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_CONVERSION" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_CONVERSION2" && not isStruggle then
+            let hit, rng = checkHit user foe move rng battle.WeatherType
+            if hit then
+                runHit false Damage.MaxRoll rng
+            else
+                let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
         elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType

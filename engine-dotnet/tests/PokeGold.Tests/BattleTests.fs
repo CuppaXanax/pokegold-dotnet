@@ -373,8 +373,11 @@ let ``Conversion changes the user to one of its move types`` () =
 [<Fact>]
 let ``Conversion2 chooses a type resistant to the target move`` () =
     let conversion2 = Moves.byName "CONVERSION2"
+    let tackle = Moves.byName "TACKLE"
     let user = BattleMon.ofSpecies (Species.byName "PORYGON") 20 [ conversion2 ]
-    let foe = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ Moves.byName "TACKLE" ]
+    let foe =
+        { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ tackle ] with
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
     let ctx =
         { User = user
           Foe = foe
@@ -397,7 +400,7 @@ let ``Conversion2 chooses a type resistant to the target move`` () =
 
     let converted = Effects.forMove conversion2 |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
 
-    Assert.Equal(0, TypeChart.multiplier (TypeChart.value "NORMAL") converted.User.Species.Type1)
+    Assert.True(TypeChart.multiplier (TypeChart.value "NORMAL") converted.User.Species.Type1 < TypeChart.Neutral)
 
 [<Fact>]
 let ``Mimic copies a target move into the user's move list with 5 PP`` () =
@@ -4577,6 +4580,63 @@ let ``C37 Conversion samples move slots without consuming hit RNG`` () =
     Assert.Equal(TypeChart.value "FIRE", after.Player.Species.Type1)
     Assert.Equal(TypeChart.value "FIRE", after.Player.Species.Type2)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("converted to FIRE"))
+
+[<Fact>]
+let ``C38 Conversion2 fails without a last counter move or after Curse`` () =
+    let conversion2 = Moves.byName "CONVERSION2"
+    let curse = Moves.byName "CURSE"
+    let user = BattleMon.ofSpecies (Species.byName "PORYGON") 20 [ conversion2 ]
+    let foeNoLast = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ Moves.byName "TACKLE" ]
+    let ctx foe =
+        { User = user
+          Foe = foe
+          Move = conversion2
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let noLast = Effects.forMove conversion2 |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (ctx foeNoLast)
+    Assert.Equal(user.Species.Type1, noLast.User.Species.Type1)
+    Assert.Contains(noLast.Messages, fun msg -> msg.Contains("But it failed"))
+
+    let foeCurse =
+        { foeNoLast with
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some curse } }
+    let afterCurse = Effects.forMove conversion2 |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (ctx foeCurse)
+    Assert.Equal(user.Species.Type1, afterCurse.User.Species.Type1)
+    Assert.Contains(afterCurse.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
+let ``C38 Conversion2 samples a type resistant to the opponent last counter move`` () =
+    let conversion2 = { Moves.byName "CONVERSION2" with Accuracy = 100 }
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ conversion2 ]
+            Pp = [ conversion2.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "EMBER" ]
+            Status = Sleep 2
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 181u)
+
+    Assert.True(TypeChart.multiplier tackle.Type after.Player.Species.Type1 < TypeChart.Neutral)
+    Assert.Equal(after.Player.Species.Type1, after.Player.Species.Type2)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("converted to"))
 
 [<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =

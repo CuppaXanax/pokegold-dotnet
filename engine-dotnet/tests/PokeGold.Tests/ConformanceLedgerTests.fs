@@ -312,8 +312,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C37 BattleTests audit Conversion's own-move type buffer, current-type and Curse exclusions, failure when no valid type exists, four-slot random sampling, and command-owned no-checkhit RNG path against BattleCommand_Conversion."
             [ "EFFECT_CONVERSION" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C38 BattleTests audit Conversion2's last-counter-move source, no-last and Curse-type failure gates, valid-type rejection sampling, resistance requirement, and checkhit-without-extra-crit-RNG path against BattleCommand_Conversion2."
+            [ "EFFECT_CONVERSION2" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
+            [ "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
 
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."

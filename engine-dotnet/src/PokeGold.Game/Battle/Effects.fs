@@ -220,6 +220,9 @@ module Effects =
         && (m.Volatile.ChargingMove
             |> Option.exists (fun move -> move.Effect = "EFFECT_FLY" || move.Effect = "EFFECT_DIG"))
 
+    let private conversion2TypeIds =
+        [ 0..9 ] @ [ 20..27 ]
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -1035,20 +1038,30 @@ module Effects =
                 { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType typ} type!" ] }
 
         | ConvertToResistantType ->
-            let attackType =
-                ctx.Foe.Moves
-                |> List.tryFind (fun move -> move.Power > 0)
-                |> Option.orElse (ctx.Foe.Moves |> List.tryHead)
-                |> Option.map (fun move -> move.Type)
-
-            match attackType with
+            let curseType = TypeChart.value "CURSE_TYPE"
+            match ctx.Foe.Volatile.LastCounterMove with
             | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | Some typ ->
-                let resistantType =
-                    concreteBattleTypes
-                    |> List.minBy (fun candidate -> TypeChart.multiplier typ candidate)
-                let user = battlerWithTypes resistantType resistantType ctx.User
-                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType resistantType} type!" ] }
+            | Some lastMove when lastMove.Type = curseType -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some lastMove ->
+                let validTypes =
+                    conversion2TypeIds
+                    |> List.filter (fun candidate -> TypeChart.multiplier lastMove.Type candidate < TypeChart.Neutral)
+
+                if validTypes.IsEmpty then
+                    { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                else
+                    let rec sample rng =
+                        let roll, rng' = Rng.next rng
+                        let candidate = roll &&& 31
+                        if List.contains candidate conversion2TypeIds
+                           && TypeChart.multiplier lastMove.Type candidate < TypeChart.Neutral then
+                            candidate, rng'
+                        else
+                            sample rng'
+
+                    let resistantType, rng' = sample ctx.Rng
+                    let user = battlerWithTypes resistantType resistantType ctx.User
+                    { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType resistantType} type!" ] }
 
         | MimicTargetMove ->
             match ctx.Foe.Moves |> List.tryFind (fun move -> move.Name <> ctx.Move.Name) with
