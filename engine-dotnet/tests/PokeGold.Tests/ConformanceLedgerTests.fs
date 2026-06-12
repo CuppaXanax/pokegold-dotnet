@@ -252,18 +252,21 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C17 BattleTests audit two-turn move first-turn runtime charging and second-turn effect commands for Fly, SolarBeam, Razor Wind, Skull Bash, and Sky Attack."
             [ "EFFECT_FLY"; "EFFECT_SOLARBEAM"; "EFFECT_RAZOR_WIND"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C18 BattleTests audit Morning Sun, Synthesis, and Moonlight through the shared time/weather heal helper, covering full-HP failure and modeled weather multipliers."
+            [ "EFFECT_MORNING_SUN"; "EFFECT_SYNTHESIS"; "EFFECT_MOONLIGHT" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
               "EFFECT_DISABLE"
               "EFFECT_ENCORE"; "EFFECT_ENDURE"
               "EFFECT_FUTURE_SIGHT"
-              "EFFECT_MIRROR_COAT"; "EFFECT_MOONLIGHT"
-              "EFFECT_MORNING_SUN"; "EFFECT_OHKO"
+              "EFFECT_MIRROR_COAT"
+              "EFFECT_OHKO"
               "EFFECT_PROTECT"
               "EFFECT_RAGE"; "EFFECT_RAMPAGE"
               "EFFECT_SKETCH"
               "EFFECT_SLEEP_TALK"; "EFFECT_SPITE"
-              "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"
+              "EFFECT_TELEPORT"; "EFFECT_THIEF"
               "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]

@@ -2679,6 +2679,37 @@ let ``C17 Skull Bash raises Defense after damage and Sky Attack can flinch`` () 
     Assert.True(skyAttackAfter.Foe.Hp < foe.Hp)
     Assert.True(skyAttackAfter.Foe.Volatile.Flinch)
 
+[<Fact>]
+let ``C18 audited weather-heal moves map to the shared time-based heal command`` () =
+    let cases =
+        [ "EFFECT_MORNING_SUN", [ WeatherHeal ]
+          "EFFECT_SYNTHESIS", [ WeatherHeal ]
+          "EFFECT_MOONLIGHT", [ WeatherHeal ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C18 weather heal restores half by default full in sun and quarter in rain or sand`` () =
+    let synthesis = Moves.byName "SYNTHESIS"
+    let user = { mon "USER" (ty "GRASS") (ty "GRASS") 50 200 100 100 100 with Hp = 40 }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let baseCtx = mkCtx user foe synthesis
+
+    let clear = Effects.applyCtx baseCtx WeatherHeal
+    let sunny = Effects.applyCtx { baseCtx with WeatherType = Some "SUN" } WeatherHeal
+    let rainy = Effects.applyCtx { baseCtx with WeatherType = Some "RAIN" } WeatherHeal
+    let sandy = Effects.applyCtx { baseCtx with WeatherType = Some "SAND" } WeatherHeal
+    let full = Effects.applyCtx (mkCtx { user with Hp = user.MaxHp } foe synthesis) WeatherHeal
+
+    Assert.Equal(140, clear.User.Hp)
+    Assert.Equal(200, sunny.User.Hp)
+    Assert.Equal(90, rainy.User.Hp)
+    Assert.Equal(90, sandy.User.Hp)
+    Assert.Equal(user.MaxHp, full.User.Hp)
+    Assert.Contains(full.Messages, fun msg -> msg.Contains("HP is full"))
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
