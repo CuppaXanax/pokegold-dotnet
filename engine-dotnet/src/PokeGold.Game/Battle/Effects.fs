@@ -718,12 +718,16 @@ module Effects =
                 { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
 
         | WeatherHeal ->
-            let heal =
-                if ctx.WeatherTimer.IsSome && ctx.WeatherType = Some "SAND" then ctx.User.MaxHp / 4
-                elif ctx.WeatherType = Some "SUN" then ctx.User.MaxHp * 2 / 3
-                else ctx.User.MaxHp / 2
-            let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
-            { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
+            if ctx.User.Hp >= ctx.User.MaxHp then
+                { ctx with Messages = ctx.Messages @ [ "HP is full!" ] }
+            else
+                let heal =
+                    match ctx.WeatherType with
+                    | Some "SUN" -> ctx.User.MaxHp
+                    | Some "RAIN" | Some "SAND" -> ctx.User.MaxHp / 4
+                    | _ -> ctx.User.MaxHp / 2
+                let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
+                { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
 
         | Swagger ->
             let foe = shiftStage Attack 2 ctx.Foe
@@ -827,7 +831,10 @@ module Effects =
             ctx
 
         | SetLockOn ->
-            { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with LockOn = true } }; Messages = ctx.Messages @ [ "took aim!" ] }
+            match ctx.Foe.Volatile.Substitute with
+            | Some _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | None ->
+                { ctx with Foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with LockOn = true } }; Messages = ctx.Messages @ [ "took aim!" ] }
 
         | SetForesight ->
             { ctx with Foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with Foresight = true } }; Messages = ctx.Messages @ [ "was identified!" ] }
@@ -948,9 +955,16 @@ module Effects =
             { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} passed its battle state!" ] }
 
         | SetPerishSong ->
-            let playerSide = { ctx.PlayerSide with PerishCounter = Some 3 }
-            let enemySide = { ctx.EnemySide with PerishCounter = Some 3 }
-            { ctx with PlayerSide = playerSide; EnemySide = enemySide; Messages = ctx.Messages @ [ "Both sides are marked by Perish Song!" ] }
+            if ctx.PlayerSide.PerishCounter.IsSome && ctx.EnemySide.PerishCounter.IsSome then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let playerSide =
+                    if ctx.PlayerSide.PerishCounter.IsSome then ctx.PlayerSide
+                    else { ctx.PlayerSide with PerishCounter = Some 4 }
+                let enemySide =
+                    if ctx.EnemySide.PerishCounter.IsSome then ctx.EnemySide
+                    else { ctx.EnemySide with PerishCounter = Some 4 }
+                { ctx with PlayerSide = playerSide; EnemySide = enemySide; Messages = ctx.Messages @ [ "Both sides are marked by Perish Song!" ] }
 
         | SetSafeguard ->
             let side = if ctx.UserIsPlayer then ctx.PlayerSide else ctx.EnemySide
@@ -988,9 +1002,13 @@ module Effects =
                     { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
 
         | SetNightmare ->
-            let vol = { ctx.Foe.Volatile with Nightmare = true }
-            let foe = { ctx.Foe with Volatile = vol }
-            { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was haunted by Nightmare!" ] }
+            match ctx.Foe.Volatile.Substitute, ctx.Foe.Status, ctx.Foe.Volatile.Nightmare with
+            | Some _, _, _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | _, Sleep _, false ->
+                let vol = { ctx.Foe.Volatile with Nightmare = true }
+                let foe = { ctx.Foe with Volatile = vol }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was haunted by Nightmare!" ] }
+            | _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | SetCurse ->
             let ghostType = TypeChart.value "GHOST"

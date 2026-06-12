@@ -1030,8 +1030,8 @@ let ``SetPerishSong sets counters on both sides`` () =
           Friendship = 0; UserIsPlayer = true
           PlayerSide = SideState.Empty; EnemySide = SideState.Empty; WeatherTimer = None; WeatherType = None }
     let applied = Effects.forMove (Moves.byName "PERISH_SONG") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
-    Assert.Equal(Some 3, applied.PlayerSide.PerishCounter)
-    Assert.Equal(Some 3, applied.EnemySide.PerishCounter)
+    Assert.Equal(Some 4, applied.PlayerSide.PerishCounter)
+    Assert.Equal(Some 4, applied.EnemySide.PerishCounter)
 
 [<Fact>]
 let ``nightmare chips sleeping target each turn`` () =
@@ -2512,6 +2512,76 @@ let ``C14 Snore only works while asleep and applies its flinch secondary`` () =
     Assert.Equal(0, awake.LastDamage)
     Assert.Equal(foe.Hp, awake.Foe.Hp)
     Assert.False(awake.Foe.Volatile.Flinch)
+
+[<Fact>]
+let ``C15 audited utility status effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_HIDDEN_POWER", [ HiddenPowerDamage ]
+          "EFFECT_LOCK_ON", [ SetLockOn ]
+          "EFFECT_FORESIGHT", [ SetForesight ]
+          "EFFECT_NIGHTMARE", [ SetNightmare ]
+          "EFFECT_PERISH_SONG", [ SetPerishSong ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C15 Hidden Power uses the modeled DV zero Fighting power`` () =
+    let hiddenPower = Moves.byName "HIDDEN_POWER"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after = Effects.applyCtx (mkCtx user foe hiddenPower) HiddenPowerDamage
+
+    Assert.Equal(30, after.LastDamage)
+    Assert.Equal(70, after.Foe.Hp)
+
+[<Fact>]
+let ``C15 Lock-On marks the target and fails through substitute`` () =
+    let lockOn = Moves.byName "LOCK_ON"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let substitutedFoe = { foe with Volatile = { VolatileStatus.empty with Substitute = Some 20 } }
+
+    let aimed = Effects.applyCtx (mkCtx user foe lockOn) SetLockOn
+    let failed = Effects.applyCtx (mkCtx user substitutedFoe lockOn) SetLockOn
+
+    Assert.False(aimed.User.Volatile.LockOn)
+    Assert.True(aimed.Foe.Volatile.LockOn)
+    Assert.False(failed.Foe.Volatile.LockOn)
+    Assert.Contains(failed.Messages, fun msg -> msg.Contains("failed"))
+
+[<Fact>]
+let ``C15 Nightmare requires a sleeping target and cannot be repeated`` () =
+    let nightmare = Moves.byName "NIGHTMARE"
+    let user = mon "USER" (ty "GHOST") (ty "GHOST") 50 100 100 100 100
+    let awakeFoe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let sleepingFoe = { awakeFoe with Status = Sleep 3 }
+
+    let failedAwake = Effects.applyCtx (mkCtx user awakeFoe nightmare) SetNightmare
+    let applied = Effects.applyCtx (mkCtx user sleepingFoe nightmare) SetNightmare
+    let failedRepeat = Effects.applyCtx (mkCtx user applied.Foe nightmare) SetNightmare
+
+    Assert.False(failedAwake.Foe.Volatile.Nightmare)
+    Assert.True(applied.Foe.Volatile.Nightmare)
+    Assert.True(failedRepeat.Foe.Volatile.Nightmare)
+    Assert.Contains(failedRepeat.Messages, fun msg -> msg.Contains("failed"))
+
+[<Fact>]
+let ``C15 Perish Song sets missing counters to four and fails when both are active`` () =
+    let perishSong = Moves.byName "PERISH_SONG"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let applied = Effects.applyCtx (mkCtx user foe perishSong) SetPerishSong
+    let failedRepeat = Effects.applyCtx applied SetPerishSong
+
+    Assert.Equal(Some 4, applied.PlayerSide.PerishCounter)
+    Assert.Equal(Some 4, applied.EnemySide.PerishCounter)
+    Assert.Equal(Some 4, failedRepeat.PlayerSide.PerishCounter)
+    Assert.Equal(Some 4, failedRepeat.EnemySide.PerishCounter)
+    Assert.Contains(failedRepeat.Messages, fun msg -> msg.Contains("failed"))
 
 // -- Pre-move gates ----------------------------------------------------------
 
