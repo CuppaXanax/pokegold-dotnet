@@ -283,6 +283,7 @@ Progress:
 - ✅ C1 batch 34: `EFFECT_TRANSFORM`.
 - ✅ C1 batch 35: `EFFECT_BATON_PASS`.
 - ✅ C1 batch 36: `EFFECT_BIDE`.
+- ✅ C1 batch 37: `EFFECT_CONVERSION`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

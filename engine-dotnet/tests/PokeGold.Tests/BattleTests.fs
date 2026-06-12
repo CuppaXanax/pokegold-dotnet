@@ -4525,6 +4525,60 @@ let ``C36 Bide release doubles stored damage and clamps at 65535`` () =
     Assert.Contains(after.Messages, fun msg -> msg.Contains("unleashed energy"))
 
 [<Fact>]
+let ``C37 Conversion fails when every move is current type or Curse`` () =
+    let conversion = Moves.byName "CONVERSION"
+    let tackle = Moves.byName "TACKLE"
+    let curse = Moves.byName "CURSE"
+    let user =
+        { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ conversion; tackle; curse ] with
+            Pp = [ conversion.Pp; tackle.Pp; curse.Pp ] }
+    let foe = BattleMon.ofSpecies (Species.byName "PIDGEY") 20 [ Moves.byName "SPLASH" ]
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = conversion
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let converted = Effects.forMove conversion |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Equal(TypeChart.value "NORMAL", converted.User.Species.Type1)
+    Assert.Equal(TypeChart.value "NORMAL", converted.User.Species.Type2)
+    Assert.Contains(converted.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
+let ``C37 Conversion samples move slots without consuming hit RNG`` () =
+    let conversion = Moves.byName "CONVERSION"
+    let ember = Moves.byName "EMBER"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ conversion; ember ]
+            Pp = [ conversion.Pp; ember.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 179u)
+
+    Assert.Equal(TypeChart.value "FIRE", after.Player.Species.Type1)
+    Assert.Equal(TypeChart.value "FIRE", after.Player.Species.Type2)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("converted to FIRE"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

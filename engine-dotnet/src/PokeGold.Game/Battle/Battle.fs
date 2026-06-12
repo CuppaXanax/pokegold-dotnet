@@ -368,6 +368,8 @@ module Battle =
             runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_TRANSFORM" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_CONVERSION" && not isStruggle then
+            runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType

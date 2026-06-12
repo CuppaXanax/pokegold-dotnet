@@ -1013,17 +1013,26 @@ module Effects =
                 { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} is storing energy!" ] }
 
         | ConvertToOwnMoveType ->
-            let moveType =
-                ctx.User.Moves
-                |> List.tryFind (fun move -> move.Type <> ctx.User.Species.Type1 && move.Type <> ctx.User.Species.Type2)
-                |> Option.orElse (ctx.User.Moves |> List.tryHead)
-                |> Option.map (fun move -> move.Type)
+            let isCandidate (move: MoveData) =
+                move.Name <> "CURSE"
+                && move.Type <> ctx.User.Species.Type1
+                && move.Type <> ctx.User.Species.Type2
 
-            match moveType with
-            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | Some typ ->
+            let candidates = ctx.User.Moves |> List.filter isCandidate
+
+            match candidates with
+            | [] -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | _ ->
+                let rec sample rng =
+                    let roll, rng' = Rng.next rng
+                    let index = roll &&& 3
+                    match ctx.User.Moves |> List.tryItem index with
+                    | Some move when isCandidate move -> move.Type, rng'
+                    | _ -> sample rng'
+
+                let typ, rng' = sample ctx.Rng
                 let user = battlerWithTypes typ typ ctx.User
-                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType typ} type!" ] }
+                { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType typ} type!" ] }
 
         | ConvertToResistantType ->
             let attackType =
