@@ -863,6 +863,19 @@ module Battle =
         |> List.tryFind (fun (i, mon) -> i > 0 && not (BattleMon.isFainted mon))
         |> Option.map fst
 
+    let private randomHealthyBench (team: BattleMon list) (rng: Rng) =
+        if firstHealthyBench team |> Option.isNone then
+            None, rng
+        else
+            let rec loop rng =
+                let roll, rng' = Rng.next rng
+                let index = roll &&& 7
+                if index > 0 && index < team.Length && not (BattleMon.isFainted team.[index]) then
+                    Some index, rng'
+                else
+                    loop rng'
+            loop rng
+
     /// The player selects a move (by index into their move list). This resolves a
     /// whole turn: both sides act in speed order, faints are checked between
     /// actions, end-of-turn residuals run, and the outcome is set if the battle ends.
@@ -1119,6 +1132,30 @@ module Battle =
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
                                     | None ->
                                         clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_FORCE_SWITCH" then
+                                    let hit, rng = checkHit user foe moveToUse rng weatherType
+                                    if not hit then
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                    else
+                                        let targetTeam = if playerIsUser then enemyTeam else playerTeam
+                                        if firstHealthyBench targetTeam |> Option.isSome then
+                                            if opponentWentFirst then
+                                                user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{foe.Species.Name} was blown away!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                            else
+                                                user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                        else
+                                            let rec drawBelow limit rng =
+                                                let roll, rng' = Rng.next rng
+                                                if roll < limit then roll, rng' else drawBelow limit rng'
+                                            let forceSucceeds, rng =
+                                                if user.Level >= foe.Level then true, rng
+                                                else
+                                                    let roll, rng = drawBelow (user.Level + foe.Level + 1) rng
+                                                    roll >= foe.Level / 4, rng
+                                            if forceSucceeds then
+                                                user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{foe.Species.Name} fled in fear!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                            else
+                                                user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif moveToUse.Effect = "EFFECT_BATON_PASS" then
                                     let team = if playerIsUser then playerTeam else enemyTeam
                                     if firstHealthyBench team |> Option.isSome then
@@ -1372,7 +1409,9 @@ module Battle =
                             | "EFFECT_FORCE_SWITCH", true ->
                                 if playerIsUser then
                                     let updatedEnemyTeam = enemyTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
-                                    match firstHealthyBench updatedEnemyTeam |> Option.bind (fun idx -> switchTeamTo idx foe updatedEnemyTeam (fun _ target -> clearSwitchVolatile target)) with
+                                    let switchIndex, rng' = randomHealthyBench updatedEnemyTeam rng
+                                    rng <- rng'
+                                    match switchIndex |> Option.bind (fun idx -> switchTeamTo idx foe updatedEnemyTeam (fun _ target -> clearSwitchVolatile target)) with
                                     | Some(incoming, team') ->
                                         player <- user
                                         playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then user else m)
@@ -1385,7 +1424,9 @@ module Battle =
                                         outcome <- Some Ran
                                 else
                                     let updatedPlayerTeam = playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
-                                    match firstHealthyBench updatedPlayerTeam |> Option.bind (fun idx -> switchTeamTo idx foe updatedPlayerTeam (fun _ target -> clearSwitchVolatile target)) with
+                                    let switchIndex, rng' = randomHealthyBench updatedPlayerTeam rng
+                                    rng <- rng'
+                                    match switchIndex |> Option.bind (fun idx -> switchTeamTo idx foe updatedPlayerTeam (fun _ target -> clearSwitchVolatile target)) with
                                     | Some(incoming, team') ->
                                         enemy <- user
                                         enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)

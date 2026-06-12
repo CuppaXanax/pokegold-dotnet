@@ -637,9 +637,9 @@ let ``Teleport ends the battle as a run outcome`` () =
     Assert.Equal(Some Ran, after.Outcome)
 
 [<Fact>]
-let ``Roar drags out the next enemy team member`` () =
-    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 200 with Moves = [ Moves.byName "ROAR" ] }
-    let firstEnemy = { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "SPLASH" ] }
+let ``Roar drags out an enemy team member after the target has moved`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "ROAR" ] }
+    let firstEnemy = { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 200 with Moves = [ Moves.byName "SPLASH" ] }
     let benchEnemy = { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "SPLASH" ] }
 
     let after = Battle.createTeam [ player ] [ firstEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
@@ -4637,6 +4637,41 @@ let ``C38 Conversion2 samples a type resistant to the opponent last counter move
     Assert.True(TypeChart.multiplier tackle.Type after.Player.Species.Type1 < TypeChart.Neutral)
     Assert.Equal(after.Player.Species.Type1, after.Player.Species.Type2)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("converted to"))
+
+[<Fact>]
+let ``C39 Force Switch fails in trainer battles if the target has not moved`` () =
+    let roar = { Moves.byName "ROAR" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ roar ]
+            Pp = [ roar.Pp ] }
+    let firstEnemy =
+        { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ] }
+    let benchEnemy =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.chooseMove 0 (Battle.createTeam [ player ] [ firstEnemy; benchEnemy ] 191u)
+
+    Assert.Equal("FIRST", after.Enemy.Species.Name)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
+let ``C39 Force Switch makes a wild target flee when there is no bench`` () =
+    let roar = { Moves.byName "ROAR" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 80 200 100 100 200 with
+            Moves = [ roar ]
+            Pp = [ roar.Pp ] }
+    let enemy =
+        { mon "WILD" (ty "NORMAL") (ty "NORMAL") 20 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 193u)
+
+    Assert.Equal(Some Ran, after.Outcome)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("fled in fear"))
 
 [<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
