@@ -461,7 +461,8 @@ let ``Metronome dispatches a deterministic called move`` () =
     let called = Effects.forMove metronome |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
 
     Assert.Contains(called.Messages, fun msg -> msg.Contains("Metronome called"))
-    Assert.NotEqual(foe.Hp, called.Foe.Hp)
+    Assert.True(called.User.Volatile.LastMove.IsSome)
+    Assert.NotEqual<string>("METRONOME", called.User.Volatile.LastMove.Value.Name)
 
 // --- Turn loop ----------------------------------------------------------------
 
@@ -4672,6 +4673,27 @@ let ``C39 Force Switch makes a wild target flee when there is no bench`` () =
 
     Assert.Equal(Some Ran, after.Outcome)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("fled in fear"))
+
+[<Fact>]
+let ``C40 Metronome records the sampled move instead of Metronome`` () =
+    let metronome = Moves.byName "METRONOME"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 300 120 100 200 with
+            Moves = [ metronome ]
+            Pp = [ metronome.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some metronome; LastCounterMove = Some metronome } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 197u)
+
+    Assert.Equal(metronome.Pp - 1, after.Player.Pp.[0])
+    Assert.True(after.Player.Volatile.LastMove.IsSome)
+    Assert.NotEqual<string>("METRONOME", after.Player.Volatile.LastMove.Value.Name)
+    Assert.Equal(after.Player.Volatile.LastMove.Value.Name, after.Player.Volatile.LastCounterMove.Value.Name)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("Metronome called"))
 
 [<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =

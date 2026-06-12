@@ -182,16 +182,20 @@ module Effects =
             let pp = m.Pp |> List.mapi (fun i existing -> if i = index then 5 else existing)
             { m with Moves = moves; Pp = pp }
 
-    let private callableMoves =
-        Moves.all
-        |> Map.toList
-        |> List.map snd
-        |> List.filter (fun move ->
-            move.Name <> "STRUGGLE"
-            && move.Effect <> "EFFECT_METRONOME"
-            && move.Effect <> "EFFECT_MIRROR_MOVE"
-            && move.Effect <> "EFFECT_SLEEP_TALK")
-        |> List.sortBy (fun move -> move.Name)
+    let private metronomeExceptions =
+        [ "METRONOME"
+          "STRUGGLE"
+          "SKETCH"
+          "MIMIC"
+          "COUNTER"
+          "MIRROR_COAT"
+          "PROTECT"
+          "DETECT"
+          "ENDURE"
+          "DESTINY_BOND"
+          "SLEEP_TALK"
+          "THIEF" ]
+        |> Set.ofList
 
     let private sleepTalkBlockedEffects =
         [ "EFFECT_SKULL_BASH"
@@ -1099,12 +1103,25 @@ module Effects =
                 runCalledMove called $"{ctx.User.Species.Name} mirrored {called.Name}!" ctx
 
         | MetronomeMove ->
-            if callableMoves.IsEmpty then
-                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            else
-                let roll, rng' = Rng.next ctx.Rng
-                let called = callableMoves.[roll % callableMoves.Length]
-                runCalledMove called $"{ctx.User.Species.Name}'s Metronome called {called.Name}!" { ctx with Rng = rng' }
+            let clearLast user =
+                { user with Volatile = { user.Volatile with LastMove = None; LastCounterMove = None } }
+            let user = clearLast ctx.User
+            let userKnows moveName =
+                user.Moves |> List.exists (fun move -> move.Name = moveName)
+            let rec sample rng =
+                let roll, rng' = Rng.next rng
+                match Moves.tryByIndex roll with
+                | Some called when not (Set.contains called.Name metronomeExceptions) && not (userKnows called.Name) ->
+                    called, rng'
+                | _ -> sample rng'
+
+            let called, rng' = sample ctx.Rng
+            let calledCtx =
+                runCalledMove called $"{ctx.User.Species.Name}'s Metronome called {called.Name}!" { ctx with User = user; Rng = rng' }
+            let user =
+                { calledCtx.User with
+                    Volatile = { calledCtx.User.Volatile with LastMove = Some called; LastCounterMove = Some called } }
+            { calledCtx with User = user }
 
         | SleepTalkMove ->
             let clearLast user =

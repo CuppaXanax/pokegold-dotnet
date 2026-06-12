@@ -318,9 +318,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C39 BattleTests audit Force Switch's checkhit gate, trainer target-moved timing gate, random healthy bench selection path, and wild-battle flee outcome/level gate against BattleCommand_ForceSwitch."
             [ "EFFECT_FORCE_SWITCH" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C40 BattleTests audit Metronome's ClearLastMove behavior, numeric move-id rejection sampling, exception list, user-known move exclusion, and called-move last-move tracking against BattleCommand_Metronome."
+            [ "EFFECT_METRONOME" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_METRONOME"
-              "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
+            [ "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
 
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."
             []
