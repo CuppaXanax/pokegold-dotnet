@@ -1096,7 +1096,10 @@ module Effects =
                 { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | TeleportAway ->
-            { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} teleported away!" ] }
+            if ctx.User.Volatile.CantEscape then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} fled from battle!" ] }
 
         | ForceSwitchTarget ->
             { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} was blown away!" ] }

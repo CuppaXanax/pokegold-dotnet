@@ -1087,6 +1087,22 @@ module Battle =
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
                                     | None ->
                                         clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_TELEPORT" then
+                                    let rec drawBelow limit rng =
+                                        let roll, rng' = Rng.next rng
+                                        if roll < limit then roll, rng' else drawBelow limit rng'
+                                    let teleportSucceeds, rng =
+                                        if user.Volatile.CantEscape then false, rng
+                                        elif not playerIsUser then true, rng
+                                        elif user.Level >= foe.Level then true, rng
+                                        else
+                                            let roll, rng = drawBelow (user.Level + foe.Level + 1) rng
+                                            roll >= foe.Level / 4, rng
+
+                                    if teleportSucceeds then
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} fled from battle!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                    else
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif moveToUse.Effect = "EFFECT_SPITE" then
                                     let hit, rng = checkHit user foe moveToUse rng weatherType
                                     if not hit then

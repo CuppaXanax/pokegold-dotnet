@@ -4231,6 +4231,71 @@ let ``C31 Spite fails without a last counter move or with zero target PP`` () =
     Assert.Contains(afterZeroPp.Messages, fun msg -> msg.Contains("didn't affect"))
 
 [<Fact>]
+let ``C32 Teleport succeeds immediately when the player is at least the foe level`` () =
+    let teleport = Moves.byName "TELEPORT"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 30 200 100 100 200 with
+            Moves = [ teleport ]
+            Pp = [ teleport.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 107u)
+
+    Assert.Equal(Some Ran, after.Outcome)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("fled from battle"))
+
+[<Fact>]
+let ``C32 Teleport can fail the low-level random check and trapped users cannot teleport`` () =
+    let teleport = Moves.byName "TELEPORT"
+    let splash = Moves.byName "SPLASH"
+    let lowLevelPlayer =
+        { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 5 200 100 100 200 with
+            Moves = [ teleport ]
+            Pp = [ teleport.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 80 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ]
+            Status = Sleep 2 }
+    let failSeed = findSeed (fun draw -> draw < enemy.Level / 4)
+
+    let afterRandomFail = Battle.chooseMove 0 (Battle.create lowLevelPlayer enemy failSeed)
+
+    Assert.True(afterRandomFail.Outcome.IsNone)
+    Assert.Contains(afterRandomFail.Messages, fun msg -> msg.Contains("But it failed"))
+
+    let trappedPlayer =
+        { lowLevelPlayer with
+            Level = 100
+            Volatile = { VolatileStatus.empty with CantEscape = true } }
+    let afterTrapped = Battle.chooseMove 0 (Battle.create trappedPlayer enemy 109u)
+
+    Assert.True(afterTrapped.Outcome.IsNone)
+    Assert.Contains(afterTrapped.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
+let ``C32 Wild enemy Teleport succeeds regardless of level difference`` () =
+    let teleport = Moves.byName "TELEPORT"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 80 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 5 200 100 100 200 with
+            Moves = [ teleport ]
+            Pp = [ teleport.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 113u)
+
+    Assert.Equal(Some Ran, after.Outcome)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("fled from battle"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

@@ -294,8 +294,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C31 BattleTests audit Spite's last-counter-move target, Struggle/no-last/zero-PP failure gates, and random clamped 2-5 PP drain against BattleCommand_Spite."
             [ "EFFECT_SPITE" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C32 BattleTests audit Teleport's wild-battle flee outcome, player level/random escape gate, CantEscape failure, and wild-enemy always-succeeds behavior against BattleCommand_Teleport."
+            [ "EFFECT_TELEPORT" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_TELEPORT"; "EFFECT_THIEF"
+            [ "EFFECT_THIEF"
               "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
