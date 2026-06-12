@@ -385,9 +385,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | _ -> ()
 
     member private _.ChangeBlockAt(x: int, y: int, blockId: int) =
-        if x >= 0 && y >= 0 && x < state.Map.Width && y < state.Map.Height then
+        let blockX = x / 2
+        let blockY = y / 2
+
+        if blockX >= 0 && blockY >= 0 && blockX < state.Map.Width && blockY < state.Map.Height then
             let blocks = Array.copy state.Map.BlockIds
-            blocks.[y * state.Map.Width + x] <- byte blockId
+            blocks.[blockY * state.Map.Width + blockX] <- byte blockId
             state <- { state with Map = { state.Map with BlockIds = blocks } }
 
     member private _.ReanchorCamera() =
@@ -748,7 +751,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         lastText <- Some(label, rendered)
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
                     | HallOfFame ->
-                        world <- World.setEvent "EVENT_BEAT_ELITE_FOUR" world
+                        let hallOfFameCount = World.getVar "__hall_of_fame_count" world
+                        world <-
+                            world
+                            |> World.setEvent "EVENT_BEAT_ELITE_FOUR"
+                            |> World.setVar "__hall_of_fame_count" (hallOfFameCount + 1)
+                            |> World.setVar "__credits_rolled" 1
+                            |> World.setBuffer "__post_credits_spawn" "NewBarkTown"
                         player <- { player with Party = Heal.healParty player.Party }
                         pending <- Some(vm, effect)
                         let speed = Options.textSpeedDelay player.Options.TextSpeed

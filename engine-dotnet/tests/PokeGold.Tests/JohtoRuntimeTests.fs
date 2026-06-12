@@ -1916,3 +1916,138 @@ let ``A13 Route23 Plateau door loads IndigoPlateauPokecenter1F`` () =
 
     Assert.Equal("IndigoPlateauPokecenter1F", owMap snap)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A14 — Elite Four → Lance → Hall of Fame → post-game save state
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A14 WillsRoom entry scene locks the door behind the player`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // WillsRoom.asm: SCENE_WILLSROOM_LOCK_DOOR sdefers WillsRoomDoorLocksBehindYouScript.
+    driver.Apply(Warp("WillsRoom", 5, 17, Some Up))
+
+    waitForCapturableOverworld driver 2000
+
+    let ow = owOf driver.Snapshot
+    Assert.Equal("WillsRoom", ow.MapId)
+    Assert.Equal(Some 1, ow.Scenes |> Map.tryFind "WILLS_ROOM")
+    Assert.True(ow.Events |> List.contains "EVENT_WILLS_ROOM_ENTRANCE_CLOSED")
+    Assert.Equal((5, 13), (ow.Player.CellX, ow.Player.CellY))
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A14 Elite Four room exit warps advance in sequence when post-battle doors are open`` () =
+    let cases =
+        [ "WillsRoom", "EVENT_WILLS_ROOM_EXIT_OPEN", 4, 3, "KogasRoom"
+          "KogasRoom", "EVENT_KOGAS_ROOM_EXIT_OPEN", 4, 3, "BrunosRoom"
+          "BrunosRoom", "EVENT_BRUNOS_ROOM_EXIT_OPEN", 4, 3, "KarensRoom"
+          "KarensRoom", "EVENT_KARENS_ROOM_EXIT_OPEN", 4, 3, "LancesRoom" ]
+
+    for mapId, exitEvent, x, y, destMap in cases do
+        let driver = GameDriver()
+        driver.Apply(StartNewGame "A")
+        driver.Apply(SetEvent(exitEvent, true))
+        driver.Apply(SetScene(mapId, 1))
+        driver.Apply(Warp(mapId, x, y, Some Up))
+
+        driver.Step Up
+
+        let snap =
+            driver.RunUntil((fun s -> owMap s = destMap), 100)
+
+        Assert.Equal(destMap, owMap snap)
+        driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A14 LancesRoom approach coord starts Champion battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("LancesRoom", 1))
+    // LancesRoom.asm: coord_event 4, 5, SCENE_LANCESROOM_APPROACH_LANCE.
+    driver.Apply(Warp("LancesRoom", 4, 6, Some Up))
+
+    driver.Step Up
+
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+
+    while frame < 4000 && not sawBattle do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Lance should address the player before the Champion battle")
+    Assert.True(sawBattle, "Lance approach coord should start the Champion battle")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A14 LancesRoom north warp reaches HallOfFame`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_LANCES_ROOM_EXIT_OPEN", true))
+    driver.Apply(SetScene("LancesRoom", 1))
+    // LancesRoom.asm: warp_event 4, 0, HALL_OF_FAME, 1.
+    driver.Apply(Warp("LancesRoom", 4, 1, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "HallOfFame"), 100)
+
+    Assert.Equal("HallOfFame", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A14 HallOfFame scene heals party rolls credits marker and persists post-game world`` () =
+    let content = Content()
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "HallOfFame" 4 13 Up)
+
+    let injured =
+        { PartyMon.create 155 50 with
+            Hp = 1
+            Status = "PSN" }
+
+    scene.Restore(ScriptWorld.empty, { PlayerStateOps.initial with Party = [ injured ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && ScriptWorld.hasEvent "EVENT_BEAT_ELITE_FOUR" scene.DebugWorld
+        && ScriptWorld.getVar "__credits_rolled" scene.DebugWorld = 1
+
+    tickSceneStackUntil stack 12000 completed
+
+    let save =
+        scene.Capture()
+        |> SaveFile.serialize
+        |> SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "Hall of Fame post-game save should deserialize")
+
+    let savedWorld = SaveData.worldOf save
+    let savedPlayer = SaveData.playerOf save
+    let savedLead = savedPlayer.Party |> List.head
+
+    Assert.True(ScriptWorld.hasEvent "EVENT_BEAT_ELITE_FOUR" savedWorld)
+    Assert.True(ScriptWorld.hasEvent "EVENT_TELEPORT_GUY" savedWorld)
+    Assert.Equal(1, ScriptWorld.getVar "__credits_rolled" savedWorld)
+    Assert.Equal(1, ScriptWorld.getVar "__hall_of_fame_count" savedWorld)
+    Assert.Equal("NewBarkTown", ScriptWorld.getBuffer "__post_credits_spawn" savedWorld)
+    Assert.Equal(injured.MaxHp, savedLead.Hp)
+    Assert.Equal("", savedLead.Status)
