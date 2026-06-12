@@ -109,7 +109,9 @@ type VolatileStatus =
       /// Defense Curl substatus, used to double Rollout's damage ramp.
       Curled: bool
       /// Minimize substatus, used by Stomp's double-damage check.
-      Minimized: bool }
+      Minimized: bool
+      /// Transform substatus. Sketch fails if the opponent has this flag set.
+      Transformed: bool }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -149,7 +151,8 @@ module VolatileStatus =
           BideTurns = None
           BideDamage = 0
           Curled = false
-          Minimized = false }
+          Minimized = false
+          Transformed = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;

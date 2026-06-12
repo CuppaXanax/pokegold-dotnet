@@ -275,6 +275,7 @@ Progress:
 - ✅ C1 batch 26: `EFFECT_MIRROR_COAT`.
 - ✅ C1 batch 27: `EFFECT_OHKO`.
 - ✅ C1 batch 28: `EFFECT_RAMPAGE`.
+- ✅ C1 batch 29: `EFFECT_SKETCH`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

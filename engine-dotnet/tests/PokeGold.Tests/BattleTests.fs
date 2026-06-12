@@ -4069,6 +4069,67 @@ let ``C28 Rampage expires into two-or-three-turn confusion without restarting`` 
     Assert.Contains(after.Messages, fun msg -> msg.Contains("became confused after rampaging"))
 
 [<Fact>]
+let ``C29 Sketch copies the opponent last counter move into Sketch slot`` () =
+    let sketch = Moves.byName "SKETCH"
+    let tackle = Moves.byName "TACKLE"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ sketch; splash ]
+            Pp = [ sketch.Pp; splash.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some sketch; LastCounterMove = Some sketch } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 71u)
+
+    Assert.Equal("TACKLE", after.Player.Moves.[0].Name)
+    Assert.Equal(tackle.Pp, after.Player.Pp.[0])
+    Assert.Equal("SPLASH", after.Player.Moves.[1].Name)
+    Assert.True(after.Player.Volatile.LastMove.IsNone)
+    Assert.True(after.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("sketched TACKLE"))
+
+[<Fact>]
+let ``C29 Sketch fails for protected targets and already known last moves`` () =
+    let sketch = Moves.byName "SKETCH"
+    let tackle = Moves.byName "TACKLE"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ sketch; splash ]
+            Pp = [ sketch.Pp; splash.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some sketch; LastCounterMove = Some sketch } }
+    let substitutedEnemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Volatile = { VolatileStatus.empty with Substitute = Some 25; LastCounterMove = Some tackle } }
+
+    let afterSubstitute = Battle.chooseMove 0 (Battle.create player substitutedEnemy 73u)
+    Assert.Equal("SKETCH", afterSubstitute.Player.Moves.[0].Name)
+    Assert.Equal(sketch.Pp - 1, afterSubstitute.Player.Pp.[0])
+    Assert.True(afterSubstitute.Player.Volatile.LastMove.IsNone)
+    Assert.True(afterSubstitute.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Contains(afterSubstitute.Messages, fun msg -> msg.Contains("didn't affect"))
+
+    let duplicatePlayer =
+        { player with
+            Moves = [ sketch; tackle ]
+            Pp = [ sketch.Pp; tackle.Pp ] }
+    let enemy =
+        { substitutedEnemy with
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let afterDuplicate = Battle.chooseMove 0 (Battle.create duplicatePlayer enemy 79u)
+    Assert.Equal("SKETCH", afterDuplicate.Player.Moves.[0].Name)
+    Assert.Equal(sketch.Pp - 1, afterDuplicate.Player.Pp.[0])
+    Assert.Contains(afterDuplicate.Messages, fun msg -> msg.Contains("didn't affect"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

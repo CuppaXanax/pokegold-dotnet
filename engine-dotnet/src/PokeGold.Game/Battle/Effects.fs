@@ -949,7 +949,8 @@ module Effects =
                     SpAtkStage = ctx.Foe.SpAtkStage
                     SpDefStage = ctx.Foe.SpDefStage
                     AccStage = ctx.Foe.AccStage
-                    EvaStage = ctx.Foe.EvaStage }
+                    EvaStage = ctx.Foe.EvaStage
+                    Volatile = { ctx.User.Volatile with Transformed = true } }
 
             { ctx with User = transformed; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} transformed into {ctx.Foe.Species.Name}!" ] }
 
@@ -1002,10 +1003,25 @@ module Effects =
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} learned {copied.Name} with Mimic!" ] }
 
         | SketchTargetMove ->
-            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Name <> ctx.Move.Name) with
-            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | Some copied ->
-                let user = replaceMove ctx.Move.Name copied ctx.User
+            let fail () =
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+            match ctx.Foe.Volatile.Substitute, ctx.Foe.Volatile.Transformed, ctx.Foe.Volatile.LastCounterMove with
+            | Some _, _, _
+            | _, true, _
+            | _, _, None -> fail ()
+            | _, _, Some copied when copied.Name = "STRUGGLE" -> fail ()
+            | _, _, Some copied when ctx.User.Moves |> List.exists (fun move -> move.Name = copied.Name) -> fail ()
+            | _, _, Some copied ->
+                let user =
+                    match ctx.User.Moves |> List.tryFindIndex (fun move -> move.Name = ctx.Move.Name) with
+                    | None -> ctx.User
+                    | Some index ->
+                        { ctx.User with
+                            Moves = ctx.User.Moves |> List.mapi (fun i move -> if i = index then copied else move)
+                            Pp = ctx.User.Pp |> List.mapi (fun i pp -> if i = index then copied.Pp else pp)
+                            Volatile = { ctx.User.Volatile with LastMove = None; LastCounterMove = None } }
+
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} sketched {copied.Name}!" ] }
 
         | MirrorTargetMove ->

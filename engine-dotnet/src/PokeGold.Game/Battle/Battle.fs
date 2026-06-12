@@ -1064,7 +1064,30 @@ module Battle =
                             // ProtectChance fails if the opponent already moved.
                             let opponentWentFirst = not userMovedFirst
                             let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit =
-                                if moveToUse.Effect = "EFFECT_ENCORE" then
+                                if moveToUse.Effect = "EFFECT_SKETCH" then
+                                    let lastOppMove =
+                                        if playerIsUser then enemyLastCounterMove else playerLastCounterMove
+                                    let clearLast user =
+                                        { user with Volatile = { user.Volatile with LastMove = None; LastCounterMove = None } }
+                                    let sketchResult =
+                                        match lastOppMove with
+                                        | Some copied when foe.Volatile.Substitute.IsNone && not foe.Volatile.Transformed && copied.Name <> "STRUGGLE" && not (user.Moves |> List.exists (fun known -> known.Name = copied.Name)) ->
+                                            user.Moves
+                                            |> List.tryFindIndex (fun move -> move.Name = moveToUse.Name)
+                                            |> Option.map (fun index -> index, copied)
+                                        | _ -> None
+
+                                    match sketchResult with
+                                    | Some(index, copied) ->
+                                        let cleared = clearLast user
+                                        let user =
+                                            { cleared with
+                                                Moves = user.Moves |> List.mapi (fun i move -> if i = index then copied else move)
+                                                Pp = user.Pp |> List.mapi (fun i pp -> if i = index then copied.Pp else pp) }
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                    | None ->
+                                        clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_ENCORE" then
                                     let hit, rng = checkHit user foe moveToUse rng weatherType
                                     if not hit then
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
@@ -1180,7 +1203,7 @@ module Battle =
                                 else
                                     foe
 
-                            if hit then
+                            if hit && moveToUse.Effect <> "EFFECT_SKETCH" then
                                 if playerIsUser then
                                     playerLastCounterMove <- Some moveToUse
                                     playerLastMove <- Some moveToUse
@@ -1191,7 +1214,7 @@ module Battle =
                                     playerDamageTaken <- lastDamage
 
                             let user =
-                                if hit then
+                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" then
                                     { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
                                 else
                                     user
@@ -1205,7 +1228,7 @@ module Battle =
                             // Phase: deduct PP (Struggle does not consume PP --
                             // effect_commands.asm l.974: cp STRUGGLE; ret z)
                             let user =
-                                if isStruggle then user
+                                if isStruggle || (moveToUse.Effect = "EFFECT_SKETCH" && hit) then user
                                 else BattleMon.deductPp mvIndexToUse user
                             let user, ppMsgs = restoreHeldPp user
                             msgs <- msgs @ ppMsgs
