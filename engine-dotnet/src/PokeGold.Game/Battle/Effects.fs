@@ -1411,7 +1411,17 @@ module Effects =
             if user.Volatile.Trapped.IsSome then
                 user <- { user with Volatile = { user.Volatile with Trapped = None } }
                 clearMsgs <- clearMsgs @ [ $"{user.Species.Name} was freed from the trap!" ]
-            // Spikes clear would go here (M13.8 field hazards).
+            let playerSide, enemySide =
+                if ctx.UserIsPlayer then
+                    let hadSpikes = ctx.PlayerSide.Spikes > 0
+                    let side = { ctx.PlayerSide with Spikes = 0 }
+                    if hadSpikes then clearMsgs <- clearMsgs @ [ "Spikes were blown away!" ]
+                    side, ctx.EnemySide
+                else
+                    let hadSpikes = ctx.EnemySide.Spikes > 0
+                    let side = { ctx.EnemySide with Spikes = 0 }
+                    if hadSpikes then clearMsgs <- clearMsgs @ [ "Spikes were blown away!" ]
+                    ctx.PlayerSide, side
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
@@ -1420,7 +1430,7 @@ module Effects =
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."
                       | _ -> () ]
-            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ notes @ clearMsgs; LastDamage = dmg }
+            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ notes @ clearMsgs; LastDamage = dmg; PlayerSide = playerSide; EnemySide = enemySide }
 
         | ThiefDamage ->
             // BattleCommand_Thief (move_effects/thief.asm).

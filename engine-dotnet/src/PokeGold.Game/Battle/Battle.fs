@@ -271,59 +271,69 @@ module Battle =
         : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option * int * bool =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
-        // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
-        let hit, rng =
-            if isStruggle then (true, rng)
-            else checkHit user foe move rng battle.WeatherType
+        let runHit crit roll rng =
+            let ctx : MoveContext =
+                { User = user
+                  Foe = foe
+                  Move = move
+                  Crit = crit
+                  Roll = roll
+                  Rng = rng
+                  Messages = [ intro ]
+                  LastDamage = 0
+                  IsStruggle = isStruggle
+                  FuryCutterCount = 0
+                  RolloutCount = 0
+                  DefenseCurlUsed = false
+                  Friendship = 0
+                  UserIsPlayer = userIsPlayer
+                  PlayerSide = battle.PlayerSide
+                  EnemySide = battle.EnemySide
+                  WeatherTimer = battle.WeatherTimer
+                  WeatherType = battle.WeatherType }
 
-        if not hit then
-            let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
-            // EFFECT_JUMP_KICK: crash damage on miss = 1/8 max HP, min 1.
-            if move.Effect = "EFFECT_JUMP_KICK" then
-                let crash = max 1 (user.MaxHp / 8)
-                let user = { user with Hp = max 0 (user.Hp - crash) }
-                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
+            let ctx =
+                Effects.forMove move
+                |> List.fold (fun (c: MoveContext) cmd ->
+                    Effects.applyCtx c cmd
+                ) ctx
+
+            let foe =
+                if ctx.Foe.Volatile.Rage && ctx.LastDamage > 0 then
+                    { ctx.Foe with AtkStage = min 6 (ctx.Foe.AtkStage + 1) }
+                else
+                    ctx.Foe
+
+            let ctx = { ctx with Foe = foe }
+            ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType, ctx.LastDamage, true
+
+        if move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
+            let crit, roll, rng = rollHit (critStageFor user move) rng
+            let hit, rng = checkHit user foe move rng battle.WeatherType
+            if hit then
+                runHit crit roll rng
             else
+                let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
+                let crash =
+                    if Damage.effectivenessTimesTen move foe = 0 then 0
+                    else max 1 ((Damage.calc user foe move crit roll isStruggle) / 8)
+                let user = { user with Hp = max 0 (user.Hp - crash) }
+                let msgs =
+                    if crash > 0 then msgs @ [ $"{user.Species.Name} kept going and crashed!" ]
+                    else msgs
                 (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
         else
+            // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
+            let hit, rng =
+                if isStruggle then (true, rng)
+                else checkHit user foe move rng battle.WeatherType
 
-        let crit, roll, rng = rollHit (critStageFor user move) rng
-        let intro = $"{user.Species.Name} used {move.Name}!"
-
-        let ctx : MoveContext =
-            { User = user
-              Foe = foe
-              Move = move
-              Crit = crit
-              Roll = roll
-              Rng = rng
-              Messages = [ intro ]
-              LastDamage = 0
-              IsStruggle = isStruggle
-              FuryCutterCount = 0
-              RolloutCount = 0
-              DefenseCurlUsed = false
-              Friendship = 0
-              UserIsPlayer = userIsPlayer
-              PlayerSide = battle.PlayerSide
-              EnemySide = battle.EnemySide
-              WeatherTimer = battle.WeatherTimer
-              WeatherType = battle.WeatherType }
-
-        let ctx =
-            Effects.forMove move
-            |> List.fold (fun (c: MoveContext) cmd ->
-                Effects.applyCtx c cmd
-            ) ctx
-
-        let foe =
-            if ctx.Foe.Volatile.Rage && ctx.LastDamage > 0 then
-                { ctx.Foe with AtkStage = min 6 (ctx.Foe.AtkStage + 1) }
+            if not hit then
+                let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
             else
-                ctx.Foe
-
-        let ctx = { ctx with Foe = foe }
-        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType, ctx.LastDamage, true
+                let crit, roll, rng = rollHit (critStageFor user move) rng
+                runHit crit roll rng
 
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 

@@ -219,6 +219,9 @@ module ConformanceLedger =
             [ "EFFECT_PSYWAVE"; "EFFECT_REVERSAL"; "EFFECT_PRESENT"; "EFFECT_MAGNITUDE"; "EFFECT_TRIPLE_KICK"
               "EFFECT_MULTI_HIT"; "EFFECT_DOUBLE_HIT"; "EFFECT_POISON_MULTI_HIT" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C7 BattleTests audit Jump Kick crash damage, Pay Day coin messaging, and Rapid Spin user-side hazard clearing against data/moves/effects.asm and the corresponding helper commands."
+            [ "EFFECT_JUMP_KICK"; "EFFECT_PAY_DAY"; "EFFECT_RAPID_SPIN" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_ALL_UP_HIT"; "EFFECT_ATTACK_UP_HIT"; "EFFECT_ATTRACT"
               "EFFECT_BEAT_UP"; "EFFECT_BELLY_DRUM"; "EFFECT_COUNTER"; "EFFECT_CURSE"
@@ -227,12 +230,11 @@ module ConformanceLedger =
               "EFFECT_ENCORE"; "EFFECT_ENDURE"; "EFFECT_FLAME_WHEEL"
               "EFFECT_FLY"; "EFFECT_FORESIGHT"
               "EFFECT_FURY_CUTTER"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
-              "EFFECT_JUMP_KICK"
               "EFFECT_LOCK_ON"; "EFFECT_MEAN_LOOK"; "EFFECT_MIRROR_COAT"; "EFFECT_MOONLIGHT"
               "EFFECT_MORNING_SUN"; "EFFECT_NIGHTMARE"; "EFFECT_OHKO"; "EFFECT_PAIN_SPLIT"
-              "EFFECT_PAY_DAY"; "EFFECT_PERISH_SONG"
+              "EFFECT_PERISH_SONG"
               "EFFECT_PROTECT"; "EFFECT_PSYCH_UP"
-              "EFFECT_RAGE"; "EFFECT_RAMPAGE"; "EFFECT_RAPID_SPIN"; "EFFECT_RAZOR_WIND"
+              "EFFECT_RAGE"; "EFFECT_RAMPAGE"; "EFFECT_RAZOR_WIND"
               "EFFECT_RESET_STATS"; "EFFECT_ROLLOUT"; "EFFECT_SACRED_FIRE"
               "EFFECT_SELFDESTRUCT"; "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
               "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"; "EFFECT_SPIKES"; "EFFECT_SPITE"; "EFFECT_SPLASH"

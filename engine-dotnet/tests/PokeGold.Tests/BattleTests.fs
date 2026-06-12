@@ -2184,6 +2184,17 @@ let ``C6 audited random and multi-hit damage effects map to disassembly command 
         let audited = { move effect effect 20 (ty "NORMAL") with Accuracy = 100 }
         Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
 
+[<Fact>]
+let ``C7 audited crash coin and hazard-clearing damage effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_JUMP_KICK", [ JumpKickDamage ]
+          "EFFECT_PAY_DAY", [ PayDayDamage ]
+          "EFFECT_RAPID_SPIN", [ RapidSpinDamage ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
@@ -3381,14 +3392,19 @@ let ``EFFECT_SELFDESTRUCT user faints after dealing damage`` () =
     Assert.True(ctx'.Foe.Hp < 200)
 
 [<Fact>]
-let ``EFFECT_JUMP_KICK crash on miss deals 1/8 max HP`` () =
+let ``EFFECT_JUMP_KICK crash on miss deals one eighth of precomputed damage`` () =
     let m = { move "JUMP_KICK" "EFFECT_JUMP_KICK" 70 (ty "FIGHTING") with Accuracy = 0 }
-    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
-    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
-    // Force miss by using accuracy 0. We use executeMove through Battle.
-    // Instead, let's test the crash directly.
-    let crash = max 1 (user.MaxHp / 8)
-    Assert.Equal(25, crash)  // 200/8 = 25.
+    let user = { mon "USER" (ty "FIGHTING") (ty "FIGHTING") 50 200 100 100 200 with Moves = [ m ]; Pp = [ 25 ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
+    let seed = 42u
+    let critByte, rng = Rng.next (Rng.create seed)
+    let spreadByte, _ = Rng.next rng
+    let spread = Damage.MinRoll + spreadByte % (Damage.MaxRoll - Damage.MinRoll + 1)
+    let crit = critByte < CriticalHit.thresholds.[0]
+    let expectedCrash = max 1 ((Damage.calc user foe m crit spread false) / 8)
+    let after = Battle.create user foe seed |> Battle.chooseMove 0
+    Assert.Equal(user.Hp - expectedCrash, after.Player.Hp)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("crashed"))
 
 [<Fact>]
 let ``EFFECT_PAY_DAY includes coins message`` () =
@@ -3408,7 +3424,7 @@ let ``EFFECT_PAY_DAY includes coins message`` () =
     Assert.True(ctx'.Foe.Hp < 200)
 
 [<Fact>]
-let ``EFFECT_RAPID_SPIN clears leech seed and trap`` () =
+let ``EFFECT_RAPID_SPIN clears leech seed trap and spikes`` () =
     let m = move "RAPID_SPIN" "EFFECT_RAPID_SPIN" 20 (ty "NORMAL")
     let user =
         { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
@@ -3419,12 +3435,13 @@ let ``EFFECT_RAPID_SPIN clears leech seed and trap`` () =
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
           FuryCutterCount = 0; RolloutCount = 0; DefenseCurlUsed = false; Friendship = 0
           UserIsPlayer = true
-          PlayerSide = SideState.Empty
+          PlayerSide = { SideState.Empty with Spikes = 1 }
           EnemySide = SideState.Empty
           WeatherTimer = None; WeatherType = None }
     let ctx' = Effects.applyCtx ctx RapidSpinDamage
     Assert.False(ctx'.User.Volatile.LeechSeed)
     Assert.Equal(None, ctx'.User.Volatile.Trapped)
+    Assert.Equal(0, ctx'.PlayerSide.Spikes)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "shed Leech Seed")
 
 // --- Multi-hit ---
