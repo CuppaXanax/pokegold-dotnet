@@ -120,6 +120,8 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "InitRoamMons" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B4 tests cover script effect routing, disassembly starting species/routes/levels, save persistence through World, and roamer encounter override on matching grass routes."
 
+          yield entry ScriptSpecial "MagnetTrain" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B5 tests cover script-var direction routing and PASS-gated Saffron-to-Goldenrod runtime travel through the station officer script."
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -131,7 +133,7 @@ module ConformanceLedger =
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
-              "MagikarpHouseSign"; "MagnetTrain"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
+              "MagikarpHouseSign"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
               "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
 

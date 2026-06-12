@@ -389,6 +389,12 @@ module Script =
             | Special "CheckFirstMonIsEgg" -> suspend next world CheckFirstMonIsEgg
             | Special "MoveDeletion" -> suspend next world MoveDeletion
             | Special "InitRoamMons" -> suspend next world InitRoamMons
+            | Special "MagnetTrain" ->
+                let destination =
+                    if vm.ScriptVar = 0 then "SaffronMagnetTrainStation"
+                    else "GoldenrodMagnetTrainStation"
+
+                suspend next world (ScriptEffect.Warp(destination, 11, 6, Some "UP"))
             | Special "OverworldTownMap" -> suspend next world (OpenPokegear(MapTab, vm.MapId, None))
             | Special "MapRadio" -> suspend next world (OpenPokegear(RadioTab, vm.MapId, Some vm.ScriptVar))
             | Special "DisplayMoneyAndCoinBalance" -> suspend next world (DisplayBalance MoneyAndCoins)

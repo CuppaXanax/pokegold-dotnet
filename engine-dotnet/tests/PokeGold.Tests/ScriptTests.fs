@@ -711,6 +711,25 @@ let ``InitRoamMons emits runtime effect`` () =
     Assert.Equal<ScriptEffect list>([ InitRoamMons ], effects)
 
 [<Fact>]
+let ``MagnetTrain routes by script var direction`` () =
+    let prog =
+        parse
+            "ToSaffron:\n\
+             \tsetval 0\n\
+             \tspecial MagnetTrain\n\
+             \tend\n\
+             ToGoldenrod:\n\
+             \tsetval 1\n\
+             \tspecial MagnetTrain\n\
+             \tend\n"
+
+    let _, toSaffron = driveSilent World.empty "ToSaffron" prog
+    let _, toGoldenrod = driveSilent World.empty "ToGoldenrod" prog
+
+    Assert.Equal<ScriptEffect list>([ ScriptEffect.Warp("SaffronMagnetTrainStation", 11, 6, Some "UP") ], toSaffron)
+    Assert.Equal<ScriptEffect list>([ ScriptEffect.Warp("GoldenrodMagnetTrainStation", 11, 6, Some "UP") ], toGoldenrod)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

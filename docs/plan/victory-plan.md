@@ -183,7 +183,7 @@ Ordered by value:
 | ✅ B2 | `DayCareMan`/`DayCareLady`/`DayCareManOutside`/`DayCareMon1/2`/`CheckFirstMonIsEgg` | `engine/events/daycare.asm` | 100% (breeding; Breeding logic already exists in `Player/`) | deposit/withdraw via a party-pick effect; egg generation already tested in `BreedingTests.fs` — these specials are just the script seam |
 | ✅ B3 | `MoveDeletion` | `engine/events/move_deleter.asm` (Blackthorn) | 100% (forgetting HMs) | party-pick + move-pick effect; remove move, compact list |
 | ✅ B4 | `InitRoamMons` | `engine/events/specials.asm` | 100% dex (Raikou/Entei) | seed roamer state (species, level 40, random route) into world/save; encounter hook reads it |
-| B5 | `MagnetTrain` | `maps/SaffronMagnetTrainStation.asm`, `engine/events/` | convenience transport | gate on `PASS` item; warp Saffron↔Goldenrod with a cutscene-less ride |
+| ✅ B5 | `MagnetTrain` | `maps/SaffronMagnetTrainStation.asm`, `engine/events/` | convenience transport | gate on `PASS` item; warp Saffron↔Goldenrod with a cutscene-less ride |
 | B6 | `OlderHaircutBrother`/`YoungerHaircutBrother` | `engine/events/haircut.asm` (day-gated) | happiness evolutions | money take + happiness bump on a party pick |
 | B7 | `SlotMachine`/`CardFlip` | `engine/games/` | Game Corner prizes (Porygon for dex) | a fair minimal game or an honest "buy coins" path; prize exchange is mart-like data |
 | B8 | `NameRater` | `engine/menus/name_rater.asm` | cosmetic | reuse `NamingScene` |

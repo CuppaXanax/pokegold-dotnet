@@ -289,3 +289,39 @@ let ``move deleter removes selected move and compacts remaining moves`` () =
     runModalScene scene 2500
 
     Assert.Equal<(int * int) list>([ 45, 30; 52, 25 ], changed.Party.Head.Moves)
+
+[<Fact>]
+let ``magnet train officer gates on pass and warps Saffron to Goldenrod`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "SaffronMagnetTrainStation" 9 10 Up)
+
+    let world = World.empty |> World.setEvent "EVENT_RESTORED_POWER_TO_KANTO"
+    let player =
+        { PlayerStateOps.initial with
+            Bag = Bag.empty |> Bag.add "PASS" 1 }
+
+    overworld.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        stack.Count = 1 && overworld.DebugState.MapId = "GoldenrodMagnetTrainStation"
+
+    let mutable frame = 0
+    while frame < 4000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "PASS-holder boarding in Saffron should arrive at Goldenrod Magnet Train Station.")
