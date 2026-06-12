@@ -120,6 +120,57 @@ let ``money and coin script effects mutate player state`` () =
     Assert.Equal(30, scene.DebugPlayer.Coins)
 
 [<Fact>]
+let ``card flip special plays a three coin fair game when player has coin case`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "CardFlipScene"
+            [| Special "CardFlip"; End |]
+
+    let player =
+        { PlayerStateOps.initial with
+            Coins = 3
+            Bag = Bag.add "COIN_CASE" 1 PlayerStateOps.initial.Bag }
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    Assert.True([ 0; 6 ] |> List.contains scene.DebugPlayer.Coins)
+
+[<Fact>]
+let ``checkcoins returns HAVE_LESS for insufficient coins`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "CoinBranchScene"
+            [| Checkcoins(Some 50)
+               Ifequal(2, "Less")
+               Givecoins(Some 10)
+               End
+               Givecoins(Some 1)
+               End |]
+
+    let state =
+        { state with
+            Script = { state.Script with Labels = Map.add "Less" 4 state.Script.Labels } }
+
+    let player = { PlayerStateOps.initial with Coins = 49 }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    Assert.Equal(50, scene.DebugPlayer.Coins)
+
+[<Fact>]
 let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
     let content = Content()
     let state =

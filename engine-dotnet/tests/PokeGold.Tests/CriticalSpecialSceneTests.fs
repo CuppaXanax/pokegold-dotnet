@@ -138,14 +138,20 @@ let ``PokeGear radio tunes a station through the onTune callback`` () =
 [<Fact>]
 let ``script menu returns one-based selections and zero on cancel`` () =
     let mutable selected = -1
-    let menu = ScriptMenuScene(Content(), "TEST_MENU", fun value -> selected <- value) :> Scene
+    let menu = ScriptMenuScene(Content(), "TEST_MENU", 3, fun value -> selected <- value) :> Scene
 
     Assert.Equal(Pop, press { Buttons.none with A = true } menu)
     Assert.Equal(1, selected)
 
-    let cancel = ScriptMenuScene(Content(), "TEST_MENU", fun value -> selected <- value) :> Scene
+    let cancel = ScriptMenuScene(Content(), "TEST_MENU", 3, fun value -> selected <- value) :> Scene
     Assert.Equal(Pop, press { Buttons.none with B = true } cancel)
     Assert.Equal(0, selected)
+
+    let four = ScriptMenuScene(Content(), "PRIZE_MENU", 4, fun value -> selected <- value) :> Scene
+    press { Buttons.none with Down = true } four |> ignore
+    press { Buttons.none with Down = true } four |> ignore
+    Assert.Equal(Pop, press { Buttons.none with A = true } four)
+    Assert.Equal(3, selected)
 
 [<Fact>]
 let ``apricorn picker returns selected item and cancel`` () =
@@ -375,3 +381,50 @@ let ``older haircut brother charges money and raises selected mon friendship`` (
 [<Fact>]
 let ``younger haircut brother charges money and raises selected mon friendship`` () =
     runHaircutBrother 8 15 3 1000 700
+
+[<Fact>]
+let ``celadon prize counter exchanges coins for Porygon and registers dex`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "CeladonGameCornerPrizeRoom" 4 2 Up)
+
+    let player =
+        { PlayerStateOps.initial with
+            Coins = 9999
+            Bag = Bag.add "COIN_CASE" 1 PlayerStateOps.initial.Bag }
+
+    overworld.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        let player = overworld.DebugPlayer
+        stack.Count = 1
+        && player.Coins = 0
+        && (player.Party |> List.exists (fun mon -> mon.SpeciesId = 137 && mon.Level = 20))
+        && Set.contains 137 player.DexSeen
+        && Set.contains 137 player.DexOwn
+
+    let mutable frame = 0
+    let mutable menuDowns = 0
+
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | "ScriptMenuScene" when frame % 2 = 0 && menuDowns < 2 ->
+                menuDowns <- menuDowns + 1
+                { Buttons.none with Down = true }
+            | "ScriptMenuScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "Celadon prize counter should sell Porygon for 9999 coins and register it in the dex.")

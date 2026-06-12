@@ -95,6 +95,21 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
     let encounterRng = System.Random()
+    let fundsResult current amount =
+        if current > amount then 0
+        elif current = amount then 1
+        else 2
+
+    let scriptMenuOptionCount mapId menu =
+        if menu = ".Gold_MenuHeader"
+           || menu = ".Silver_MenuHeader"
+           || menu = "GoldenrodGameCornerTMVendorMenuHeader"
+           || menu = "CeladonPrizeRoom_TMMenuHeader"
+           || (mapId = "CeladonGameCornerPrizeRoom" && menu = ".MenuHeader") then
+            4
+        else
+            3
+
     /// The outcome of the most recent battle (set by BattleScene callback).
     let mutable lastBattleOutcome: Outcome option = None
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
@@ -646,6 +661,26 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             player <- { player with Party = party }
             haircutResult <- result
 
+    member private _.PlayGameCornerGame (game: string) (lucky: bool) =
+        if Bag.count "COIN_CASE" player.Bag > 0 && player.Coins >= 3 then
+            let win =
+                if lucky then encounterRng.Next(4) <> 0
+                else encounterRng.Next(2) = 0
+
+            let payout =
+                if not win then 0
+                elif game = "SLOT_MACHINE" && lucky then 15
+                else 6
+
+            player <- { player with Coins = min 9999 (player.Coins - 3 + payout) }
+
+    member private _.RegisterPrizeDex (dex: int) =
+        if dex > 0 && not (Set.contains dex player.DexOwn) then
+            player <-
+                { player with
+                    DexSeen = Set.add dex player.DexSeen
+                    DexOwn = Set.add dex player.DexOwn }
+
     member private _.SyncBattleParty (battle: BattleState) =
         lastBattleOutcome <- battle.Outcome
         let statusCode (status: StatusCondition) : string =
@@ -859,7 +894,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | OpenScriptMenu menu ->
                         pending <- Some(vm, effect)
                         menuResult <- 0
-                        stop (Push(ScriptMenuScene(content, menu, fun result -> menuResult <- result) :> Scene))
+                        let optionCount = scriptMenuOptionCount vm.MapId menu
+                        stop (Push(ScriptMenuScene(content, menu, optionCount, fun result -> menuResult <- result) :> Scene))
                     | SelectApricornForKurt ->
                         match Apricorns.available player.Bag with
                         | [] -> resume (Some 0) vm
@@ -947,7 +983,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         world <- Roaming.init world
                         resume None vm
                     | CheckMoney amount ->
-                        resume (Some(if Money.canAfford player.Money amount then 1 else 0)) vm
+                        resume (Some(fundsResult player.Money amount)) vm
                     | GiveMoney amount ->
                         player <- { player with Money = Money.give player.Money amount }
                         resume None vm
@@ -957,7 +993,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             player <- { player with Money = Money.take player.Money amount }
                         resume (Some(if ok then 1 else 0)) vm
                     | CheckCoins amount ->
-                        resume (Some(if player.Coins >= amount then 1 else 0)) vm
+                        resume (Some(fundsResult player.Coins amount)) vm
                     | GiveCoins amount ->
                         player <- { player with Coins = min 9999 (max 0 (player.Coins + amount)) }
                         resume None vm
@@ -966,6 +1002,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         if ok then
                             player <- { player with Coins = max 0 (player.Coins - amount) }
                         resume (Some(if ok then 1 else 0)) vm
+                    | GameCornerGame(game, lucky) ->
+                        this.PlayGameCornerGame game lucky
+                        resume None vm
+                    | RegisterPrizeDex dex ->
+                        this.RegisterPrizeDex dex
+                        resume None vm
                     | AddPhoneContact phone ->
                         if Set.contains phone player.PhoneContacts || player.PhoneContacts.Count < 10 then
                             player <- { player with PhoneContacts = Set.add phone player.PhoneContacts }

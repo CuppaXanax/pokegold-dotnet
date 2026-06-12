@@ -125,6 +125,11 @@ module ConformanceLedger =
           yield! many ScriptSpecial FaithfulTested [ SideSystem; RequiredFor100Percent ] "B6 tests cover day-gated Goldenrod Underground runtime scripts, party selection, symbolic price parsing, money deduction, and friendship gains for both haircut brothers."
             [ "OlderHaircutBrother"; "YoungerHaircutBrother" ]
 
+          yield entry ScriptSpecial "GameCornerPrizeMonCheckDex" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B7 runtime test covers setval-staged prize dex registration before the Celadon Porygon givepoke path."
+
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B7 tests cover SlotMachine/CardFlip script dispatch and a minimal fair coin-game runtime seam; exact reel/card UI remains future Game Corner polish."
+            [ "SlotMachine"; "CardFlip" ]
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -132,13 +137,13 @@ module ConformanceLedger =
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
-            [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckForLuckyNumberWinners"
+            [ "BillsGrandfather"; "BugContestJudging"; "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
-              "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
+              "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
               "MagikarpHouseSign"; "MrChrono"; "NameRater"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
-              "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
+              "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 

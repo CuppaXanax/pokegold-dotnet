@@ -762,6 +762,26 @@ let ``haircut brother specials emit party picker effects`` () =
     Assert.Equal<ScriptEffect list>([ Haircut "OLDER"; Haircut "YOUNGER" ], effects)
 
 [<Fact>]
+let ``game corner specials emit game and prize dex effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tsetval TRUE\n\
+             \tspecial SlotMachine\n\
+             \tspecial CardFlip\n\
+             \tsetval 137\n\
+             \tspecial GameCornerPrizeMonCheckDex\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ GameCornerGame("SLOT_MACHINE", true)
+          GameCornerGame("CARD_FLIP", false)
+          RegisterPrizeDex 137 ],
+        effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

@@ -36,14 +36,19 @@ type ScriptEffect =
     | TakeItem of item: string * qty: int
     /// `checkitem` — is the item in the bag? → resume value: 1 / 0.
     | CheckItem of item: string
-    /// Money/coin checks and mutations. Checks and take operations resume with
-    /// 1 on success and 0 on failure; give operations resume with no value.
+    /// Money/coin checks and mutations. Checks resume with HAVE_MORE/HAVE_AMOUNT/
+    /// HAVE_LESS (0/1/2); take operations resume with 1/0; give operations resume
+    /// with no value.
     | CheckMoney of amount: int
     | GiveMoney of amount: int
     | TakeMoney of amount: int
     | CheckCoins of amount: int
     | GiveCoins of amount: int
     | TakeCoins of amount: int
+    /// `special SlotMachine` / `special CardFlip` — run the Game Corner game seam.
+    | GameCornerGame of game: string * lucky: bool
+    /// `special GameCornerPrizeMonCheckDex` — mark the staged prize species caught.
+    | RegisterPrizeDex of dex: int
     /// Phone contact commands.
     | AddPhoneContact of phone: string
     | CheckPhoneContact of phone: string
@@ -408,6 +413,9 @@ module Script =
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
+            | Special "SlotMachine" -> suspend next world (GameCornerGame("SLOT_MACHINE", vm.ScriptVar <> 0))
+            | Special "CardFlip" -> suspend next world (GameCornerGame("CARD_FLIP", false))
+            | Special "GameCornerPrizeMonCheckDex" -> suspend next world (RegisterPrizeDex vm.ScriptVar)
             // engine/events/specials.asm: ScriptVar = 1 iff the party holds the
             // species staged by the preceding `setval`. The YourTrainerID variant's
             // OT check is unmodelled — every party mon belongs to the player here.

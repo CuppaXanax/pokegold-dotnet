@@ -185,7 +185,7 @@ Ordered by value:
 | ✅ B4 | `InitRoamMons` | `engine/events/specials.asm` | 100% dex (Raikou/Entei) | seed roamer state (species, level 40, random route) into world/save; encounter hook reads it |
 | ✅ B5 | `MagnetTrain` | `maps/SaffronMagnetTrainStation.asm`, `engine/events/` | convenience transport | gate on `PASS` item; warp Saffron↔Goldenrod with a cutscene-less ride |
 | ✅ B6 | `OlderHaircutBrother`/`YoungerHaircutBrother` | `engine/events/haircut.asm` (day-gated) | happiness evolutions | money take + happiness bump on a party pick |
-| B7 | `SlotMachine`/`CardFlip` | `engine/games/` | Game Corner prizes (Porygon for dex) | a fair minimal game or an honest "buy coins" path; prize exchange is mart-like data |
+| ✅ B7 | `SlotMachine`/`CardFlip` | `engine/games/` | Game Corner prizes (Porygon for dex) | a fair minimal game or an honest "buy coins" path; prize exchange is mart-like data |
 | B8 | `NameRater` | `engine/menus/name_rater.asm` | cosmetic | reuse `NamingScene` |
 | B9 | `BugContestJudging`/`GiveParkBalls`/contest specials | `engine/events/bug_contest*` | 100% (Scyther/Pinsir) | timed contest loop can be simplified to: enter, catch with park balls, judged vs seeded NPC scores (`data/events/bug_contest_winners.asm`) |
 | B10 | `BillsGrandfather` | `maps/Route25.asm` area / `engine` | Eevee + stones | show-mon checks via `CheckPoke` like `FindPartyMonThatSpecies` |

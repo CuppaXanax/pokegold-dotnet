@@ -9,10 +9,13 @@ open PokeGold.Game.Ui
 /// The exact option text lives in menu headers we do not fully decode yet, but the
 /// command now has a real UI/input path and returns the same 1-based selection
 /// shape scripts expect. B/cancel returns 0.
-type ScriptMenuScene(content: Content, menuLabel: string, onResult: int -> unit) =
+type ScriptMenuScene(content: Content, menuLabel: string, optionCount: int, onResult: int -> unit) =
     let palette = TextRenderer.palette
     let input = EdgeDetector()
-    let entries = [| "OPTION 1"; "OPTION 2"; "CANCEL" |]
+    let entries =
+        [| for i in 1 .. max 1 (optionCount - 1) do
+               $"OPTION {i}"
+           "CANCEL" |]
     let mutable menu = MenuList.create entries.Length entries.Length true
 
     interface Scene with
