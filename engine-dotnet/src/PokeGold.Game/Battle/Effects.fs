@@ -706,8 +706,8 @@ module Effects =
             { confused with Foe = foe; Messages = confused.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] }
 
         | ResetStats ->
-            let user = { ctx.User with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0; Volatile = VolatileStatus.empty }
-            let foe = { ctx.Foe with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0; Volatile = VolatileStatus.empty }
+            let user = { ctx.User with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0 }
+            let foe = { ctx.Foe with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0 }
             { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "All stat changes were eliminated!" ] }
 
         | Protect ->
@@ -719,24 +719,36 @@ module Effects =
             else { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with Endure = true } }; Messages = ctx.Messages @ [ "braced itself!" ] }
 
         | BellyDrum ->
-            if ctx.User.Hp <= ctx.User.MaxHp / 2 then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            if ctx.User.AtkStage >= 6 then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
             else
-                let user = { ctx.User with Hp = ctx.User.Hp - (ctx.User.MaxHp / 2); AtkStage = 6 }
-                { ctx with User = user; Messages = ctx.Messages @ [ "cut its HP and maximized ATTACK!" ] }
+                let user = { ctx.User with AtkStage = min 6 (ctx.User.AtkStage + 2) }
+                if ctx.User.Hp <= ctx.User.MaxHp / 2 then
+                    { ctx with User = user; Messages = ctx.Messages @ [ "But it failed!" ] }
+                else
+                    let user = { user with Hp = user.Hp - (user.MaxHp / 2); AtkStage = 6 }
+                    { ctx with User = user; Messages = ctx.Messages @ [ "cut its HP and maximized ATTACK!" ] }
 
         | PsychUp ->
-            let user = { ctx.User with AtkStage = ctx.Foe.AtkStage; DefStage = ctx.Foe.DefStage; SpdStage = ctx.Foe.SpdStage; SpAtkStage = ctx.Foe.SpAtkStage; SpDefStage = ctx.Foe.SpDefStage; AccStage = ctx.Foe.AccStage; EvaStage = ctx.Foe.EvaStage }
-            { ctx with User = user; Messages = ctx.Messages @ [ "copied stat changes!" ] }
+            let foeStages =
+                [ ctx.Foe.AtkStage; ctx.Foe.DefStage; ctx.Foe.SpdStage; ctx.Foe.SpAtkStage; ctx.Foe.SpDefStage; ctx.Foe.AccStage; ctx.Foe.EvaStage ]
+            if foeStages |> List.forall ((=) 0) then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let user = { ctx.User with AtkStage = ctx.Foe.AtkStage; DefStage = ctx.Foe.DefStage; SpdStage = ctx.Foe.SpdStage; SpAtkStage = ctx.Foe.SpAtkStage; SpDefStage = ctx.Foe.SpDefStage; AccStage = ctx.Foe.AccStage; EvaStage = ctx.Foe.EvaStage }
+                { ctx with User = user; Messages = ctx.Messages @ [ "copied stat changes!" ] }
 
         | DestinyBond ->
             let user = { ctx.User with Volatile = { ctx.User.Volatile with DestinyBond = true } }
             { ctx with User = user; Messages = ctx.Messages @ [ "is trying to take its foe with it!" ] }
 
         | PainSplit ->
-            let avg = (ctx.User.Hp + ctx.Foe.Hp) / 2
-            let user = { ctx.User with Hp = min ctx.User.MaxHp avg }
-            let foe = { ctx.Foe with Hp = min ctx.Foe.MaxHp avg }
-            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "The battlers shared their pain!" ] }
+            if ctx.Foe.Volatile.Substitute.IsSome then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let avg = (ctx.User.Hp + ctx.Foe.Hp) / 2
+                let user = { ctx.User with Hp = min ctx.User.MaxHp avg }
+                let foe = { ctx.Foe with Hp = min ctx.Foe.MaxHp avg }
+                { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "The battlers shared their pain!" ] }
 
         | SnoreDamage ->
             match ctx.User.Status with

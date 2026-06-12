@@ -1111,8 +1111,8 @@ let ``EFFECT_RESET_STATS clears all stages`` () =
     let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe mv)
     Assert.Equal(0, applied.User.AtkStage)
     Assert.Equal(0, applied.Foe.EvaStage)
-    Assert.False(applied.User.Volatile.Confusion.IsSome)
-    Assert.False(applied.Foe.Volatile.LeechSeed)
+    Assert.True(applied.User.Volatile.Confusion.IsSome)
+    Assert.True(applied.Foe.Volatile.LeechSeed)
 
 [<Fact>]
 let ``EFFECT_BELLY_DRUM maximizes attack at half HP cost`` () =
@@ -1124,6 +1124,16 @@ let ``EFFECT_BELLY_DRUM maximizes attack at half HP cost`` () =
     Assert.Equal(6, applied.User.AtkStage)
 
 [<Fact>]
+let ``EFFECT_BELLY_DRUM preserves under-half HP attack boost bug`` () =
+    let mv = Moves.byName "BELLY_DRUM"
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with Hp = 40 }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1
+    let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe mv)
+    Assert.Equal(40, applied.User.Hp)
+    Assert.Equal(2, applied.User.AtkStage)
+    Assert.Contains(applied.Messages, fun msg -> msg.Contains("failed"))
+
+[<Fact>]
 let ``EFFECT_PAIN_SPLIT averages HP`` () =
     let mv = Moves.byName "PAIN_SPLIT"
     let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with Hp = 60 }
@@ -1131,6 +1141,16 @@ let ``EFFECT_PAIN_SPLIT averages HP`` () =
     let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe mv)
     Assert.Equal(50, applied.User.Hp)
     Assert.Equal(50, applied.Foe.Hp)
+
+[<Fact>]
+let ``EFFECT_PAIN_SPLIT fails against substitute`` () =
+    let mv = Moves.byName "PAIN_SPLIT"
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with Hp = 60 }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1 with Hp = 40; Volatile = { VolatileStatus.empty with Substitute = Some 20 } }
+    let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe mv)
+    Assert.Equal(60, applied.User.Hp)
+    Assert.Equal(40, applied.Foe.Hp)
+    Assert.Contains(applied.Messages, fun msg -> msg.Contains("failed"))
 
 [<Fact>]
 let ``EFFECT_RAIN_DANCE sets weather`` () =
@@ -2229,6 +2249,34 @@ let ``C8 Curse and Spikes follow disassembly target-side behavior`` () =
     let failedSecondLayer = Effects.applyCtx { mkCtx normalUser baseFoe spikes with EnemySide = scattered.EnemySide } SetSpikes
     Assert.Equal(1, failedSecondLayer.EnemySide.Spikes)
     Assert.Contains(failedSecondLayer.Messages, fun msg -> msg.Contains("failed"))
+
+[<Fact>]
+let ``C9 audited utility effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_BELLY_DRUM", [ BellyDrum ]
+          "EFFECT_PSYCH_UP", [ PsychUp ]
+          "EFFECT_RESET_STATS", [ ResetStats ]
+          "EFFECT_DREAM_EATER", [ DreamEaterDamage ]
+          "EFFECT_PAIN_SPLIT", [ PainSplit ]
+          "EFFECT_SPLASH", [] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C9 Psych Up fails unless target stat stages changed`` () =
+    let psychUp = Moves.byName "PSYCH_UP"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let unchangedFoe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let failed = Effects.applyCtx (mkCtx user unchangedFoe psychUp) PsychUp
+    Assert.Equal(0, failed.User.AtkStage)
+    Assert.Contains(failed.Messages, fun msg -> msg.Contains("failed"))
+
+    let changedFoe = { unchangedFoe with AtkStage = 2; EvaStage = -1 }
+    let copied = Effects.applyCtx (mkCtx user changedFoe psychUp) PsychUp
+    Assert.Equal(2, copied.User.AtkStage)
+    Assert.Equal(-1, copied.User.EvaStage)
 
 // -- Pre-move gates ----------------------------------------------------------
 
