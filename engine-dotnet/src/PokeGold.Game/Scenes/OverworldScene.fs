@@ -1352,50 +1352,54 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     let fx, fy = Triggers.facedCell state.Player.CellX state.Player.CellY state.Player.Facing
                     let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy
 
-                    match collId with
-                    | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
-                        this.UseFieldMove "CUT"
-                    | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
-                        this.UseFieldMove "SURF"
-                    | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->
-                        this.UseFieldMove "WHIRLPOOL"
-                    | id when
-                        id = FieldMoves.CollWaterfallRight
-                        || id = FieldMoves.CollWaterfallLeft
-                        || id = FieldMoves.CollWaterfallUp
-                        || id = FieldMoves.CollWaterfall ->
-                        this.UseFieldMove "WATERFALL"
+                    // Objects on special collision tiles still take A-button priority
+                    // over field moves (e.g. Lake of Rage Red Gyarados sits on water).
+                    let mutable talkedNpcCandidate: ActorId option = None
+
+                    let objectScriptAt fx fy =
+                        state.Npcs
+                        |> Array.mapi (fun i n -> i, n)
+                        |> Array.tryFind (fun (i, n) ->
+                            isObjectPresent i && n.CellX = fx && n.CellY = fy)
+                        |> Option.map (fun (i, _) ->
+                            let script = state.Npcs.[i].Event.Script
+
+                            if script <> "" && script <> "ObjectEvent" then
+                                talkedNpcCandidate <- Some(ActorId.Object i)
+
+                            script)
+
+                    let startScript label =
+                        lastTalkedActor <- talkedNpcCandidate
+                        interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
+                        this.Drive(Script.start label world state.Script state.MapId)
+
+                    match objectScriptAt fx fy with
+                    | Some label when state.Script.Labels.ContainsKey label -> startScript label
                     | _ ->
-                        // Talk to / read whatever the player faces. Objects are resolved
-                        // over the *live* NPC set (a wandering NPC is talked to where it
-                        // now stands), filtered to those currently present.
-                        let mutable talkedNpcCandidate: ActorId option = None
+                        match collId with
+                        | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
+                            this.UseFieldMove "CUT"
+                        | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
+                            this.UseFieldMove "SURF"
+                        | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->
+                            this.UseFieldMove "WHIRLPOOL"
+                        | id when
+                            id = FieldMoves.CollWaterfallRight
+                            || id = FieldMoves.CollWaterfallLeft
+                            || id = FieldMoves.CollWaterfallUp
+                            || id = FieldMoves.CollWaterfall ->
+                            this.UseFieldMove "WATERFALL"
+                        | _ ->
+                            // A counter/desk tile in front of the player: GSC reaches one tile
+                            // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
+                            let isCounter fx fy =
+                                Collision.isCounterId (
+                                    MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
 
-                        let objectScriptAt fx fy =
-                            state.Npcs
-                            |> Array.mapi (fun i n -> i, n)
-                            |> Array.tryFind (fun (i, n) ->
-                                isObjectPresent i && n.CellX = fx && n.CellY = fy)
-                            |> Option.map (fun (i, _) ->
-                                let script = state.Npcs.[i].Event.Script
-
-                                if script <> "" && script <> "ObjectEvent" then
-                                    talkedNpcCandidate <- Some(ActorId.Object i)
-
-                                script)
-
-                        // A counter/desk tile in front of the player: GSC reaches one tile
-                        // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
-                        let isCounter fx fy =
-                            Collision.isCounterId (
-                                MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
-
-                        match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
-                        | Some label when state.Script.Labels.ContainsKey label ->
-                            lastTalkedActor <- talkedNpcCandidate
-                            interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
-                            this.Drive(Script.start label world state.Script state.MapId)
-                        | _ -> Stay
+                            match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                            | Some label when state.Script.Labels.ContainsKey label -> startScript label
+                            | _ -> Stay
                 else
                     let playerBefore = state.Player
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCell leader)

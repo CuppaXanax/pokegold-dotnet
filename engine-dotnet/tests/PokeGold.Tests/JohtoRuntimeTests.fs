@@ -40,6 +40,46 @@ let private directionDelta direction =
     | Left -> -1, 0
     | Right -> 1, 0
 
+let private advanceRuntimeUntil (driver: GameDriver) maxFrames predicate =
+    let mutable frame = 0
+
+    while frame < maxFrames && not (predicate driver.Snapshot) do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "BattleScene"
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+let private applyTransition (stack: ResizeArray<Scene>) transition =
+    match transition with
+    | Stay -> ()
+    | Push scene -> stack.Add scene
+    | Pop ->
+        if stack.Count > 1 then
+            stack.RemoveAt(stack.Count - 1)
+    | Replace scene -> stack.[stack.Count - 1] <- scene
+
+let private tickSceneStackUntil (stack: ResizeArray<Scene>) maxFrames predicate =
+    let mutable frame = 0
+
+    while frame < maxFrames && not (predicate ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "BattleScene"
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+
+        top.Update buttons |> applyTransition stack
+
 [<Fact>]
 let ``Goldenrod Flower Shop runtime gate gives SquirtBottle after PlainBadge`` () =
     let driver = GameDriver()
@@ -908,3 +948,292 @@ let ``A9 Route41 west connection enters CianwoodCity while surfing`` () =
                 driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
     Assert.True(crossed, "Could not cross Route41 west edge into CianwoodCity while surfing")
+
+// ---------------------------------------------------------------------------
+// A10 — Pharmacy; Chuck; Jasmine return; Mahogany; Lake of Rage
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A10 CianwoodCity pharmacy door loads CianwoodPharmacy`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // CianwoodCity warp 4 at (15,47) -> CianwoodPharmacy.
+    driver.Apply(Warp("CianwoodCity", 15, 46, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "CianwoodPharmacy"), 100)
+
+    Assert.Equal("CianwoodPharmacy", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 CianwoodPharmacy gives SecretPotion after Jasmine explains Amphy sickness`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_JASMINE_EXPLAINED_AMPHYS_SICKNESS", true))
+    // Pharmacist at (2,3); stand south facing up.
+    driver.Apply(Warp("CianwoodPharmacy", 2, 4, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_SECRETPOTION_FROM_PHARMACY"
+        | None -> false
+
+    advanceRuntimeUntil driver 2000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_SECRETPOTION_FROM_PHARMACY",
+                "Pharmacist should give SECRETPOTION after Jasmine explains Amphy's sickness")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 CianwoodCity gym door loads CianwoodGym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // CianwoodCity warp 2 at (8,43) -> CianwoodGym.
+    driver.Apply(Warp("CianwoodCity", 8, 42, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "CianwoodGym"), 100)
+
+    Assert.Equal("CianwoodGym", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 Chuck gives StormBadge and TM01 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_BEAT_CHUCK", true))
+    driver.Apply(SetFlag("ENGINE_STORMBADGE", true))
+    // Chuck at (4,1); stand south facing up.
+    driver.Apply(Warp("CianwoodGym", 4, 2, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM01_DYNAMICPUNCH"
+        | None -> false
+
+    advanceRuntimeUntil driver 2000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_STORMBADGE",
+                "STORMBADGE should be set after Chuck")
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM01_DYNAMICPUNCH",
+                "Chuck should give TM01 DYNAMICPUNCH after the badge")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 Jasmine returns to OlivineGym after SecretPotion is delivered`` () =
+    let content = Content()
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "OlivineLighthouse6F" 8 9 Up)
+
+    let player =
+        { PlayerStateOps.initial with
+            Bag = Bag.add "SECRETPOTION" 1 PlayerStateOps.initial.Bag }
+
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setEvent "EVENT_JASMINE_EXPLAINED_AMPHYS_SICKNESS"
+
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    (scene :> Scene).Update (press "a") |> applyTransition stack
+
+    let completed () =
+        stack.Count = 1
+        && ScriptWorld.hasEvent "EVENT_JASMINE_RETURNED_TO_GYM" scene.DebugWorld
+
+    tickSceneStackUntil stack 4000 completed
+
+    Assert.True(ScriptWorld.hasEvent "EVENT_JASMINE_RETURNED_TO_GYM" scene.DebugWorld,
+                "Jasmine should return to Olivine Gym after accepting SECRETPOTION")
+    Assert.False(ScriptWorld.hasEvent "EVENT_OLIVINE_GYM_JASMINE" scene.DebugWorld,
+                 "Jasmine should be visible in Olivine Gym after the lighthouse cure")
+    Assert.Equal(0, Bag.count "SECRETPOTION" scene.Player.Bag)
+
+[<Fact>]
+let ``A10 OlivineGym Jasmine gives MineralBadge and TM23 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_JASMINE_RETURNED_TO_GYM", true))
+    driver.Apply(SetEvent("EVENT_OLIVINE_GYM_JASMINE", false))
+    driver.Apply(SetEvent("EVENT_BEAT_JASMINE", true))
+    driver.Apply(SetFlag("ENGINE_MINERALBADGE", true))
+    // Jasmine at (5,3); stand south facing up.
+    driver.Apply(Warp("OlivineGym", 5, 4, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM23_IRON_TAIL"
+        | None -> false
+
+    advanceRuntimeUntil driver 2000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_MINERALBADGE",
+                "MINERALBADGE should be set after Jasmine")
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM23_IRON_TAIL",
+                "Jasmine should give TM23 IRON TAIL after the badge")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 Route42 east connection enters MahoganyTown`` () =
+    let mutable crossed = false
+
+    for tryY in [ 0 .. 17 ] do
+        if not crossed then
+            let driver = GameDriver()
+            driver.Apply(StartNewGame "A")
+            driver.Apply(Warp("Route42", 58, tryY, Some Right))
+
+            for _ in 1 .. 8 do
+                driver.Step Right
+
+            if owMap driver.Snapshot = "MahoganyTown" then
+                crossed <- true
+                driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route42 east edge into MahoganyTown")
+
+[<Fact>]
+let ``A10 MahoganyTown mart door loads MahoganyMart1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // MahoganyTown warp 1 at (11,7) -> MahoganyMart1F.
+    driver.Apply(Warp("MahoganyTown", 11, 8, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "MahoganyMart1F"), 100)
+
+    Assert.Equal("MahoganyMart1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 Route43 north connection enters LakeOfRage`` () =
+    let mutable crossed = false
+
+    for tryY in [ 1; 2; 3 ] do
+        for tryX in [ 0 .. 19 ] do
+            if not crossed then
+                let driver = GameDriver()
+                driver.Apply(StartNewGame "A")
+                driver.Apply(Warp("Route43", tryX, tryY, Some Up))
+
+                for _ in 1 .. 8 do
+                    driver.Step Up
+
+                if owMap driver.Snapshot = "LakeOfRage" then
+                    crossed <- true
+                    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route43 north edge into LakeOfRage")
+
+[<Fact>]
+let ``A10 LakeOfRage Red Gyarados starts forced battle from surf tile`` () =
+    let content = Content()
+    let lake = OverworldState.loadById content "LakeOfRage"
+    let coll = Movement.collisionIdAtCell lake.Map lake.Collision 18 23
+    Assert.True(FieldMoves.isSurfWater coll, "Expected the tile south of Red Gyarados to be surf water")
+
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetVar("__surfing", 1))
+    driver.Apply(SetEvent("EVENT_LAKE_OF_RAGE_RED_GYARADOS", false))
+    // Red Gyarados at (18,22); stand one surf tile south facing up.
+    driver.Apply(Warp("LakeOfRage", 18, 23, Some Up))
+
+    driver.Talk()
+
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+
+    while frame < 2000 && not sawBattle do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Red Gyarados should cry before the forced battle")
+    Assert.True(sawBattle, "Red Gyarados should start a forced battle from the surf tile")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 LakeOfRage Lance sets MahoganyMart1F staircase scene`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_LAKE_OF_RAGE_LANCE", false))
+    // Lance at (21,28); stand south facing up.
+    driver.Apply(Warp("LakeOfRage", 21, 29, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_DECIDED_TO_HELP_LANCE"
+            && (ow.Scenes |> Map.tryFind "MAHOGANY_MART_1F" = Some 1)
+        | None -> false
+
+    advanceRuntimeUntil driver 3000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_DECIDED_TO_HELP_LANCE",
+                "Agreeing to help Lance should set EVENT_DECIDED_TO_HELP_LANCE")
+    Assert.Equal(Some 1, ow.Scenes |> Map.tryFind "MAHOGANY_MART_1F")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A10 MahoganyMart1F Lance scene uncovers Rocket staircase`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("MAHOGANY_MART_1F", 1))
+    // Scene 1 is MahoganyMart1FLanceUncoversStairsScene.
+    driver.Apply(Warp("MahoganyMart1F", 5, 6, Some Up))
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_UNCOVERED_STAIRCASE_IN_MAHOGANY_MART"
+            && (ow.Scenes |> Map.tryFind "MAHOGANY_MART_1F" = Some 0)
+        | None -> false
+
+    advanceRuntimeUntil driver 5000 completed
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_UNCOVERED_STAIRCASE_IN_MAHOGANY_MART",
+                "Mahogany Mart Lance scene should uncover the Rocket staircase")
+    Assert.Equal(Some 0, ow.Scenes |> Map.tryFind "MAHOGANY_MART_1F")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
