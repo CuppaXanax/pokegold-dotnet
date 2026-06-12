@@ -1760,3 +1760,159 @@ let ``A12 BlackthornGym2F Strength boulder falls through stone-table hole`` () =
     Assert.Equal((8, 3), (boulder.CellX, boulder.CellY))
     Assert.True(ScriptWorld.hasEvent "EVENT_BOULDER_IN_BLACKTHORN_GYM_1" scene.DebugWorld)
     Assert.False(MapEvents.objectVisible scene.DebugWorld boulder.Event)
+
+// ---------------------------------------------------------------------------
+// A13 — New Bark → Route 27/26 → Victory Road gate → Indigo Plateau
+// ---------------------------------------------------------------------------
+
+let private johtoBadgeFlags =
+    [ "ENGINE_ZEPHYRBADGE"
+      "ENGINE_HIVEBADGE"
+      "ENGINE_PLAINBADGE"
+      "ENGINE_FOGBADGE"
+      "ENGINE_MINERALBADGE"
+      "ENGINE_STORMBADGE"
+      "ENGINE_GLACIERBADGE"
+      "ENGINE_RISINGBADGE" ]
+
+let private setJohtoBadges (driver: GameDriver) =
+    johtoBadgeFlags
+    |> List.iter (fun flag -> driver.Apply(SetFlag(flag, true)))
+
+let private waitForCapturableOverworld (driver: GameDriver) maxFrames =
+    advanceRuntimeUntil
+        driver
+        maxFrames
+        (fun snapshot ->
+            match snapshot.Overworld with
+            | Some ow -> ow.CanCapture
+            | None -> false)
+
+[<Fact>]
+let ``A13 NewBarkTown east surf connection enters Route27`` () =
+    let mutable crossed = false
+
+    for tryY in [ 6 .. 9 ] do
+        if not crossed then
+            let driver = GameDriver()
+            driver.Apply(StartNewGame "A")
+            driver.Apply(SetScene("NEW_BARK_TOWN", 1))
+            driver.Apply(SetVar("__surfing", 1))
+            // NewBarkTown generated metadata connects east to Route27; y=6..9 are the water exit.
+            driver.Apply(Warp("NewBarkTown", 18, tryY, Some Right))
+
+            for _ in 1 .. 4 do
+                driver.Step Right
+
+            if owMap driver.Snapshot = "Route27" then
+                crossed <- true
+                driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross New Bark Town east surf connection into Route27")
+
+[<Fact>]
+let ``A13 Route27 east connection enters Route26`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route27 generated metadata connects east to Route26; y=4 is the land path.
+    driver.Apply(Warp("Route27", 78, 4, Some Right))
+
+    for _ in 1 .. 4 do
+        driver.Step Right
+
+    Assert.Equal("Route26", owMap driver.Snapshot)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 Route26 north gate warp loads VictoryRoadGate`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route26.asm: warp_event 7, 5, VICTORY_ROAD_GATE, 3.
+    driver.Apply(Warp("Route26", 7, 6, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "VictoryRoadGate"), 100)
+
+    Assert.Equal("VictoryRoadGate", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 VictoryRoadGate badge guard blocks before all eight Johto badges`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // VictoryRoadGate.asm: coord_event 10, 11 checks VAR_BADGES and steps the player down.
+    driver.Apply(Warp("VictoryRoadGate", 10, 12, Some Up))
+
+    driver.Step Up
+    waitForCapturableOverworld driver 2000
+
+    let ow = owOf driver.Snapshot
+    Assert.Equal("VictoryRoadGate", ow.MapId)
+    Assert.Equal((10, 12), (ow.Player.CellX, ow.Player.CellY))
+    Assert.NotEqual(Some 1, ow.Scenes |> Map.tryFind "VICTORY_ROAD_GATE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 VictoryRoadGate badge guard passes with all eight Johto badges`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    setJohtoBadges driver
+    // VictoryRoadGate.asm: all eight badges set SCENE_VICTORYROADGATE_NOOP.
+    driver.Apply(Warp("VictoryRoadGate", 10, 12, Some Up))
+
+    driver.Step Up
+    waitForCapturableOverworld driver 2000
+
+    let ow = owOf driver.Snapshot
+    Assert.Equal("VictoryRoadGate", ow.MapId)
+    Assert.Equal((10, 11), (ow.Player.CellX, ow.Player.CellY))
+    Assert.Equal(Some 1, ow.Scenes |> Map.tryFind "VICTORY_ROAD_GATE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 VictoryRoadGate north warp loads VictoryRoad after guard passes`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("VICTORY_ROAD_GATE", 1))
+    // VictoryRoadGate.asm: warp_event 10, 0, VICTORY_ROAD, 1.
+    driver.Apply(Warp("VictoryRoadGate", 10, 1, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "VictoryRoad"), 100)
+
+    Assert.Equal("VictoryRoad", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 VictoryRoad north exit loads Route23`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // VictoryRoad.asm: warp_event 13, 5, ROUTE_23, 3.
+    driver.Apply(Warp("VictoryRoad", 13, 6, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "Route23"), 100)
+
+    Assert.Equal("Route23", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A13 Route23 Plateau door loads IndigoPlateauPokecenter1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route23.asm: warp_event 9, 5, INDIGO_PLATEAU_POKECENTER_1F, 1.
+    driver.Apply(Warp("Route23", 9, 6, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "IndigoPlateauPokecenter1F"), 100)
+
+    Assert.Equal("IndigoPlateauPokecenter1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
