@@ -2613,3 +2613,155 @@ let ``A18 EXPN Card Pokegear radio tune wakes Vermilion Snorlax`` () =
         afterSnorlax.Actors,
         fun a -> a.Script = "VermilionSnorlax" && not a.Visible)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A19 — Diglett's Cave → Pewter → Brock; Celadon → Erika; Fuchsia → Janine
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A19 Digletts Cave route reaches Route2 and PewterCity`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_VERMILION_CITY_SNORLAX", true))
+
+    let waitForOverworldAt mapId x y =
+        driver.RunUntil(
+            (fun s ->
+                match s.Overworld with
+                | Some ow -> ow.CanCapture && ow.MapId = mapId && ow.Player.CellX = x && ow.Player.CellY = y
+                | None -> false),
+            500)
+        |> ignore
+
+    // VermilionCity.asm: warp_event 34,7, DIGLETTS_CAVE, 1.
+    driver.Apply(Warp("VermilionCity", 34, 8, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("DiglettsCave", owMap driver.Snapshot)
+    Assert.Equal((3, 33), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+
+    // DiglettsCave.asm: walk from the south entrance onto warp_event 5,31 -> warp 5.
+    for direction in [ Right; Right; Up; Up; Up ] do
+        stepAndSettle driver direction
+
+    waitForOverworldAt "DiglettsCave" 17 33
+    Assert.Equal("DiglettsCave", owMap driver.Snapshot)
+    Assert.Equal((17, 33), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+
+    // DiglettsCave.asm: warp_event 17,3 -> warp 6.
+    driver.Apply(Warp("DiglettsCave", 17, 4, Some Up))
+    stepAndSettle driver Up
+    waitForOverworldAt "DiglettsCave" 3 3
+    Assert.Equal("DiglettsCave", owMap driver.Snapshot)
+    Assert.Equal((3, 3), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+
+    // DiglettsCave.asm: warp_event 15,5, ROUTE_2, 5.
+    driver.Apply(Warp("DiglettsCave", 15, 6, Some Up))
+    stepAndSettle driver Up
+    waitForOverworldAt "Route2" 12 7
+    Assert.Equal("Route2", owMap driver.Snapshot)
+    Assert.Equal((12, 7), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+
+    // Route2 metadata connects north into PewterCity; x=16 is a walkable north-edge tile.
+    driver.Apply(Warp("Route2", 16, 0, Some Up))
+    stepAndSettle driver Up
+    waitForOverworldAt "PewterCity" 26 35
+    Assert.Equal("PewterCity", owMap driver.Snapshot)
+    Assert.Equal((26, 35), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A19 Pewter Celadon and Fuchsia gym doors load their gyms`` () =
+    let cases =
+        [ "PewterCity", 16, 18, Up, "PewterGym"
+          "CeladonCity", 10, 30, Up, "CeladonGym"
+          "FuchsiaCity", 8, 28, Up, "FuchsiaGym" ]
+
+    for cityMap, x, y, direction, gymMap in cases do
+        let driver = GameDriver()
+        driver.Apply(StartNewGame "A")
+        driver.Apply(Warp(cityMap, x, y, Some direction))
+        stepAndSettle driver direction
+
+        Assert.Equal(gymMap, owMap driver.Snapshot)
+        driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A19 Brock awards BoulderBadge after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // PewterGym.asm: Brock stands at 5,1.
+    driver.Apply(Warp("PewterGym", 5, 2, Some Up))
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_BROCK"
+                && ow.Events |> List.contains "EVENT_BEAT_CAMPER_JERRY"
+                && ow.EngineFlags |> List.contains "ENGINE_BOULDERBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_BROCK", "Brock battle should set EVENT_BEAT_BROCK")
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_CAMPER_JERRY", "Brock script should mark Camper Jerry beaten")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_BOULDERBADGE", "Brock battle should set BOULDERBADGE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A19 Erika awards RainbowBadge and TM19 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // CeladonGym.asm: Erika stands at 5,3.
+    driver.Apply(Warp("CeladonGym", 5, 4, Some Up))
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_ERIKA"
+                && ow.Events |> List.contains "EVENT_GOT_TM19_GIGA_DRAIN"
+                && ow.EngineFlags |> List.contains "ENGINE_RAINBOWBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_ERIKA", "Erika battle should set EVENT_BEAT_ERIKA")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_RAINBOWBADGE", "Erika battle should set RAINBOWBADGE")
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM19_GIGA_DRAIN", "Erika should give TM19 GIGA DRAIN")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A19 Janine awards SoulBadge and TM06 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // FuchsiaGym.asm: Janine stands at 1,10.
+    driver.Apply(Warp("FuchsiaGym", 1, 11, Some Up))
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_JANINE"
+                && ow.Events |> List.contains "EVENT_GOT_TM06_TOXIC"
+                && ow.EngineFlags |> List.contains "ENGINE_SOULBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_JANINE", "Janine battle should set EVENT_BEAT_JANINE")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_SOULBADGE", "Janine battle should set SOULBADGE")
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM06_TOXIC", "Janine should give TM06 TOXIC")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
