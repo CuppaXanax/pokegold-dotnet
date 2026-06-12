@@ -2765,3 +2765,127 @@ let ``A19 Janine awards SoulBadge and TM06 after battle`` () =
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_SOULBADGE", "Janine battle should set SOULBADGE")
     Assert.True(ow.Events |> List.contains "EVENT_GOT_TM06_TOXIC", "Janine should give TM06 TOXIC")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A20 — Cinnabar (Blue) → Seafoam (Blaine) → Viridian (Blue)
+// ---------------------------------------------------------------------------
+
+let private hasActor script visible (ow: RuntimeOverworldSnapshot) =
+    ow.Actors |> List.exists (fun actor -> actor.Script = script && actor.Visible = visible)
+
+[<Fact>]
+let ``A20 Cinnabar Blue disappears and enables Viridian Gym Blue`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_BLUE_IN_CINNABAR", false))
+    driver.Apply(SetEvent("EVENT_VIRIDIAN_GYM_BLUE", true))
+
+    // CinnabarIsland.asm: Blue stands at 9,6 and clears EVENT_VIRIDIAN_GYM_BLUE after teleporting away.
+    driver.Apply(Warp("CinnabarIsland", 9, 7, Some Up))
+    let beforeBlue = owOf driver.Snapshot
+    Assert.True(hasActor "CinnabarIslandBlue" true beforeBlue, "Blue should be visible on Cinnabar before he is invited back")
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BLUE_IN_CINNABAR"
+                && not (ow.Events |> List.contains "EVENT_VIRIDIAN_GYM_BLUE")
+            | None -> false)
+
+    let afterCinnabarBlue = owOf driver.Snapshot
+    Assert.True(hasActor "CinnabarIslandBlue" false afterCinnabarBlue, "Blue should disappear from Cinnabar after the teleport movement")
+    Assert.True(afterCinnabarBlue.Events |> List.contains "EVENT_BLUE_IN_CINNABAR")
+    Assert.False(afterCinnabarBlue.Events |> List.contains "EVENT_VIRIDIAN_GYM_BLUE")
+
+    driver.Apply(Warp("ViridianGym", 5, 4, Some Up))
+    settleUntilCapture driver 300
+    let viridianGym = owOf driver.Snapshot
+    Assert.True(hasActor "ViridianGymBlueScript" true viridianGym, "Clearing EVENT_VIRIDIAN_GYM_BLUE should show Blue in Viridian Gym")
+    Assert.True(hasActor "ViridianGymGuideScript" true viridianGym, "Clearing EVENT_VIRIDIAN_GYM_BLUE should show the Viridian Gym guide")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A20 Cinnabar east surf route loads Route20 and Seafoam Gym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetVar("__surfing", 1))
+
+    // CinnabarIsland metadata connects east to Route20; y=8 is open water.
+    driver.Apply(Warp("CinnabarIsland", 19, 8, Some Right))
+    stepAndSettle driver Right
+    Assert.Equal("Route20", owMap driver.Snapshot)
+    Assert.Equal((0, 8), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))
+
+    // Route20.asm: warp_event 38,7, SEAFOAM_GYM, 1.
+    driver.Apply(Warp("Route20", 38, 8, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("SeafoamGym", owMap driver.Snapshot)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A20 Blaine awards VolcanoBadge after Seafoam Gym battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_SEAFOAM_GYM_GYM_GUIDE", true))
+    // SeafoamGym.asm: Blaine stands at 5,2.
+    driver.Apply(Warp("SeafoamGym", 5, 3, Some Up))
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_BLAINE"
+                && ow.EngineFlags |> List.contains "ENGINE_VOLCANOBADGE"
+                && not (ow.Events |> List.contains "EVENT_SEAFOAM_GYM_GYM_GUIDE")
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_BLAINE", "Blaine battle should set EVENT_BEAT_BLAINE")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_VOLCANOBADGE", "Blaine battle should set VOLCANOBADGE")
+    Assert.True(hasActor "SeafoamGymGuideScript" true ow, "Blaine script should reveal the Seafoam Gym guide after battle")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A20 Viridian Gym door loads gym and Blue awards EarthBadge`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_VIRIDIAN_GYM_BLUE", false))
+
+    // ViridianCity.asm: warp_event 32,7, VIRIDIAN_GYM, 1.
+    driver.Apply(Warp("ViridianCity", 32, 8, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("ViridianGym", owMap driver.Snapshot)
+
+    // ViridianGym.asm: Blue stands at 5,3.
+    driver.Apply(Warp("ViridianGym", 5, 4, Some Up))
+    let beforeBattle = owOf driver.Snapshot
+    Assert.True(hasActor "ViridianGymBlueScript" true beforeBattle, "Blue should be visible in Viridian Gym after the Cinnabar event")
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_BEAT_BLUE"
+                && ow.EngineFlags |> List.contains "ENGINE_EARTHBADGE"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_BEAT_BLUE", "Blue battle should set EVENT_BEAT_BLUE")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_EARTHBADGE", "Blue battle should set EARTHBADGE")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)

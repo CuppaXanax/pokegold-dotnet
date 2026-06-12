@@ -145,7 +145,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 | ✅ A17 | Cerulean/Power Plant machine-part chain on foot | hidden item via A-press on the gym tile (BGEVENT_ITEM dispatch) |
 | ✅ A18 | Lavender EXPN card; radio tune via Pokégear UI; Snorlax wake battle | tune through the real radio tab (it writes `__radio_station`) |
 | ✅ A19 | Diglett's Cave → Pewter → Brock; Celadon → Erika; Fuchsia → Janine | — |
-| A20 | Cinnabar (Blue) → Seafoam (Blaine) → Viridian (Blue) | Blue object visibility flips per `EVENT_VIRIDIAN_GYM_BLUE` |
+| ✅ A20 | Cinnabar (Blue) → Seafoam (Blaine) → Viridian (Blue) | Blue object visibility flips per `EVENT_VIRIDIAN_GYM_BLUE` |
 | A21 | Pallet → Oak (16 badges) → Route 28/Silver Cave gate → Red → credits | Mt. Silver guard honours `EVENT_OPENED_MT_SILVER` |
 
 When a leg fails, the failure is the work: fix the runtime (collision id handling, warp
