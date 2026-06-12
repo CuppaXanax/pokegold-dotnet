@@ -4801,6 +4801,37 @@ let ``C42 Mirror Move fails when there is no opponent last counter move or the u
     Assert.True(afterDuplicate.Player.Volatile.LastCounterMove.IsNone)
 
 [<Fact>]
+let ``C43 Pursuit doubles damage when the target is switching`` () =
+    let pursuit = Moves.byName "PURSUIT"
+    let user = mon "PLAYER" (ty "DARK") (ty "DARK") 50 300 140 100 200
+    let foe = mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1
+    let ctx : MoveContext =
+        { User = user
+          Foe = foe
+          Move = pursuit
+          Crit = false
+          Roll = 255
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let normal = Effects.applyCtxWith false ctx Damage
+    let switching = Effects.applyCtxWith true ctx Damage
+
+    Assert.Equal(normal.LastDamage * 2, switching.LastDamage)
+    Assert.Equal(foe.Hp - switching.LastDamage, switching.Foe.Hp)
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

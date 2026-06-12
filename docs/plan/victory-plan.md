@@ -289,6 +289,7 @@ Progress:
 - ✅ C1 batch 40: `EFFECT_METRONOME`.
 - ✅ C1 batch 41: `EFFECT_MIMIC`.
 - ✅ C1 batch 42: `EFFECT_MIRROR_MOVE`.
+- ✅ C1 batch 43: `EFFECT_PURSUIT`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

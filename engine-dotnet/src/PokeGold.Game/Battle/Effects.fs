@@ -399,7 +399,7 @@ module Effects =
 
     /// Apply one effect command to a MoveContext. Returns the updated context
     /// with user/foe/messages/lastDamage modified as needed.
-    let rec applyCtx (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
+    let rec applyCtxWith (targetIsSwitching: bool) (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
         let runCalledMove (called: MoveData) (message: string) (ctx: MoveContext) =
             let nested =
                 { ctx with
@@ -409,13 +409,18 @@ module Effects =
                     IsStruggle = false }
 
             forMove called
-            |> List.fold (fun c nestedCmd -> applyCtx c nestedCmd) nested
+            |> List.fold (fun c nestedCmd -> applyCtxWith false c nestedCmd) nested
 
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
             let dmg = applyHeldTypeBoost ctx dmg
             let dmg = damageToUserSide ctx dmg
+            let dmg =
+                if ctx.Move.Effect = "EFFECT_PURSUIT" && targetIsSwitching then
+                    min 65535 (dmg * 2)
+                else
+                    dmg
             // Substitute absorbs damage (effect_commands.asm CheckSubstitute).
             let foe, subBroke, focusMsgs, rng =
                 if ctx.Foe.Volatile.Protect then
@@ -505,7 +510,7 @@ module Effects =
 
         | RaiseAllUserStats ->
             [ Attack; Defense; Speed; SpAttack; SpDefense ]
-            |> List.fold (fun c stat -> applyCtx c (RaiseUserStat stat)) ctx
+            |> List.fold (fun c stat -> applyCtxWith targetIsSwitching c (RaiseUserStat stat)) ctx
 
         | SetDefenseCurl ->
             let user = { ctx.User with Volatile = { ctx.User.Volatile with Curled = true } }
@@ -659,7 +664,7 @@ module Effects =
                 | _ -> InflictBurn, rng'
 
             let command, rng' = choose ctx.Rng
-            applyCtx { ctx with Rng = rng' } command
+            applyCtxWith targetIsSwitching { ctx with Rng = rng' } command
 
         | InflictAttract ->
             if safeguardBlocked ctx then
@@ -700,7 +705,7 @@ module Effects =
         | EffectChance cmd ->
             let roll, rng' = Rng.next ctx.Rng
             if roll < ctx.Move.EffectChance then
-                applyCtx { ctx with Rng = rng' } cmd
+                applyCtxWith targetIsSwitching { ctx with Rng = rng' } cmd
             else
                 { ctx with Rng = rng' }
 
@@ -836,7 +841,7 @@ module Effects =
 
         | Swagger ->
             let foe = shiftStage Attack 2 ctx.Foe
-            applyCtx { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] } InflictConfuse
+            applyCtxWith targetIsSwitching { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] } InflictConfuse
 
         | ResetStats ->
             let user = { ctx.User with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0 }
@@ -901,7 +906,7 @@ module Effects =
                 let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
                 let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
                 let after = { ctx with Foe = foe; Messages = ctx.Messages @ [ "It was asleep!" ]; LastDamage = dmg }
-                applyCtx after (EffectChance SetFlinch)
+                applyCtxWith targetIsSwitching after (EffectChance SetFlinch)
             | _ -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
         | SetEncore ->
@@ -1919,6 +1924,9 @@ module Effects =
                       | _ -> ()
                   if subBroke then $"{foe.Species.Name}'s substitute faded!" ]
             { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+
+    let applyCtx (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
+        applyCtxWith false ctx cmd
 
     /// Legacy apply: wraps applyCtx for callers that don't need the full context.
     let apply

@@ -287,7 +287,7 @@ module Battle =
     ///   1. Accuracy roll  — checkHit (skipped for EFFECT_ALWAYS_HIT / acc $FF)
     ///   2. Crit roll      — rollHit  (skipped on miss)
     ///   3. Spread roll    — rollHit  (skipped on miss)
-    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) (userIsPlayer: bool) (battle: BattleState)
+    let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) (userIsPlayer: bool) (targetIsSwitching: bool) (battle: BattleState)
         : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option * int * bool =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
@@ -348,7 +348,7 @@ module Battle =
             let ctx =
                 Effects.forMove move
                 |> List.fold (fun (c: MoveContext) cmd ->
-                    Effects.applyCtx c cmd
+                    Effects.applyCtxWith targetIsSwitching c cmd
                 ) ctx
 
             let foe =
@@ -1028,6 +1028,7 @@ module Battle =
                 let moveToUse = if chargeTurn then storedCharge.Value else move
                 let mvIndexToUse =
                     if chargeTurn then user.Moves |> List.findIndex (fun m -> m.Name = storedCharge.Value.Name) else mvIndex
+                let targetIsSwitching = playerIsUser && enemySwitched
 
                 // Did this user move first this turn?
                 let userMovedFirst =
@@ -1170,7 +1171,7 @@ module Battle =
                                 elif moveToUse.Effect = "EFFECT_BATON_PASS" then
                                     let team = if playerIsUser then playerTeam else enemyTeam
                                     if firstHealthyBench team |> Option.isSome then
-                                        executeMove user foe moveToUse isStruggle rng playerIsUser s
+                                        executeMove user foe moveToUse isStruggle rng playerIsUser targetIsSwitching s
                                     else
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif moveToUse.Effect = "EFFECT_TELEPORT" then
@@ -1316,7 +1317,7 @@ module Battle =
                                     let user = { user with Volatile = { user.Volatile with ProtectCount = 0 } }
                                     user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 else
-                                    executeMove user foe moveToUse isStruggle rng playerIsUser s
+                                    executeMove user foe moveToUse isStruggle rng playerIsUser targetIsSwitching s
                             rng <- rng'
                             playerSide <- playerSide'
                             enemySide <- enemySide'
