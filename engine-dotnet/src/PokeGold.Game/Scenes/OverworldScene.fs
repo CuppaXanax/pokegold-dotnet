@@ -520,6 +520,47 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
         player <- { player with Party = syncedParty }
 
+    member private _.CaptureBattleMon(mon: BattleMon) =
+        let statusCode (status: StatusCondition) : string =
+            match status with
+            | Healthy -> ""
+            | Sleep _ -> "SLP"
+            | Poison -> "PSN"
+            | BadPoison _ -> "PSN"
+            | Burn -> "BRN"
+            | Freeze -> "FRZ"
+            | Paralysis -> "PAR"
+
+        let moves =
+            List.zip mon.Moves mon.Pp
+            |> List.choose (fun (move, pp) ->
+                let idx = MovesData.byIndex |> Array.tryFindIndex (fun m -> m.Name = move.Name)
+                idx |> Option.map (fun i -> i, pp))
+
+        let captured =
+            { PartyMon.create mon.Species.Dex mon.Level with
+                Hp = max 1 mon.Hp
+                MaxHp = mon.MaxHp
+                Status = statusCode mon.Status
+                Moves = moves
+                HeldItem = mon.HeldItem }
+
+        let updatedPlayer =
+            { player with
+                DexSeen = Set.add mon.Species.Dex player.DexSeen
+                DexOwn = Set.add mon.Species.Dex player.DexOwn }
+
+        if updatedPlayer.Party.Length < BoxOps.partyLength then
+            player <- { updatedPlayer with Party = updatedPlayer.Party @ [ captured ] }
+        else
+            let box = updatedPlayer.Pc.Boxes.[updatedPlayer.Pc.CurrentBox]
+            if box.Mons.Length < Storage.monsPerBox then
+                let newBox = { box with Mons = box.Mons @ [ captured ] }
+                let boxes = updatedPlayer.Pc.Boxes |> Array.mapi (fun i b -> if i = updatedPlayer.Pc.CurrentBox then newBox else b)
+                player <- { updatedPlayer with Pc = { updatedPlayer.Pc with Boxes = boxes } }
+            else
+                player <- updatedPlayer
+
     member private this.BuildBattle() : BattleScene =
         let playerTeam =
             player.Party
@@ -549,7 +590,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | None ->
                     [ BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ] ]
 
-        BattleScene(content.Font, Battle.createTeam playerTeam enemyTeam 0x1234u, fun state -> this.SyncBattleParty state)
+        BattleScene(
+            content.Font,
+            Battle.createTeam playerTeam enemyTeam 0x1234u,
+            onBattleEnd = (fun state -> this.SyncBattleParty state),
+            bag = player.Bag,
+            onBagChange = (fun bag -> player <- { player with Bag = bag }),
+            onCatch = (fun mon -> this.CaptureBattleMon mon))
 
     /// Drive the VM from a run step: enact pure/immediate effects inline (resuming
     /// at once), and for effects that need a child scene, push it and suspend.

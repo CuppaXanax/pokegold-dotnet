@@ -90,7 +90,11 @@ type VolatileStatus =
       Foresight: bool
       /// Attract infatuation: the mon is attracted to its opponent and has a
       /// 50% chance to fail its move on the pre-move gate.
-      Attracted: bool }
+      Attracted: bool
+      /// Bide lock-in turns remaining; damage taken while active is released at
+      /// double power when the counter expires.
+      BideTurns: int option
+      BideDamage: int }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -120,7 +124,9 @@ module VolatileStatus =
           DisabledMoveIndex = None
           LockOn = false
           Foresight = false
-          Attracted = false }
+          Attracted = false
+          BideTurns = None
+          BideDamage = 0 }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;
@@ -207,9 +213,17 @@ module BattleMon =
         min MaxStatValue (stat * num / den)
 
     let effectiveAttack (m: BattleMon) = applyStage m.AtkStage m.Attack
-    let effectiveDefense (m: BattleMon) = applyStage m.DefStage m.Defense
+    let effectiveDefense (m: BattleMon) =
+        let value = applyStage m.DefStage m.Defense
+        if m.Species.Name = "DITTO" && m.HeldItem = Some "METAL_POWDER" then
+            min MaxStatValue (value * 2)
+        else value
     let effectiveSpAttack (m: BattleMon) = applyStage m.SpAtkStage m.SpAttack
-    let effectiveSpDefense (m: BattleMon) = applyStage m.SpDefStage m.SpDefense
+    let effectiveSpDefense (m: BattleMon) =
+        let value = applyStage m.SpDefStage m.SpDefense
+        if m.Species.Name = "DITTO" && m.HeldItem = Some "METAL_POWDER" then
+            min MaxStatValue (value * 2)
+        else value
     /// Effective Speed, faithful to the GSC engine: stage-modified then quartered
     /// if paralysed (PAR). `ApplyPrzEffectOnSpeed` in core.asm halves twice.
     let effectiveSpeed (m: BattleMon) =

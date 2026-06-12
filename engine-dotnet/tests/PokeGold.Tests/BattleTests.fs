@@ -1,8 +1,11 @@
 module PokeGold.Tests.BattleTests
 
 open Xunit
+open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Battle
+open PokeGold.Game.Player
+open PokeGold.Game.Scenes
 
 // --- Data-table tests (baked at build time by PokeGold.DataGen) ---------------
 
@@ -298,6 +301,165 @@ let ``type boosting held item increases matching move damage`` () =
 
     Assert.True(boosted.Enemy.Hp < normal.Enemy.Hp, $"expected CHARCOAL to increase damage: normal hp={normal.Enemy.Hp}, boosted hp={boosted.Enemy.Hp}")
 
+[<Fact>]
+let ``Transform copies target species stats moves and stages`` () =
+    let transform = Moves.byName "TRANSFORM"
+    let ditto =
+        { BattleMon.ofSpecies (Species.byName "DITTO") 30 [ transform ] with
+            AtkStage = -1 }
+    let target =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 12 [ Moves.byName "EMBER"; Moves.byName "TACKLE" ] with
+            AtkStage = 2
+            DefStage = 1 }
+    let ctx =
+        { User = ditto
+          Foe = target
+          Move = transform
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let transformed = Effects.forMove transform |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Equal("CYNDAQUIL", transformed.User.Species.Name)
+    Assert.Equal(target.Attack, transformed.User.Attack)
+    Assert.True(transformed.User.Pp = [ 5; 5 ], $"expected copied PP to be 5 each, got {transformed.User.Pp}")
+    Assert.Equal(2, transformed.User.AtkStage)
+    Assert.Equal(1, transformed.User.DefStage)
+
+[<Fact>]
+let ``Conversion changes the user to one of its move types`` () =
+    let conversion = Moves.byName "CONVERSION"
+    let ember = Moves.byName "EMBER"
+    let user = { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ conversion; ember ] with Pp = [ 30; 25 ] }
+    let foe = BattleMon.ofSpecies (Species.byName "PIDGEY") 20 [ Moves.byName "TACKLE" ]
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = conversion
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let converted = Effects.forMove conversion |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Equal(TypeChart.value "FIRE", converted.User.Species.Type1)
+    Assert.Equal(TypeChart.value "FIRE", converted.User.Species.Type2)
+
+[<Fact>]
+let ``Conversion2 chooses a type resistant to the target move`` () =
+    let conversion2 = Moves.byName "CONVERSION2"
+    let user = BattleMon.ofSpecies (Species.byName "PORYGON") 20 [ conversion2 ]
+    let foe = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ Moves.byName "TACKLE" ]
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = conversion2
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let converted = Effects.forMove conversion2 |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Equal(0, TypeChart.multiplier (TypeChart.value "NORMAL") converted.User.Species.Type1)
+
+[<Fact>]
+let ``Mimic copies a target move into the user's move list with 5 PP`` () =
+    let mimic = Moves.byName "MIMIC"
+    let ember = Moves.byName "EMBER"
+    let user = { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ mimic ] with Pp = [ 10 ] }
+    let foe = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 20 [ ember ]
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = mimic
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let copied = Effects.forMove mimic |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Equal("EMBER", copied.User.Moves.Head.Name)
+    Assert.True(copied.User.Pp = [ 5 ], $"expected copied move PP to be 5, got {copied.User.Pp}")
+
+[<Fact>]
+let ``Metronome dispatches a deterministic called move`` () =
+    let metronome = Moves.byName "METRONOME"
+    let user = BattleMon.ofSpecies (Species.byName "CLEFAIRY") 20 [ metronome ]
+    let foe = BattleMon.ofSpecies (Species.byName "GEODUDE") 20 [ Moves.byName "SPLASH" ]
+    let ctx =
+        { User = user
+          Foe = foe
+          Move = metronome
+          Crit = false
+          Roll = Damage.MaxRoll
+          Rng = Rng.create 0u
+          Messages = []
+          LastDamage = 0
+          IsStruggle = false
+          FuryCutterCount = 0
+          RolloutCount = 0
+          DefenseCurlUsed = false
+          Friendship = 0
+          UserIsPlayer = true
+          PlayerSide = SideState.Empty
+          EnemySide = SideState.Empty
+          WeatherTimer = None
+          WeatherType = None }
+
+    let called = Effects.forMove metronome |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    Assert.Contains(called.Messages, fun msg -> msg.Contains("Metronome called"))
+    Assert.NotEqual(foe.Hp, called.Foe.Hp)
+
 // --- Turn loop ----------------------------------------------------------------
 
 let private strongHit = move "TACKLE" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
@@ -363,6 +525,186 @@ let ``Focus Band can leave the holder at 1 HP against lethal damage`` () =
     Assert.Equal(1, after.Enemy.Hp)
     Assert.True(after.Outcome.IsNone)
     Assert.Contains(after.Messages, fun m -> m.Contains("FOCUS BAND"))
+
+[<Fact>]
+let ``BrightPowder can turn an otherwise accurate hit into a miss`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ strongHit ] }
+    let normalEnemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ Moves.byName "SPLASH" ] }
+    let powderEnemy = { normalEnemy with HeldItem = Some "BRIGHTPOWDER" }
+
+    let normal = Battle.create player normalEnemy 5u |> Battle.chooseMove 0
+    let powdered = Battle.create player powderEnemy 5u |> Battle.chooseMove 0
+
+    Assert.True(normal.Enemy.Hp < normalEnemy.Hp, "normal enemy should be hit")
+    Assert.Equal(powderEnemy.Hp, powdered.Enemy.Hp)
+    Assert.Contains(powdered.Messages, fun msg -> msg.Contains("missed"))
+
+[<Fact>]
+let ``Scope Lens raises critical hit stage`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ strongHit ] }
+    let scoped = { player with HeldItem = Some "SCOPE_LENS" }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with Moves = [ Moves.byName "SPLASH" ] }
+
+    let normal = Battle.create player enemy 4u |> Battle.chooseMove 0
+    let withScope = Battle.create scoped enemy 4u |> Battle.chooseMove 0
+
+    Assert.DoesNotContain(normal.Messages, fun msg -> msg.Contains("critical"))
+    Assert.Contains(withScope.Messages, fun msg -> msg.Contains("critical"))
+
+[<Fact>]
+let ``King's Rock can set flinch on a damaging hit`` () =
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ strongHit ]
+            HeldItem = Some "KINGS_ROCK" }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with Moves = [ Moves.byName "SPLASH" ] }
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("KING'S ROCK"))
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("flinched"))
+
+[<Fact>]
+let ``MysteryBerry restores PP when a move reaches zero`` () =
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ strongHit ]
+            Pp = [ 1 ]
+            HeldItem = Some "MYSTERYBERRY" }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with Moves = [ Moves.byName "SPLASH" ] }
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal<int list>([ 5 ], after.Player.Pp)
+    Assert.Equal(None, after.Player.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("restored PP"))
+
+[<Fact>]
+let ``Smoke Ball allows escape while trapped`` () =
+    let trapped = { VolatileStatus.empty with Trapped = Some 3 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ strongHit ]
+            Volatile = trapped
+            HeldItem = Some "SMOKE_BALL" }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 500 100 100 1 with Moves = [ Moves.byName "SPLASH" ] }
+    let after = Battle.create player enemy 0u |> Battle.run
+
+    Assert.Equal(Some Ran, after.Outcome)
+
+[<Fact>]
+let ``Sleep Talk can call a move while the user is asleep`` () =
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 30 120 80 60 200 with
+            Moves = [ Moves.byName "SLEEP_TALK"; strongHit ]
+            Pp = [ 10; 35 ]
+            Status = Sleep 3 }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 120 40 40 1 with Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("Sleep Talk called"))
+    Assert.True(after.Enemy.Hp < enemy.Hp)
+
+[<Fact>]
+let ``Bide stores damage and later unleashes double damage`` () =
+    let bide = Moves.byName "BIDE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 30 200 60 60 200 with
+            Moves = [ bide ]
+            Pp = [ 10 ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 200 80 40 1 with
+            Moves = [ strongHit ] }
+
+    let mutable state = Battle.create player enemy 0u |> Battle.chooseMove 0
+    let mutable turns = 0
+    while not (state.Messages |> List.exists (fun msg -> msg.Contains("unleashed energy"))) && turns < 5 do
+        state <- Battle.chooseMove 0 state
+        turns <- turns + 1
+
+    Assert.Contains(state.Messages, fun msg -> msg.Contains("unleashed energy"))
+    Assert.True(state.Enemy.Hp < enemy.Hp)
+
+[<Fact>]
+let ``Teleport ends the battle as a run outcome`` () =
+    let player = { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 20 100 50 50 200 with Moves = [ Moves.byName "TELEPORT" ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ strongHit ] }
+
+    let after = Battle.create player enemy 0u |> Battle.chooseMove 0
+
+    Assert.Equal(Some Ran, after.Outcome)
+
+[<Fact>]
+let ``Roar drags out the next enemy team member`` () =
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 200 with Moves = [ Moves.byName "ROAR" ] }
+    let firstEnemy = { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "SPLASH" ] }
+    let benchEnemy = { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.createTeam [ player ] [ firstEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal("BENCH", after.Enemy.Species.Name)
+    Assert.True(after.Outcome.IsNone)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("dragged out"))
+
+[<Fact>]
+let ``Baton Pass switches to a bench mon and preserves stat stages`` () =
+    let player =
+        { mon "PASSER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 200 with
+            Moves = [ Moves.byName "BATON_PASS" ]
+            AtkStage = 3
+            EvaStage = 2 }
+    let bench = { mon "RECEIVER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 100 with Moves = [ strongHit ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 1 with Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.createTeam [ player; bench ] [ enemy ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal("RECEIVER", after.Player.Species.Name)
+    Assert.Equal(3, after.Player.AtkStage)
+    Assert.Equal(2, after.Player.EvaStage)
+
+[<Fact>]
+let ``trainer AI switches out of a bad low HP matchup`` () =
+    let player = { mon "GHOST" (ty "GHOST") (ty "GHOST") 30 120 70 70 50 with Moves = [ Moves.byName "SPLASH" ] }
+    let activeEnemy =
+        { mon "WALLED" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
+            Hp = 20
+            Moves = [ strongHit ] }
+    let benchEnemy =
+        { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with
+            Moves = [ Moves.byName "BITE" ] }
+
+    let after = Battle.createTeam [ player ] [ activeEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal("ANSWER", after.Enemy.Species.Name)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("Enemy withdrew"))
+
+[<Fact>]
+let ``Metal Powder boosts Ditto defenses`` () =
+    let ditto = BattleMon.ofSpecies (Species.byName "DITTO") 30 [ Moves.byName "TRANSFORM" ]
+    let boosted = { ditto with HeldItem = Some "METAL_POWDER" }
+
+    Assert.True(BattleMon.effectiveDefense boosted > BattleMon.effectiveDefense ditto)
+    Assert.True(BattleMon.effectiveSpDefense boosted > BattleMon.effectiveSpDefense ditto)
+
+[<Fact>]
+let ``BattleScene item menu uses Potion on active Pokemon and decrements bag`` () =
+    let potion = "POTION"
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with
+            Hp = 40
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 5 100 20 20 1 with Moves = [ Moves.byName "SPLASH" ]; Pp = [ (Moves.byName "SPLASH").Pp ] }
+    let mutable bag = Bag.empty |> Bag.add potion 1
+    let state = { Battle.create player enemy 0u with Messages = [] }
+    let scene = BattleScene(Content().Font, state, bag = bag, onBagChange = (fun b -> bag <- b))
+
+    (scene :> Scene).Update { Buttons.none with Right = true } |> ignore
+    (scene :> Scene).Update Buttons.none |> ignore
+    (scene :> Scene).Update { Buttons.none with A = true } |> ignore
+
+    Assert.Equal(60, scene.CurrentState.Player.Hp)
+    Assert.Equal(0, Bag.count potion scene.CurrentBag)
 
 [<Fact>]
 let ``a stat-down move lowers the target's stage`` () =

@@ -3,6 +3,7 @@ module PokeGold.Tests.WildEncounterTests
 open Xunit
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
+open PokeGold.Game.Player
 
 [<Fact>]
 let ``isEncounterTile identifies grass and water tiles`` () =
@@ -23,6 +24,14 @@ let ``selectSlot maps rolls to 7 probability slots`` () =
 let ``shouldEncounter returns true when roll below threshold`` () =
     Assert.True(WildEncounter.shouldEncounter 25 0)
     Assert.False(WildEncounter.shouldEncounter 25 255)
+
+[<Fact>]
+let ``Cleanse Tag reduces encounter rate`` () =
+    let lead = { PartyMon.create 155 10 with HeldItem = Some "CLEANSE_TAG" }
+    let player = { PlayerStateOps.initial with Party = [ lead ] }
+
+    Assert.Equal(16, WildEncounter.effectiveRate player 25)
+    Assert.Equal(25, WildEncounter.effectiveRate PlayerStateOps.initial 25)
 
 [<Fact>]
 let ``fishEncounter returns rod-specific encounters`` () =

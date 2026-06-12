@@ -76,7 +76,7 @@ module Effects =
               "HELD_POISON_BOOST", "POISON"
               "HELD_GROUND_BOOST", "GROUND"
               "HELD_FLYING_BOOST", "FLYING"
-              "HELD_PSYCHIC_BOOST", "PSYCHIC"
+              "HELD_PSYCHIC_BOOST", "PSYCHIC_TYPE"
               "HELD_BUG_BOOST", "BUG"
               "HELD_ROCK_BOOST", "ROCK"
               "HELD_GHOST_BOOST", "GHOST"
@@ -101,6 +101,40 @@ module Effects =
         |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId)
         |> Option.filter (fun item -> item.HeldEffect = effect)
         |> Option.map (fun item -> item.Param)
+
+    let private battlerWithTypes type1 type2 (m: BattleMon) =
+        { m with Species = { m.Species with Type1 = type1; Type2 = type2 } }
+
+    let private concreteBattleTypes =
+        [ "NORMAL"; "FIGHTING"; "FLYING"; "POISON"; "GROUND"; "ROCK"; "BUG"; "GHOST"; "STEEL"
+          "FIRE"; "WATER"; "GRASS"; "ELECTRIC"; "PSYCHIC_TYPE"; "ICE"; "DRAGON"; "DARK" ]
+        |> List.map TypeChart.value
+
+    let private replaceMove oldName copied (m: BattleMon) =
+        let replaced =
+            m.Moves
+            |> List.mapi (fun i move ->
+                if move.Name = oldName then Some(i, copied) else None)
+            |> List.choose id
+            |> List.tryHead
+
+        match replaced with
+        | None -> m
+        | Some(index, move) ->
+            let moves = m.Moves |> List.mapi (fun i existing -> if i = index then move else existing)
+            let pp = m.Pp |> List.mapi (fun i existing -> if i = index then 5 else existing)
+            { m with Moves = moves; Pp = pp }
+
+    let private callableMoves =
+        Moves.all
+        |> Map.toList
+        |> List.map snd
+        |> List.filter (fun move ->
+            move.Name <> "STRUGGLE"
+            && move.Effect <> "EFFECT_METRONOME"
+            && move.Effect <> "EFFECT_MIRROR_MOVE"
+            && move.Effect <> "EFFECT_SLEEP_TALK")
+        |> List.sortBy (fun move -> move.Name)
 
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
@@ -163,7 +197,7 @@ module Effects =
         | "EFFECT_SPLASH" -> []
         | "EFFECT_ALWAYS_HIT" -> [ Damage ]
         | "EFFECT_PRIORITY_HIT" -> [ Damage ]
-        | "EFFECT_TELEPORT" -> []
+        | "EFFECT_TELEPORT" -> [ TeleportAway ]
         | "EFFECT_SOLARBEAM" -> [ Damage; BeginCharging ]
         | "EFFECT_THUNDER" -> [ Damage; EffectChance InflictParalyze ]
         | "EFFECT_DEFENSE_CURL" -> [ RaiseUserStat Defense ]
@@ -195,6 +229,18 @@ module Effects =
         | "EFFECT_HEAL_BELL" -> [ HealBellEffect ]
         | "EFFECT_LOCK_ON" -> [ SetLockOn ]
         | "EFFECT_FORESIGHT" -> [ SetForesight ]
+        | "EFFECT_TRANSFORM" -> [ TransformIntoTarget ]
+        | "EFFECT_BIDE" -> [ StartBide ]
+        | "EFFECT_CONVERSION" -> [ ConvertToOwnMoveType ]
+        | "EFFECT_CONVERSION2" -> [ ConvertToResistantType ]
+        | "EFFECT_MIMIC" -> [ MimicTargetMove ]
+        | "EFFECT_MIRROR_MOVE" -> [ MirrorTargetMove ]
+        | "EFFECT_METRONOME" -> [ MetronomeMove ]
+        | "EFFECT_SLEEP_TALK" -> [ SleepTalkMove ]
+        | "EFFECT_SKETCH" -> [ SketchTargetMove ]
+        | "EFFECT_FORCE_SWITCH" -> [ ForceSwitchTarget ]
+        | "EFFECT_BATON_PASS" -> [ BatonPass ]
+        | "EFFECT_PURSUIT" -> [ Damage ]
         | "EFFECT_TRI_ATTACK" -> [ Damage; EffectChance InflictBurn ]
         | "EFFECT_FLINCH_HIT" -> [ Damage; EffectChance SetFlinch ]
         | "EFFECT_CONFUSE_HIT" -> [ Damage; EffectChance InflictConfuse ]
@@ -263,6 +309,17 @@ module Effects =
     /// Apply one effect command to a MoveContext. Returns the updated context
     /// with user/foe/messages/lastDamage modified as needed.
     let rec applyCtx (ctx: MoveContext) (cmd: EffectCommand) : MoveContext =
+        let runCalledMove (called: MoveData) (message: string) (ctx: MoveContext) =
+            let nested =
+                { ctx with
+                    Move = called
+                    Messages = ctx.Messages @ [ message ]
+                    LastDamage = 0
+                    IsStruggle = false }
+
+            forMove called
+            |> List.fold (fun c nestedCmd -> applyCtx c nestedCmd) nested
+
         match cmd with
         | Damage ->
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
@@ -290,6 +347,19 @@ module Effects =
                     | _ ->
                         { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], ctx.Rng
 
+            let foe, flinchMsgs, rng =
+                if not (BattleMon.isFainted foe) && ctx.Move.Power > 0 then
+                    match heldParam "HELD_FLINCH" ctx.User with
+                    | Some chance ->
+                        let roll, rng' = Rng.next rng
+                        if roll < chance then
+                            { foe with Volatile = { foe.Volatile with Flinch = true } }, [ $"{foe.Species.Name} flinched from KING'S ROCK!" ], rng'
+                        else
+                            foe, [], rng'
+                    | None -> foe, [], rng
+                else
+                    foe, [], rng
+
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
@@ -300,7 +370,7 @@ module Effects =
                       | _ -> ()
                   if subBroke then $"{foe.Species.Name}'s substitute faded!" ]
 
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes @ focusMsgs; LastDamage = dmg; Rng = rng }
+            { ctx with Foe = foe; Messages = ctx.Messages @ notes @ focusMsgs @ flinchMsgs; LastDamage = dmg; Rng = rng }
 
         | Recoil ->
             // Recoil = 1/4 of damage dealt, min 1 HP.
@@ -717,6 +787,121 @@ module Effects =
 
         | SetForesight ->
             { ctx with Foe = { ctx.Foe with Volatile = { ctx.Foe.Volatile with Foresight = true } }; Messages = ctx.Messages @ [ "was identified!" ] }
+
+        | TransformIntoTarget ->
+            let transformed =
+                { ctx.User with
+                    Species = ctx.Foe.Species
+                    Attack = ctx.Foe.Attack
+                    Defense = ctx.Foe.Defense
+                    Speed = ctx.Foe.Speed
+                    SpAttack = ctx.Foe.SpAttack
+                    SpDefense = ctx.Foe.SpDefense
+                    Moves = ctx.Foe.Moves
+                    Pp = ctx.Foe.Moves |> List.map (fun _ -> 5)
+                    AtkStage = ctx.Foe.AtkStage
+                    DefStage = ctx.Foe.DefStage
+                    SpdStage = ctx.Foe.SpdStage
+                    SpAtkStage = ctx.Foe.SpAtkStage
+                    SpDefStage = ctx.Foe.SpDefStage
+                    AccStage = ctx.Foe.AccStage
+                    EvaStage = ctx.Foe.EvaStage }
+
+            { ctx with User = transformed; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} transformed into {ctx.Foe.Species.Name}!" ] }
+
+        | StartBide ->
+            if ctx.User.Volatile.BideTurns.IsSome then
+                { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} is storing energy!" ] }
+            else
+                let roll, rng' = Rng.next ctx.Rng
+                let turns = (roll &&& 1) + 2
+                let user =
+                    { ctx.User with
+                        Volatile = { ctx.User.Volatile with BideTurns = Some turns; BideDamage = 0 } }
+
+                { ctx with User = user; Rng = rng'; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} is storing energy!" ] }
+
+        | ConvertToOwnMoveType ->
+            let moveType =
+                ctx.User.Moves
+                |> List.tryFind (fun move -> move.Type <> ctx.User.Species.Type1 && move.Type <> ctx.User.Species.Type2)
+                |> Option.orElse (ctx.User.Moves |> List.tryHead)
+                |> Option.map (fun move -> move.Type)
+
+            match moveType with
+            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some typ ->
+                let user = battlerWithTypes typ typ ctx.User
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType typ} type!" ] }
+
+        | ConvertToResistantType ->
+            let attackType =
+                ctx.Foe.Moves
+                |> List.tryFind (fun move -> move.Power > 0)
+                |> Option.orElse (ctx.Foe.Moves |> List.tryHead)
+                |> Option.map (fun move -> move.Type)
+
+            match attackType with
+            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some typ ->
+                let resistantType =
+                    concreteBattleTypes
+                    |> List.minBy (fun candidate -> TypeChart.multiplier typ candidate)
+                let user = battlerWithTypes resistantType resistantType ctx.User
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} converted to {TypeChart.nameOfType resistantType} type!" ] }
+
+        | MimicTargetMove ->
+            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Name <> ctx.Move.Name) with
+            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some copied ->
+                let user = replaceMove ctx.Move.Name copied ctx.User
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} learned {copied.Name} with Mimic!" ] }
+
+        | SketchTargetMove ->
+            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Name <> ctx.Move.Name) with
+            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some copied ->
+                let user = replaceMove ctx.Move.Name copied ctx.User
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} sketched {copied.Name}!" ] }
+
+        | MirrorTargetMove ->
+            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Effect <> "EFFECT_MIRROR_MOVE") with
+            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some called ->
+                runCalledMove called $"{ctx.User.Species.Name} mirrored {called.Name}!" ctx
+
+        | MetronomeMove ->
+            if callableMoves.IsEmpty then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+            else
+                let roll, rng' = Rng.next ctx.Rng
+                let called = callableMoves.[roll % callableMoves.Length]
+                runCalledMove called $"{ctx.User.Species.Name}'s Metronome called {called.Name}!" { ctx with Rng = rng' }
+
+        | SleepTalkMove ->
+            match ctx.User.Status with
+            | Sleep _ ->
+                let candidates =
+                    ctx.User.Moves
+                    |> List.filter (fun move -> move.Effect <> "EFFECT_SLEEP_TALK" && move.Effect <> "EFFECT_MIRROR_MOVE")
+
+                match candidates with
+                | [] -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+                | _ ->
+                    let roll, rng' = Rng.next ctx.Rng
+                    let called = candidates.[roll % candidates.Length]
+                    runCalledMove called $"{ctx.User.Species.Name}'s Sleep Talk called {called.Name}!" { ctx with Rng = rng' }
+            | _ ->
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        | TeleportAway ->
+            { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} teleported away!" ] }
+
+        | ForceSwitchTarget ->
+            { ctx with Messages = ctx.Messages @ [ $"{ctx.Foe.Species.Name} was blown away!" ] }
+
+        | BatonPass ->
+            { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} passed its battle state!" ] }
 
         | SetPerishSong ->
             let playerSide = { ctx.PlayerSide with PerishCounter = Some 3 }

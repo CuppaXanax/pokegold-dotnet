@@ -95,14 +95,17 @@ module Battle =
     /// Returns: (canAct, confusionSelfHit, updatedUser, messages, rng)
     /// When confusionSelfHit = true, the caller must apply a 40-power typeless
     /// physical hit from the user to itself (using user's own atk/def).
-    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (userMovedFirst: bool) (rng: Rng)
+    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (selectedMove: MoveData) (userMovedFirst: bool) (rng: Rng)
         : bool * bool * BattleMon * string list * Rng =
 
         // 1. Sleep gate
         match user.Status with
         | Sleep turnsLeft ->
             let remaining = turnsLeft - 1
-            if remaining = 0 then
+            if selectedMove.Effect = "EFFECT_SLEEP_TALK" && remaining > 0 then
+                let user' = { user with Status = Sleep remaining }
+                (true, false, user', [], rng)
+            elif remaining = 0 then
                 let user' = { user with Status = Healthy }
                 (true, false, user', [ $"{user.Species.Name} woke up!" ], rng)
             else
@@ -222,7 +225,10 @@ module Battle =
         let accByte = move.Accuracy * 255 / 100
 
         let modifiedAcc =
-            BattleMon.applyAccEvaStages accByte user.AccStage foe.EvaStage
+            let staged = BattleMon.applyAccEvaStages accByte user.AccStage foe.EvaStage
+            match heldParam "HELD_BRIGHTPOWDER" foe with
+            | Some pct -> max 1 (staged * (100 - pct) / 100)
+            | None -> staged
 
         if modifiedAcc >= 255 then
             (true, rng)
@@ -241,6 +247,10 @@ module Battle =
         let roll = Damage.MinRoll + spread % (Damage.MaxRoll - Damage.MinRoll + 1)
         crit, roll, rng
 
+    let private critStageFor (user: BattleMon) (move: MoveData) =
+        let itemBoost = if heldEffect "HELD_CRITICAL_UP" user then 1 else 0
+        min (CriticalHit.thresholds.Length - 1) (CriticalHit.critStage user.Volatile.FocusEnergy move + itemBoost)
+
     // -- Phase: execute move -------------------------------------------------
 
     /// Execute one mon's move against the other using the MoveContext pattern.
@@ -252,7 +262,7 @@ module Battle =
     ///   2. Crit roll      — rollHit  (skipped on miss)
     ///   3. Spread roll    — rollHit  (skipped on miss)
     let private executeMove (user: BattleMon) (foe: BattleMon) (move: MoveData) (isStruggle: bool) (rng: Rng) (userIsPlayer: bool) (battle: BattleState)
-        : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option =
+        : BattleMon * BattleMon * string list * Rng * SideState * SideState * int option * string option * int * bool =
         let intro = $"{user.Species.Name} used {move.Name}!"
 
         // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
@@ -266,12 +276,12 @@ module Battle =
             if move.Effect = "EFFECT_JUMP_KICK" then
                 let crash = max 1 (user.MaxHp / 8)
                 let user = { user with Hp = max 0 (user.Hp - crash) }
-                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType)
+                (user, foe, msgs @ [ $"{user.Species.Name} kept going and crashed!" ], rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
             else
-                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType)
+                (user, foe, msgs, rng, battle.PlayerSide, battle.EnemySide, battle.WeatherTimer, battle.WeatherType, 0, false)
         else
 
-        let crit, roll, rng = rollHit (CriticalHit.critStage user.Volatile.FocusEnergy move) rng
+        let crit, roll, rng = rollHit (critStageFor user move) rng
         let intro = $"{user.Species.Name} used {move.Name}!"
 
         let ctx : MoveContext =
@@ -307,7 +317,7 @@ module Battle =
                 ctx.Foe
 
         let ctx = { ctx with Foe = foe }
-        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType
+        ctx.User, ctx.Foe, ctx.Messages, ctx.Rng, ctx.PlayerSide, ctx.EnemySide, ctx.WeatherTimer, ctx.WeatherType, ctx.LastDamage, true
 
     // -- Phase: end-of-turn residuals (between turns) ------------------------
 
@@ -686,6 +696,60 @@ module Battle =
           "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"; "EFFECT_RAZOR_WIND" ]
         |> List.contains move.Effect
 
+    let private restoreHeldPp (m: BattleMon) =
+        match heldParam "HELD_RESTORE_PP" m with
+        | None -> m, []
+        | Some _ ->
+            let target =
+                List.zip [ 0 .. m.Pp.Length - 1 ] m.Pp
+                |> List.tryFind (fun (i, pp) -> pp = 0 && i < m.Moves.Length && m.Moves.[i].Pp > 0)
+
+            match target with
+            | None -> m, []
+            | Some(i, pp) ->
+                let maxPp = m.Moves.[i].Pp
+                let restored = min maxPp (pp + 5)
+                let pp' = m.Pp |> List.mapi (fun j current -> if i = j then restored else current)
+                { m with Pp = pp'; HeldItem = None }, [ $"{m.Species.Name}'s held item restored PP!" ]
+
+    let private clearSwitchVolatile (m: BattleMon) =
+        { m with Volatile = VolatileStatus.empty }
+
+    let private batonPassTo (source: BattleMon) (target: BattleMon) =
+        { target with
+            AtkStage = source.AtkStage
+            DefStage = source.DefStage
+            SpdStage = source.SpdStage
+            SpAtkStage = source.SpAtkStage
+            SpDefStage = source.SpDefStage
+            AccStage = source.AccStage
+            EvaStage = source.EvaStage
+            Volatile = { source.Volatile with BideTurns = None; BideDamage = 0 } }
+
+    let private switchTeamTo (teamIndex: int) (active: BattleMon) (team: BattleMon list) (incoming: BattleMon -> BattleMon -> BattleMon) =
+        if teamIndex <= 0 || teamIndex >= team.Length then
+            None
+        else
+            let target = team.[teamIndex]
+            if BattleMon.isFainted target then
+                None
+            else
+                let switchedIn = incoming active target
+                let switchedOut = clearSwitchVolatile active
+                let team' =
+                    team
+                    |> List.mapi (fun i mon ->
+                        if i = 0 then switchedIn
+                        elif i = teamIndex then switchedOut
+                        else mon)
+                Some(switchedIn, team')
+
+    let private firstHealthyBench (team: BattleMon list) =
+        team
+        |> List.mapi (fun i mon -> i, mon)
+        |> List.tryFind (fun (i, mon) -> i > 0 && not (BattleMon.isFainted mon))
+        |> Option.map fst
+
     /// The player selects a move (by index into their move list). This resolves a
     /// whole turn: both sides act in speed order, faints are checked between
     /// actions, end-of-turn residuals run, and the outcome is set if the battle ends.
@@ -701,13 +765,29 @@ module Battle =
             if playerStruggle then struggle, -1
             else s.Player.Moves.[index], index
 
+        let mutable preEnemy = s.Enemy
+        let mutable preEnemyTeam = s.EnemyTeam
+        let enemySwitched, enemySwitchMsgs =
+            match BattleAI.chooseSwitch preEnemy s.Player preEnemyTeam with
+            | Some switchIndex ->
+                match switchTeamTo switchIndex preEnemy preEnemyTeam (fun _ target -> clearSwitchVolatile target) with
+                | Some(incoming, team') ->
+                    let msgs = [ $"Enemy withdrew {preEnemy.Species.Name}!"; $"Enemy sent out {incoming.Species.Name}!" ]
+                    preEnemy <- incoming
+                    preEnemyTeam <- team'
+                    true, msgs
+                | None -> false, []
+            | None -> false, []
+
         // Enemy move selection.
-        let enemyChoice = enemyMoveChoice s.Enemy s.Player
-        let enemyStruggle = enemyChoice.IsNone
+        let enemyChoice = if enemySwitched then None else enemyMoveChoice preEnemy s.Player
+        let enemyStruggle = (not enemySwitched) && enemyChoice.IsNone
         let enemyMv, enemyMvIndex =
-            match enemyChoice with
-            | Some (m, i) -> m, i
-            | None -> struggle, -1
+            if enemySwitched then Moves.byName "SPLASH", -1
+            else
+                match enemyChoice with
+                | Some (m, i) -> m, i
+                | None -> struggle, -1
 
         // Struggle messages (before moves execute).
         let struggleMsgs =
@@ -715,16 +795,18 @@ module Battle =
               if enemyStruggle then $"{s.Enemy.Species.Name} has no moves left!" ]
 
         let mutable player = s.Player
-        let mutable enemy = s.Enemy
+        let mutable enemy = preEnemy
         let mutable playerTeam = s.PlayerTeam
-        let mutable enemyTeam = s.EnemyTeam
+        let mutable enemyTeam = preEnemyTeam
         let mutable rng = s.Rng
         let mutable weatherTimer = s.WeatherTimer
         let mutable weatherType = s.WeatherType
         let mutable playerSide = s.PlayerSide
         let mutable enemySide = s.EnemySide
-        let mutable msgs: string list = struggleMsgs
+        let mutable msgs: string list = enemySwitchMsgs @ struggleMsgs
         let mutable outcome: Outcome option = None
+        let mutable skipPlayerAction = false
+        let mutable skipEnemyAction = false
 
         let priorityOf (move: MoveData) =
             if move.Effect = "EFFECT_PRIORITY_HIT" then 1 else 0
@@ -737,29 +819,38 @@ module Battle =
             | None -> false, rng
 
         let playerFirst =
-            let playerPriority = priorityOf playerMv
-            let enemyPriority = priorityOf enemyMv
-
-            if playerPriority <> enemyPriority then
-                playerPriority > enemyPriority
+            if enemySwitched then
+                true
             else
-                match heldEffect "HELD_QUICK_CLAW" player, heldEffect "HELD_QUICK_CLAW" enemy with
-                | true, false ->
-                    let activated, rng' = quickClawCheck player rng
-                    rng <- rng'
-                    if activated then msgs <- msgs @ [ $"{player.Species.Name}'s QUICK CLAW let it move first!" ]
-                    if activated then true else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
-                | false, true ->
-                    let activated, rng' = quickClawCheck enemy rng
-                    rng <- rng'
-                    if activated then msgs <- msgs @ [ $"{enemy.Species.Name}'s QUICK CLAW let it move first!" ]
-                    if activated then false else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
-                | _ ->
-                    BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
+                let playerPriority = priorityOf playerMv
+                let enemyPriority = priorityOf enemyMv
+
+                if playerPriority <> enemyPriority then
+                    playerPriority > enemyPriority
+                else
+                    match heldEffect "HELD_QUICK_CLAW" player, heldEffect "HELD_QUICK_CLAW" enemy with
+                    | true, false ->
+                        let activated, rng' = quickClawCheck player rng
+                        rng <- rng'
+                        if activated then msgs <- msgs @ [ $"{player.Species.Name}'s QUICK CLAW let it move first!" ]
+                        if activated then true else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
+                    | false, true ->
+                        let activated, rng' = quickClawCheck enemy rng
+                        rng <- rng'
+                        if activated then msgs <- msgs @ [ $"{enemy.Species.Name}'s QUICK CLAW let it move first!" ]
+                        if activated then false else BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
+                    | _ ->
+                        BattleMon.effectiveSpeed player >= BattleMon.effectiveSpeed enemy
 
         // Run one side's action (pre-move gate -> execute -> PP deduct -> mid-turn faint check).
         let act (playerIsUser: bool) : bool =
             if outcome.IsSome then
+                false
+            elif playerIsUser && skipPlayerAction then
+                skipPlayerAction <- false
+                false
+            elif (not playerIsUser) && skipEnemyAction then
+                skipEnemyAction <- false
                 false
             else
                 let user, foe, move, mvIndex, isStruggle =
@@ -777,7 +868,7 @@ module Battle =
                     if playerIsUser then playerFirst else not playerFirst
 
                 // Phase: pre-move status gates
-                let canAct, selfHit, user, gateMsgs, rng' = preMoveStatusCheck user foe userMovedFirst rng
+                let canAct, selfHit, user, gateMsgs, rng' = preMoveStatusCheck user foe moveToUse userMovedFirst rng
                 rng <- rng'
                 msgs <- msgs @ gateMsgs
 
@@ -810,34 +901,19 @@ module Battle =
                     if playerIsUser then player <- user else enemy <- user
                     true
                 else
-                    // First turn of a charging move: set the charge flag and skip the action.
-                    if not chargeTurn && isChargingEffect move && user.Volatile.Charging.IsNone then
-                        let user' = { user with Volatile = { user.Volatile with Charging = Some 1; ChargingMove = Some move } }
-                        if playerIsUser then player <- user' else enemy <- user'
-                        msgs <- msgs @ [ $"{user'.Species.Name} is charging up!" ]
-                        true
-                    else
-                        // Phase: execute move
-                        let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType' = executeMove user foe moveToUse isStruggle rng playerIsUser s
-                        rng <- rng'
-                        playerSide <- playerSide'
-                        enemySide <- enemySide'
-                        weatherTimer <- weatherTimer'
-                        weatherType <- weatherType'
-                        msgs <- msgs @ moveMsgs
+                    match user.Volatile.BideTurns with
+                    | Some turns ->
+                        let user, foe, bideMsgs =
+                            if turns > 1 then
+                                let vol = { user.Volatile with BideTurns = Some (turns - 1) }
+                                { user with Volatile = vol }, foe, [ $"{user.Species.Name} is storing energy!" ]
+                            else
+                                let dmg = user.Volatile.BideDamage * 2
+                                let foe = { foe with Hp = max 0 (foe.Hp - dmg) }
+                                let vol = { user.Volatile with BideTurns = None; BideDamage = 0 }
+                                { user with Volatile = vol }, foe, [ $"{user.Species.Name} unleashed energy!" ]
 
-                        // Clear the charge window after the second-turn execution.
-                        let user =
-                            if chargeTurn then
-                                { user with Volatile = { user.Volatile with Charging = None; ChargingMove = None } }
-                            else user
-
-                        // Phase: deduct PP (Struggle does not consume PP --
-                        // effect_commands.asm l.974: cp STRUGGLE; ret z)
-                        let user =
-                            if isStruggle then user
-                            else BattleMon.deductPp mvIndexToUse user
-
+                        msgs <- msgs @ bideMsgs
                         if playerIsUser then
                             player <- user
                             enemy <- foe
@@ -849,14 +925,11 @@ module Battle =
                             playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
                             enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
 
-                        // Phase: mid-turn faint check
                         let faintOutcome, faintMsgs, enemyFainted, playerFainted =
                             faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                         msgs <- msgs @ faintMsgs
                         match faintOutcome with
-                        | Some o ->
-                            outcome <- Some o
-                            false
+                        | Some o -> outcome <- Some o; false
                         | None when enemyFainted || playerFainted ->
                             let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                             player <- switched.Player
@@ -867,7 +940,136 @@ module Battle =
                             true
                         | None -> true
 
-        let order = if playerFirst then [ true; false ] else [ false; true ]
+                    | None ->
+                        // First turn of a charging move: set the charge flag and skip the action.
+                        if not chargeTurn && isChargingEffect move && user.Volatile.Charging.IsNone then
+                            let user' = { user with Volatile = { user.Volatile with Charging = Some 1; ChargingMove = Some move } }
+                            if playerIsUser then player <- user' else enemy <- user'
+                            msgs <- msgs @ [ $"{user'.Species.Name} is charging up!" ]
+                            true
+                        else
+                            // Phase: execute move
+                            let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit = executeMove user foe moveToUse isStruggle rng playerIsUser s
+                            rng <- rng'
+                            playerSide <- playerSide'
+                            enemySide <- enemySide'
+                            weatherTimer <- weatherTimer'
+                            weatherType <- weatherType'
+                            msgs <- msgs @ moveMsgs
+
+                            let foe =
+                                if lastDamage > 0 && foe.Volatile.BideTurns.IsSome then
+                                    { foe with Volatile = { foe.Volatile with BideDamage = foe.Volatile.BideDamage + lastDamage } }
+                                else
+                                    foe
+
+                            // Clear the charge window after the second-turn execution.
+                            let user =
+                                if chargeTurn then
+                                    { user with Volatile = { user.Volatile with Charging = None; ChargingMove = None } }
+                                else user
+
+                            // Phase: deduct PP (Struggle does not consume PP --
+                            // effect_commands.asm l.974: cp STRUGGLE; ret z)
+                            let user =
+                                if isStruggle then user
+                                else BattleMon.deductPp mvIndexToUse user
+                            let user, ppMsgs = restoreHeldPp user
+                            msgs <- msgs @ ppMsgs
+
+                            let applyDefaultAssignment () =
+                                if playerIsUser then
+                                    player <- user
+                                    enemy <- foe
+                                    playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+                                    enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                else
+                                    enemy <- user
+                                    player <- foe
+                                    playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                    enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+
+                            match moveToUse.Effect, hit with
+                            | "EFFECT_TELEPORT", true ->
+                                applyDefaultAssignment ()
+                                outcome <- Some Ran
+                            | "EFFECT_BATON_PASS", true ->
+                                if playerIsUser then
+                                    let updatedTeam = playerTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+                                    match firstHealthyBench updatedTeam |> Option.bind (fun idx -> switchTeamTo idx user updatedTeam batonPassTo) with
+                                    | Some(incoming, team') ->
+                                        player <- incoming
+                                        playerTeam <- team'
+                                        enemy <- foe
+                                        enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                        msgs <- msgs @ [ $"Go, {incoming.Species.Name}!" ]
+                                    | None ->
+                                        msgs <- msgs @ [ "But it failed!" ]
+                                        applyDefaultAssignment ()
+                                else
+                                    let updatedTeam = enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+                                    match firstHealthyBench updatedTeam |> Option.bind (fun idx -> switchTeamTo idx user updatedTeam batonPassTo) with
+                                    | Some(incoming, team') ->
+                                        enemy <- incoming
+                                        enemyTeam <- team'
+                                        player <- foe
+                                        playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                        msgs <- msgs @ [ $"{incoming.Species.Name} was sent out!" ]
+                                    | None ->
+                                        msgs <- msgs @ [ "But it failed!" ]
+                                        applyDefaultAssignment ()
+                            | "EFFECT_FORCE_SWITCH", true ->
+                                if playerIsUser then
+                                    let updatedEnemyTeam = enemyTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                    match firstHealthyBench updatedEnemyTeam |> Option.bind (fun idx -> switchTeamTo idx foe updatedEnemyTeam (fun _ target -> clearSwitchVolatile target)) with
+                                    | Some(incoming, team') ->
+                                        player <- user
+                                        playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+                                        enemy <- incoming
+                                        enemyTeam <- team'
+                                        skipEnemyAction <- true
+                                        msgs <- msgs @ [ $"{incoming.Species.Name} was dragged out!" ]
+                                    | None ->
+                                        applyDefaultAssignment ()
+                                        outcome <- Some Ran
+                                else
+                                    let updatedPlayerTeam = playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                    match firstHealthyBench updatedPlayerTeam |> Option.bind (fun idx -> switchTeamTo idx foe updatedPlayerTeam (fun _ target -> clearSwitchVolatile target)) with
+                                    | Some(incoming, team') ->
+                                        enemy <- user
+                                        enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
+                                        player <- incoming
+                                        playerTeam <- team'
+                                        skipPlayerAction <- true
+                                        msgs <- msgs @ [ $"Go, {incoming.Species.Name}!" ]
+                                    | None ->
+                                        applyDefaultAssignment ()
+                                        msgs <- msgs @ [ "But it failed!" ]
+                            | _ ->
+                                applyDefaultAssignment ()
+
+                            // Phase: mid-turn faint check
+                            let faintOutcome, faintMsgs, enemyFainted, playerFainted =
+                                faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                            msgs <- msgs @ faintMsgs
+                            match faintOutcome with
+                            | Some o ->
+                                outcome <- Some o
+                                false
+                            | None when enemyFainted || playerFainted ->
+                                let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                                player <- switched.Player
+                                enemy <- switched.Enemy
+                                playerTeam <- switched.PlayerTeam
+                                enemyTeam <- switched.EnemyTeam
+                                msgs <- msgs @ switchMsgs
+                                true
+                            | None -> true
+
+        let order =
+            if enemySwitched then [ true ]
+            elif playerFirst then [ true; false ]
+            else [ false; true ]
         order |> List.iter (fun who -> act who |> ignore)
 
         // Phase: end-of-turn residuals (only if nobody fainted mid-turn)
@@ -917,6 +1119,10 @@ module Battle =
     let run (s: BattleState) : BattleState =
         if isOver s then
             s
+        elif heldEffect "HELD_ESCAPE" s.Player then
+            { s with
+                Messages = [ "Got away safely!" ]
+                Outcome = Some Ran }
         elif s.Player.Volatile.Trapped.IsSome then
             { s with Messages = [ $"{s.Player.Species.Name} is trapped and can't escape!" ] }
         elif s.Player.Volatile.CantEscape then

@@ -150,6 +150,18 @@ type EffectCommand =
     | HealBellEffect
     | SetLockOn
     | SetForesight
+    | TransformIntoTarget
+    | StartBide
+    | ConvertToOwnMoveType
+    | ConvertToResistantType
+    | MimicTargetMove
+    | MirrorTargetMove
+    | MetronomeMove
+    | SleepTalkMove
+    | SketchTargetMove
+    | TeleportAway
+    | ForceSwitchTarget
+    | BatonPass
 
     // -----------------------------------------------------------------------
     //  M13.5: damage-shaping & fixed damage family

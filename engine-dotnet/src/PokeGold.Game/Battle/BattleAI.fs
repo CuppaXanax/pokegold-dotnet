@@ -55,3 +55,29 @@ module BattleAI =
             |> List.sortByDescending (fun (_, _, s) -> s)
             |> List.tryHead
             |> Option.map (fun (m, i, _) -> (m, i))
+
+    let private bestAvailableScore (user: BattleMon) (target: BattleMon) =
+        chooseMove user target
+        |> Option.map (fun (move, _) -> scoreMove user target move)
+        |> Option.defaultValue 0
+
+    /// Pick a healthier bench mon when the active matchup is poor enough to
+    /// justify spending the trainer's turn switching.
+    let chooseSwitch (active: BattleMon) (target: BattleMon) (team: BattleMon list) : int option =
+        let activeScore = bestAvailableScore active target
+        let activeLowHp = active.Hp * 4 <= active.MaxHp
+        let activeIsWalled =
+            active.Moves
+            |> List.filter (fun move -> move.Power > 0)
+            |> List.forall (fun move -> Damage.effectivenessTimesTen move target = 0)
+
+        if not activeLowHp && not activeIsWalled then
+            None
+        else
+            team
+            |> List.mapi (fun index mon -> index, mon)
+            |> List.filter (fun (index, mon) -> index > 0 && not (BattleMon.isFainted mon))
+            |> List.map (fun (index, mon) -> index, mon, bestAvailableScore mon target)
+            |> List.sortByDescending (fun (_, _, score) -> score)
+            |> List.tryFind (fun (_, _, score) -> score > activeScore + 20)
+            |> Option.map (fun (index, _, _) -> index)

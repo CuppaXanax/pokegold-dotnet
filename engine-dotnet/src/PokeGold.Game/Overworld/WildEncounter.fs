@@ -31,6 +31,12 @@ module WildEncounter =
         let threshold = rate * 16 / 100
         roll < threshold
 
+    let effectiveRate (player: PlayerState) (rate: int) : int =
+        match player.Party with
+        | lead :: _ when lead.HeldItem = Some "CLEANSE_TAG" ->
+            max 0 (rate * 2 / 3)
+        | _ -> rate
+
     /// Encounter probability table (7 slots) from data/wild/probabilities.asm.
     /// Each entry is the cumulative threshold out of 100.
     let private probTable = [| 30; 60; 80; 90; 95; 99; 100 |]
@@ -118,7 +124,9 @@ module WildEncounter =
             | Some table when collId = CollWater && table.WaterRate > 0 ->
                 let encounterRoll = rng.Next(256)
 
-                if not (shouldEncounter table.WaterRate encounterRoll) then
+                let rate = effectiveRate player table.WaterRate
+
+                if not (shouldEncounter rate encounterRoll) then
                     None
                 else
                     let slotRoll = rng.Next(100)
@@ -131,7 +139,7 @@ module WildEncounter =
                         Some(entry.Species, entry.Level)
             | Some table when collId <> CollWater && table.GrassRate <> (0, 0, 0) ->
                 let encounterRoll = rng.Next(256)
-                let rate = currentGrassRate table
+                let rate = currentGrassRate table |> effectiveRate player
 
                 if not (shouldEncounter rate encounterRoll) then
                     None
@@ -146,6 +154,8 @@ module WildEncounter =
                         Some(entry.Species, entry.Level)
             | _ ->
                 let encounterRoll = rng.Next(256)
+
+                let fallbackRate = effectiveRate player fallbackRate
 
                 if not (shouldEncounter fallbackRate encounterRoll) then
                     None

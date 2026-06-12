@@ -155,35 +155,41 @@ module ConformanceLedger =
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "PokedexScene"; "SummaryScene" ]
 
-          yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is present in move data; battle conformance status has not been audited in the ledger yet."
+          yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_ACCURACY_DOWN"; "EFFECT_ACCURACY_DOWN_HIT"; "EFFECT_ALL_UP_HIT"; "EFFECT_ALWAYS_HIT"; "EFFECT_ATTACK_DOWN"
               "EFFECT_ATTACK_DOWN_2"; "EFFECT_ATTACK_DOWN_HIT"; "EFFECT_ATTACK_UP"; "EFFECT_ATTACK_UP_2"; "EFFECT_ATTACK_UP_HIT"; "EFFECT_ATTRACT"
-              "EFFECT_BATON_PASS"; "EFFECT_BEAT_UP"; "EFFECT_BELLY_DRUM"; "EFFECT_BIDE"; "EFFECT_BURN_HIT"; "EFFECT_CONFUSE"; "EFFECT_CONFUSE_HIT"
-              "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_COUNTER"; "EFFECT_CURSE"; "EFFECT_DEFENSE_CURL"; "EFFECT_DEFENSE_DOWN"
-              "EFFECT_DEFENSE_DOWN_2"; "EFFECT_DEFENSE_DOWN_HIT"; "EFFECT_DEFENSE_UP"; "EFFECT_DEFENSE_UP_2"; "EFFECT_DEFENSE_UP_HIT"
-              "EFFECT_DESTINY_BOND"; "EFFECT_DISABLE"; "EFFECT_DOUBLE_HIT"; "EFFECT_DREAM_EATER"; "EFFECT_EARTHQUAKE"; "EFFECT_ENCORE"
-              "EFFECT_ENDURE"; "EFFECT_EVASION_DOWN"; "EFFECT_EVASION_UP"; "EFFECT_FALSE_SWIPE"; "EFFECT_FLAME_WHEEL"; "EFFECT_FLINCH_HIT"
-              "EFFECT_FLY"; "EFFECT_FOCUS_ENERGY"; "EFFECT_FORCE_SWITCH"; "EFFECT_FORESIGHT"; "EFFECT_FREEZE_HIT"; "EFFECT_FRUSTRATION"
+              "EFFECT_BEAT_UP"; "EFFECT_BELLY_DRUM"; "EFFECT_BURN_HIT"; "EFFECT_CONFUSE"; "EFFECT_CONFUSE_HIT"; "EFFECT_COUNTER"; "EFFECT_CURSE"
+              "EFFECT_DEFENSE_CURL"; "EFFECT_DEFENSE_DOWN"; "EFFECT_DEFENSE_DOWN_2"; "EFFECT_DEFENSE_DOWN_HIT"; "EFFECT_DEFENSE_UP"; "EFFECT_DEFENSE_UP_2"
+              "EFFECT_DEFENSE_UP_HIT"; "EFFECT_DESTINY_BOND"; "EFFECT_DISABLE"; "EFFECT_DOUBLE_HIT"; "EFFECT_DREAM_EATER"; "EFFECT_EARTHQUAKE"
+              "EFFECT_ENCORE"; "EFFECT_ENDURE"; "EFFECT_EVASION_DOWN"; "EFFECT_EVASION_UP"; "EFFECT_FALSE_SWIPE"; "EFFECT_FLAME_WHEEL"
+              "EFFECT_FLINCH_HIT"; "EFFECT_FLY"; "EFFECT_FOCUS_ENERGY"; "EFFECT_FORESIGHT"; "EFFECT_FREEZE_HIT"; "EFFECT_FRUSTRATION"
               "EFFECT_FURY_CUTTER"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_HEAL"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
               "EFFECT_HYPER_BEAM"; "EFFECT_JUMP_KICK"; "EFFECT_LEECH_HIT"; "EFFECT_LEECH_SEED"; "EFFECT_LEVEL_DAMAGE"; "EFFECT_LIGHT_SCREEN"
-              "EFFECT_LOCK_ON"; "EFFECT_MAGNITUDE"; "EFFECT_MEAN_LOOK"; "EFFECT_METRONOME"; "EFFECT_MIMIC"; "EFFECT_MIRROR_COAT"
-              "EFFECT_MIRROR_MOVE"; "EFFECT_MIST"; "EFFECT_MOONLIGHT"; "EFFECT_MORNING_SUN"; "EFFECT_MULTI_HIT"; "EFFECT_NIGHTMARE"
-              "EFFECT_NORMAL_HIT"; "EFFECT_OHKO"; "EFFECT_PAIN_SPLIT"; "EFFECT_PARALYZE"; "EFFECT_PARALYZE_HIT"; "EFFECT_PAY_DAY"
-              "EFFECT_PERISH_SONG"; "EFFECT_POISON"; "EFFECT_POISON_HIT"; "EFFECT_POISON_MULTI_HIT"; "EFFECT_PRESENT"; "EFFECT_PRIORITY_HIT"
-              "EFFECT_PROTECT"; "EFFECT_PSYCH_UP"; "EFFECT_PSYWAVE"; "EFFECT_PURSUIT"; "EFFECT_RAGE"; "EFFECT_RAIN_DANCE"; "EFFECT_RAMPAGE"
-              "EFFECT_RAPID_SPIN"; "EFFECT_RAZOR_WIND"; "EFFECT_RECOIL_HIT"; "EFFECT_REFLECT"; "EFFECT_RESET_STATS"; "EFFECT_RETURN"
-              "EFFECT_REVERSAL"; "EFFECT_ROLLOUT"; "EFFECT_SACRED_FIRE"; "EFFECT_SAFEGUARD"; "EFFECT_SANDSTORM"; "EFFECT_SELFDESTRUCT"
-              "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"; "EFFECT_SLEEP"; "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"
-              "EFFECT_SP_ATK_UP"; "EFFECT_SP_DEF_DOWN_HIT"; "EFFECT_SP_DEF_UP_2"; "EFFECT_SPEED_DOWN"; "EFFECT_SPEED_DOWN_2"; "EFFECT_SPEED_DOWN_HIT"
-              "EFFECT_SPEED_UP_2"; "EFFECT_SPIKES"; "EFFECT_SPITE"; "EFFECT_SPLASH"; "EFFECT_STATIC_DAMAGE"; "EFFECT_STOMP"; "EFFECT_SUBSTITUTE"
-              "EFFECT_SUNNY_DAY"; "EFFECT_SUPER_FANG"; "EFFECT_SWAGGER"; "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"; "EFFECT_THUNDER"
-              "EFFECT_TOXIC"; "EFFECT_TRANSFORM"; "EFFECT_TRAP_TARGET"; "EFFECT_TRI_ATTACK"; "EFFECT_TRIPLE_KICK"; "EFFECT_TWISTER" ]
+              "EFFECT_LOCK_ON"; "EFFECT_MAGNITUDE"; "EFFECT_MEAN_LOOK"; "EFFECT_MIRROR_COAT"; "EFFECT_MIST"; "EFFECT_MOONLIGHT"
+              "EFFECT_MORNING_SUN"; "EFFECT_MULTI_HIT"; "EFFECT_NIGHTMARE"; "EFFECT_NORMAL_HIT"; "EFFECT_OHKO"; "EFFECT_PAIN_SPLIT"
+              "EFFECT_PARALYZE"; "EFFECT_PARALYZE_HIT"; "EFFECT_PAY_DAY"; "EFFECT_PERISH_SONG"; "EFFECT_POISON"; "EFFECT_POISON_HIT"
+              "EFFECT_POISON_MULTI_HIT"; "EFFECT_PRESENT"; "EFFECT_PRIORITY_HIT"; "EFFECT_PROTECT"; "EFFECT_PSYCH_UP"; "EFFECT_PSYWAVE"
+              "EFFECT_RAGE"; "EFFECT_RAIN_DANCE"; "EFFECT_RAMPAGE"; "EFFECT_RAPID_SPIN"; "EFFECT_RAZOR_WIND"; "EFFECT_RECOIL_HIT"
+              "EFFECT_REFLECT"; "EFFECT_RESET_STATS"; "EFFECT_RETURN"; "EFFECT_REVERSAL"; "EFFECT_ROLLOUT"; "EFFECT_SACRED_FIRE"
+              "EFFECT_SAFEGUARD"; "EFFECT_SANDSTORM"; "EFFECT_SELFDESTRUCT"; "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"; "EFFECT_SLEEP"
+              "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"; "EFFECT_SP_ATK_UP"; "EFFECT_SP_DEF_DOWN_HIT"; "EFFECT_SP_DEF_UP_2"; "EFFECT_SPEED_DOWN"
+              "EFFECT_SPEED_DOWN_2"; "EFFECT_SPEED_DOWN_HIT"; "EFFECT_SPEED_UP_2"; "EFFECT_SPIKES"; "EFFECT_SPITE"; "EFFECT_SPLASH"
+              "EFFECT_STATIC_DAMAGE"; "EFFECT_STOMP"; "EFFECT_SUBSTITUTE"; "EFFECT_SUNNY_DAY"; "EFFECT_SUPER_FANG"; "EFFECT_SWAGGER"
+              "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"; "EFFECT_THUNDER"; "EFFECT_TOXIC"; "EFFECT_TRAP_TARGET"; "EFFECT_TRI_ATTACK"
+              "EFFECT_TRIPLE_KICK"; "EFFECT_TWISTER"; "EFFECT_TRANSFORM"
+              "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
+              "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
+
+          yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."
+            []
 
           yield! many ItemFieldMenu Unknown [ CriticalPathJohto; RequiredFor100Percent ] "Item field-menu behavior exists in data; conformance status has not been audited in the ledger yet."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_CURRENT"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
 
-          yield! many ItemBattleMenu Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Item battle-menu behavior exists in data; conformance status has not been audited in the ledger yet."
-            [ "ITEMMENU_CLOSE"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
+          yield entry ItemBattleMenu "ITEMMENU_PARTY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene item menu supports active-mon HP/status item use and runtime tests cover battle item use."
+
+          yield! many ItemBattleMenu ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene ball/item filtering covers close-after-use balls and excludes unusable battle items from the selectable battle item menu."
+            [ "ITEMMENU_CLOSE"; "ITEMMENU_NOUSE" ]
 
           yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "BattleTests cover party-held item propagation and end-of-turn held healing behavior."
             [ "HELD_LEFTOVERS"; "HELD_BERRY" ]
@@ -201,9 +207,12 @@ module ConformanceLedger =
           yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover status/confusion cure berries in the residual held-item slot."
             [ "HELD_HEAL_BURN"; "HELD_HEAL_CONFUSION"; "HELD_HEAL_FREEZE"; "HELD_HEAL_PARALYZE"; "HELD_HEAL_POISON"; "HELD_HEAL_SLEEP"; "HELD_HEAL_STATUS" ]
 
-          yield! many ItemHeldEffect Unknown [ RequiredFor100Percent; SideSystem ] "Held-item behavior exists in data; conformance status has not been audited in the ledger yet."
-            [ "HELD_BRIGHTPOWDER"; "HELD_CLEANSE_TAG"; "HELD_CRITICAL_UP"; "HELD_ESCAPE"; "HELD_FLINCH"
-              "HELD_METAL_POWDER"; "HELD_NONE"; "HELD_RESTORE_PP" ]
+          yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover remaining special held-item mechanics: accuracy reduction, crit boost, flinch, PP restore, Smoke Ball escape, and Ditto Metal Powder defenses."
+            [ "HELD_BRIGHTPOWDER"; "HELD_CRITICAL_UP"; "HELD_ESCAPE"; "HELD_FLINCH"; "HELD_METAL_POWDER"; "HELD_RESTORE_PP" ]
+
+          yield entry ItemHeldEffect "HELD_CLEANSE_TAG" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "WildEncounterTests cover Cleanse Tag reducing encounter rate when held by the lead party mon."
+
+          yield entry ItemHeldEffect "HELD_NONE" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HELD_NONE intentionally has no battle effect."
 
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
             [ "CUT"; "SURF"; "STRENGTH"; "FLY"; "FLASH"; "WHIRLPOOL"; "WATERFALL" ]

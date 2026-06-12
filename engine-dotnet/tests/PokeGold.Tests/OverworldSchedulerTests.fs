@@ -174,6 +174,153 @@ let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
     Assert.True(scene.DebugPlayer.Money > 1000, "trainer battle should award prize money")
 
 [<Fact>]
+let ``wild battle runtime catches Pokemon with Master Ball`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "WildCatchScene"
+            [| Loadwildmon("RATTATA", 4)
+               Startbattle
+               Writetext "CatchDone"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "CatchDone", "done<DONE>" ] }
+
+    let ember = Moves.byName "EMBER"
+    let mon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "EMBER", ember.Pp ] }
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ mon ]
+            Bag = Bag.add "MASTER_BALL" 1 Bag.empty }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let buttons =
+            match frame % 6 with
+            | 0 -> { Buttons.none with Right = true }
+            | 2 -> { Buttons.none with A = true }
+            | 4 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (stack.[stack.Count - 1].Update buttons)
+
+    Assert.Equal(1, stack.Count)
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push (:? TextBoxScene) -> ()
+    | other -> failwithf "expected resumed catch script text, got %A" other
+
+    let rattataDex = (Species.byName "RATTATA").Dex
+    Assert.Equal(0, Bag.count "MASTER_BALL" scene.DebugPlayer.Bag)
+    Assert.Equal(2, scene.DebugPlayer.Party.Length)
+    Assert.Contains(rattataDex, scene.DebugPlayer.DexOwn)
+    Assert.Contains(rattataDex, scene.DebugPlayer.DexSeen)
+    Assert.Equal(Some "CatchDone", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``caught Pokemon goes to PC when party is full`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "PcCatchScene"
+            [| Loadwildmon("RATTATA", 4)
+               Startbattle
+               End |]
+    let party = [ for i in 1 .. 6 -> PartyMon.create (Species.byName "CYNDAQUIL").Dex (10 + i) ]
+    let player =
+        { PlayerStateOps.initial with
+            Party = party
+            Bag = Bag.add "MASTER_BALL" 1 Bag.empty }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let buttons =
+            match frame % 6 with
+            | 0 -> { Buttons.none with Right = true }
+            | 2 -> { Buttons.none with A = true }
+            | 4 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (stack.[stack.Count - 1].Update buttons)
+
+    Assert.Equal(6, scene.DebugPlayer.Party.Length)
+    Assert.Single(scene.DebugPlayer.Pc.Boxes.[scene.DebugPlayer.Pc.CurrentBox].Mons)
+
+[<Fact>]
+let ``wild battle loss heals party and halves money on script resume`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "WhiteoutScene"
+            [| Loadwildmon("MEWTWO", 100)
+               Startbattle
+               Writetext "AfterLoss"
+               End |]
+        |> fun s -> { s with Text = Map.ofList [ "AfterLoss", "after<DONE>" ] }
+
+    let splash = Moves.byName "SPLASH"
+    let faintable =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 2 with
+            Hp = 1
+            Moves = [ moveId "SPLASH", splash.Pp ] }
+    let player =
+        { PlayerStateOps.initial with
+            Money = 2000
+            Party = [ faintable ] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let buttons = if frame % 2 = 0 then { Buttons.none with A = true } else Buttons.none
+        applyTransition stack (stack.[stack.Count - 1].Update buttons)
+
+    Assert.Equal(1, stack.Count)
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push (:? TextBoxScene) -> ()
+    | other -> failwithf "expected post-loss script text, got %A" other
+
+    Assert.Equal(1000, scene.DebugPlayer.Money)
+    Assert.True(scene.DebugPlayer.Party.[0].Hp > 1, "loss should heal party")
+    Assert.Equal(Some "AfterLoss", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
 let ``phone contact script effects mutate player state`` () =
     let content = Content()
     let state =

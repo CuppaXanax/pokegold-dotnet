@@ -219,6 +219,26 @@ ordering; write one worked-example test in `BattleTests.fs` (fixed seed, fixed r
 asserted exact damage/state); flip the ledger entry to `FaithfulTested` with the test name.
 Batch ~10 effects per commit.
 
+### C′ (optional) — generate the worked examples from the real ROM as oracle
+
+Instead of hand-transcribing examples from the ASM, they can be machine-generated: this
+repo builds the **byte-identical retail ROM** (`make`, verified by `roms.sha1`), and
+`pokegold.sym` names every WRAM address. A one-off Python script driving a headless
+emulator (PyBoy — already used as the APU reference for M8) can poke battle state
+(species, stats, stages, move id, fixed RNG bytes) into symbol-mapped WRAM, step the
+damage/effect routine, and read back the result — sampled across a grid of cases and
+dumped as a JSON corpus checked into `tests/` (no emulator in CI; tests just consume the
+fixture). Scope it to **closed-form mechanics only** (damage, stat calc, catch rate, exp
+curves, type/crit/held-item modifiers); do not attempt lockstep overworld comparison —
+the port intentionally diverges there. This mechanizes the most error-prone part of
+Workstream C and upgrades those ledger entries to `FaithfulTested` against ground truth.
+
+(For the curious: static *semantic* equivalence ASM↔F# is not pursued — undecidable and
+meaningless given intentional divergence. Static *surface* totality — "every behavior the
+ASM can express is at least enumerated and classified" — is already enforced by
+`ConformanceLedgerTests` over the baked data; cheap extensions are DU-totality audits
+over `constants/collision_constants.asm`, text control codes, and trainer AI layers.)
+
 ---
 
 ## Workstream D — presentation (after A–C; ship-quality, not correctness)

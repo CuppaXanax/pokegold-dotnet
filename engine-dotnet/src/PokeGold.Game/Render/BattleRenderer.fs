@@ -108,6 +108,21 @@ module BattleRenderer =
             let ppStr = $"PP {curPp}/{maxPp}"
             drawText fb font (ScreenW - 1 - ppStr.Length) (13 + moves.Length) ppStr
 
+    let drawItemMenu (fb: Framebuffer) (font: Font) (items: string list) (cursor: int) =
+        drawBox fb font
+
+        items
+        |> List.truncate 4
+        |> List.iteri (fun i item ->
+            let row = 13 + i
+            if i = cursor then
+                for y in 0..6 do
+                    for x in 0..4 do
+                        if x <= y && x <= 6 - y then
+                            fb.SetPixel(2 * 8 + x, row * 8 + 1 + y, 0uy, 0uy, 0uy, 255uy)
+
+            drawText fb font 3 row item)
+
     /// Draw a single message line in the bottom box.
     let drawMessage (fb: Framebuffer) (font: Font) (line: string) =
         drawBox fb font
