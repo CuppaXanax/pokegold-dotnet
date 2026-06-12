@@ -253,6 +253,7 @@ Progress:
 - ✅ C1 batch 10: `EFFECT_SELFDESTRUCT`, `EFFECT_TRI_ATTACK`.
 - ✅ C1 batch 11: `EFFECT_ALL_UP_HIT`, `EFFECT_ATTACK_UP_HIT`,
   `EFFECT_DEFENSE_UP_HIT`, `EFFECT_DEFENSE_CURL`, `EFFECT_ROLLOUT`.
+- ✅ C1 batch 12: `EFFECT_DESTINY_BOND`, `EFFECT_SWAGGER`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

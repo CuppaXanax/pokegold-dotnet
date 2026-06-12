@@ -2386,6 +2386,40 @@ let ``C11 Defense Curl marks the user curled and Rollout doubles after STAB`` ()
     Assert.Equal(44, afterRollout.LastDamage)
     Assert.Equal(56, afterRollout.Foe.Hp)
 
+[<Fact>]
+let ``C12 audited destiny bond and swagger effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_DESTINY_BOND", [ DestinyBond ]
+          "EFFECT_SWAGGER", [ Swagger ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C12 Destiny Bond sets the user substatus`` () =
+    let destinyBond = Moves.byName "DESTINY_BOND"
+    let user = mon "USER" (ty "GHOST") (ty "GHOST") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after = Effects.applyCtx (mkCtx user foe destinyBond) DestinyBond
+
+    Assert.True(after.User.Volatile.DestinyBond)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("take its foe"))
+
+[<Fact>]
+let ``C12 Swagger raises target Attack before confusing it`` () =
+    let swagger = Moves.byName "SWAGGER"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after = Effects.applyCtx (mkCtx user foe swagger) Swagger
+
+    Assert.Equal(2, after.Foe.AtkStage)
+    Assert.True(after.Foe.Volatile.Confusion.IsSome)
+    Assert.Equal("FOE's ATTACK rose sharply!", after.Messages.[0])
+    Assert.Equal("FOE became confused!", after.Messages.[1])
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

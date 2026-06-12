@@ -721,9 +721,8 @@ module Effects =
             { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
 
         | Swagger ->
-            let confused = applyCtx { ctx with Messages = ctx.Messages } InflictConfuse
-            let foe = shiftStage Attack 2 confused.Foe
-            { confused with Foe = foe; Messages = confused.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] }
+            let foe = shiftStage Attack 2 ctx.Foe
+            applyCtx { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name}'s ATTACK rose sharply!" ] } InflictConfuse
 
         | ResetStats ->
             let user = { ctx.User with AtkStage = 0; DefStage = 0; SpdStage = 0; SpAtkStage = 0; SpDefStage = 0; AccStage = 0; EvaStage = 0 }
