@@ -408,6 +408,22 @@ let ``unmodelled opcodes become Unsupported but keep parsing`` () =
     )
 
 [<Fact>]
+let ``fade specials suspend as palette fade effects`` () =
+    let cases =
+        [ "FadeOutToWhite", PaletteFade(FadeOut, FadeToWhite)
+          "FadeOutToBlack", PaletteFade(FadeOut, FadeToBlack)
+          "FadeInFromWhite", PaletteFade(FadeIn, FadeToWhite)
+          "FadeInFromBlack", PaletteFade(FadeIn, FadeToBlack)
+          "ClearBGPalettes", PaletteFade(FadeOut, FadeToWhite) ]
+
+    for special, expected in cases do
+        let prog = parse (sprintf "S:\n\tspecial %s\n\tend\n" special)
+
+        match (Script.start "S" World.empty prog "TestMap").Outcome with
+        | Suspended(_, effect) -> Assert.Equal(expected, effect)
+        | other -> failwithf "expected %s to suspend, got %A" special other
+
+[<Fact>]
 let ``applymovementlasttalked maps to LAST_TALKED`` () =
     let prog =
         parse

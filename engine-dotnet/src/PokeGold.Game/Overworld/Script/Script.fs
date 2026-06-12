@@ -13,6 +13,14 @@ type BalanceDisplay =
     | CoinCase
     | MoneyAndCoins
 
+type PaletteFadeColor =
+    | FadeToBlack
+    | FadeToWhite
+
+type PaletteFadeDirection =
+    | FadeIn
+    | FadeOut
+
 /// Something the script needs the outside world to do before it can continue. The
 /// VM ([`Script`](#)) runs every *pure* command itself (control flow, flags, vars,
 /// scene ids) but **suspends** on anything that touches the player, the screen, the
@@ -84,6 +92,9 @@ type ScriptEffect =
     | ReanchorMap
     /// `pause` / `showemote` timing — wait a number of frames before resuming.
     | Pause of frames: int
+    /// `special Fade*` palette transitions. `engine/tilesets/timeofday_pals.asm`
+    /// advances four palette levels with two frames per level.
+    | PaletteFade of direction: PaletteFadeDirection * color: PaletteFadeColor
     /// `loadwildmon` — stage a wild encounter for the next `startbattle`.
     | LoadWild of species: string * level: int
     /// `loadtrainer` — stage a trainer battle for the next `startbattle`.
@@ -467,6 +478,11 @@ module Script =
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
+            | Special "FadeOutToWhite" -> suspend next world (PaletteFade(FadeOut, FadeToWhite))
+            | Special "FadeOutToBlack" -> suspend next world (PaletteFade(FadeOut, FadeToBlack))
+            | Special "FadeInFromWhite" -> suspend next world (PaletteFade(FadeIn, FadeToWhite))
+            | Special "FadeInFromBlack" -> suspend next world (PaletteFade(FadeIn, FadeToBlack))
+            | Special "ClearBGPalettes" -> suspend next world (PaletteFade(FadeOut, FadeToWhite))
             | Special "SlotMachine" -> suspend next world (GameCornerGame("SLOT_MACHINE", vm.ScriptVar <> 0))
             | Special "CardFlip" -> suspend next world (GameCornerGame("CARD_FLIP", false))
             | Special "GameCornerPrizeMonCheckDex" -> suspend next world (RegisterPrizeDex vm.ScriptVar)

@@ -45,6 +45,13 @@ module TrainerSight =
             && isInSightCone npc px py)
         |> Option.map fst
 
+type private PaletteFadeRun =
+    { Color: PaletteFadeColor
+      FromAlpha: int
+      ToAlpha: int
+      TotalFrames: int
+      ElapsedFrames: int }
+
 /// The walk-around-the-map scene. Owns the mutable overworld state plus the
 /// running-script bookkeeping that turns NPC/sign interactions and coord triggers
 /// into real GSC scripts: it drives the pure [`Script`] VM, enacting each
@@ -83,6 +90,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// A script suspended by `pause` / timed cosmetic effects.
     let mutable pauseFrames = 0
     let mutable pauseVm: ScriptVm option = None
+    /// Palette fade state for `Fade*` specials. A finished fade-out persists as an
+    /// overlay until the matching fade-in removes it, mirroring script usage.
+    let mutable fadeOverlay: (PaletteFadeColor * byte) option = None
+    let mutable fadeRun: PaletteFadeRun option = None
+    let mutable fadeVm: ScriptVm option = None
+    let paletteFadeFrames = 8
     /// Active `follow follower, leader` relationship.
     let mutable followPair: (ActorId * ActorId) option = None
     let mutable lastText: (string * string) option = None
@@ -104,6 +117,44 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         if current > amount then 0
         elif current = amount then 1
         else 2
+
+    let fadeAlpha (run: PaletteFadeRun) =
+        let elapsed = min run.TotalFrames (max 0 run.ElapsedFrames)
+        let alpha = run.FromAlpha + ((run.ToAlpha - run.FromAlpha) * elapsed / run.TotalFrames)
+        byte (min 255 (max 0 alpha))
+
+    let currentFadeAlpha color =
+        match fadeRun with
+        | Some run when run.Color = color -> int (fadeAlpha run)
+        | _ ->
+            match fadeOverlay with
+            | Some(c, alpha) when c = color -> int alpha
+            | _ -> 0
+
+    let overlayRgb =
+        function
+        | FadeToBlack -> 0, 0, 0
+        | FadeToWhite -> 255, 255, 255
+
+    let applyFadeOverlay (fb: Framebuffer) =
+        let overlay =
+            match fadeRun with
+            | Some run -> Some(run.Color, fadeAlpha run)
+            | None -> fadeOverlay
+
+        match overlay with
+        | Some(color, alpha) when alpha > 0uy ->
+            let r, g, b = overlayRgb color
+            let a = int alpha
+            let inv = 255 - a
+            let pixels = fb.Pixels
+            let mutable i = 0
+            while i < pixels.Length do
+                pixels.[i] <- byte ((int pixels.[i] * inv + r * a) / 255)
+                pixels.[i + 1] <- byte ((int pixels.[i + 1] * inv + g * a) / 255)
+                pixels.[i + 2] <- byte ((int pixels.[i + 2] * inv + b * a) / 255)
+                i <- i + 4
+        | _ -> ()
 
     let scriptMenuOptionCount mapId menu =
         if menu = ".Gold_MenuHeader"
@@ -509,6 +560,61 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         else
             Stay
 
+    member private _.BeginPaletteFade(vm: ScriptVm, direction: PaletteFadeDirection, color: PaletteFadeColor) =
+        let fromAlpha, toAlpha =
+            match direction with
+            | FadeOut -> currentFadeAlpha color, 255
+            | FadeIn ->
+                let current = currentFadeAlpha color
+                (if current = 0 then 255 else current), 0
+
+        fadeRun <-
+            Some
+                { Color = color
+                  FromAlpha = fromAlpha
+                  ToAlpha = toAlpha
+                  TotalFrames = paletteFadeFrames
+                  ElapsedFrames = 0 }
+        fadeOverlay <- None
+        fadeVm <- Some vm
+
+    member private _.BeginMapEntryFadeIn() =
+        match fadeOverlay with
+        | Some(color, alpha) when alpha > 0uy ->
+            fadeRun <-
+                Some
+                    { Color = color
+                      FromAlpha = int alpha
+                      ToAlpha = 0
+                      TotalFrames = paletteFadeFrames
+                      ElapsedFrames = 0 }
+            fadeOverlay <- None
+            fadeVm <- None
+        | _ -> ()
+
+    member private this.AdvancePaletteFade() : Transition =
+        match fadeRun with
+        | None -> Stay
+        | Some run ->
+            let next =
+                { run with
+                    ElapsedFrames = min run.TotalFrames (run.ElapsedFrames + 1) }
+
+            if next.ElapsedFrames >= next.TotalFrames then
+                fadeRun <- None
+                fadeOverlay <-
+                    if next.ToAlpha = 0 then None
+                    else Some(next.Color, byte next.ToAlpha)
+
+                match fadeVm with
+                | Some vm ->
+                    fadeVm <- None
+                    this.Drive(Script.resume None world vm)
+                | None -> Stay
+            else
+                fadeRun <- Some next
+                Stay
+
     member private this.RunSceneScript(mapId: string) : Transition =
         let sceneIdx = World.getScene mapId world
         let sceneLabel = MapEvents.sceneLabelAt sceneIdx state.Events
@@ -523,6 +629,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         balanceOverlay <- None
         resetObjectPresence ()
         firedCoords <- Set.empty
+        this.BeginMapEntryFadeIn()
 
         if playMusic then
             this.PlayMapMusic nextState.MapId
@@ -1355,6 +1462,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             pauseFrames <- frames
                             pauseVm <- Some vm
                             stop Stay
+                    | PaletteFade(direction, color) ->
+                        this.BeginPaletteFade(vm, direction, color)
+                        stop Stay
                     | ReloadMap ->
                         this.ReloadCurrentMap()
                         if World.getVar "__dont_restart_map_music" world = 0 then
@@ -1487,6 +1597,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         [ if pending.IsSome then "pending child scene"
           if runningMove.IsSome then "scripted movement"
           if pauseVm.IsSome || pauseFrames > 0 then "script pause"
+          if fadeVm.IsSome || fadeRun.IsSome || fadeOverlay.IsSome then "palette fade"
           if scriptQueue.Count > 0 then "queued script continuation"
           if followPair.IsSome then "active follow relationship" ]
 
@@ -1506,6 +1617,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         world <- w
         player <- p
         balanceOverlay <- None
+        fadeOverlay <- None
+        fadeRun <- None
+        fadeVm <- None
         scriptQueue.Clear()
         resetObjectPresence ()
         this.RunMapCallbacks state.MapId
@@ -1631,6 +1745,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         scriptQueue.Clear()
         pending <- None
         restoreTransition <- None
+        fadeOverlay <- None
+        fadeRun <- None
+        fadeVm <- None
 
         match this.EnterMap(ns, true) with
         | Stay -> ()
@@ -1656,6 +1773,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             match transitionFromRestore, runningMove with
             | Some transition, _ -> transition
+            | None, _ when fadeRun.IsSome -> this.AdvancePaletteFade()
             // An applymovement is animating: advance the actor a frame, write it back,
             // and resume the suspended script once the run reaches step_end.
             | None, Some(vm, actor, run) ->
@@ -2057,3 +2175,5 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 WindowRenderer.drawBox fb content.Font TextRenderer.palette 5 0 14 5
                 WindowRenderer.drawString fb content.Font TextRenderer.palette 6 1 (sprintf "MONEY $%d" player.Money)
                 WindowRenderer.drawString fb content.Font TextRenderer.palette 6 3 (sprintf "COIN %d" player.Coins)
+
+            applyFadeOverlay fb

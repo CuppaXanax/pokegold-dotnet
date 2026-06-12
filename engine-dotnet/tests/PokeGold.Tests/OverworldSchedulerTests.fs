@@ -80,6 +80,22 @@ let private scriptedScene content mapId x y facing label commands =
 let private moveId name =
     MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name)
 
+let private averageBrightness (fb: Framebuffer) =
+    let pixels = fb.Pixels
+    let mutable total = 0L
+    let mutable i = 0
+
+    while i < pixels.Length do
+        total <- total + int64 (int pixels.[i]) + int64 (int pixels.[i + 1]) + int64 (int pixels.[i + 2])
+        i <- i + 4
+
+    float total / float Display.PixelCount
+
+let private renderBrightness (scene: Scene) =
+    let fb = Framebuffer()
+    scene.Render fb
+    averageBrightness fb
+
 [<Fact>]
 let ``restore runs map callbacks through the scheduler`` () =
     let content = Content()
@@ -94,6 +110,55 @@ let ``restore runs map callbacks through the scheduler`` () =
 
     Assert.True(World.hasFlag "ENGINE_FLYPOINT_NEW_BARK" scene.DebugWorld)
     Assert.False(World.hasEvent "EVENT_FIRST_TIME_BANKING_WITH_MOM" scene.DebugWorld)
+
+[<Fact>]
+let ``fade specials render palette overlay and resume script after palette steps`` () =
+    let content = Content()
+    let doneEvent = "EVENT_TEST_FADE_DONE"
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "FadeScene"
+            [| Special "FadeOutToBlack"
+               Special "FadeInFromBlack"
+               Setevent doneEvent
+               End |]
+
+    let baseline =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" 5 5 Down)
+    baseline.Restore(World.empty, PlayerStateOps.initial)
+    let baselineBrightness = renderBrightness (baseline :> Scene)
+
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    let tickFade frames =
+        for _ in 1 .. frames do
+            match (scene :> Scene).Update Buttons.none with
+            | Stay -> ()
+            | other -> failwithf "expected fade tick to stay, got %A" other
+
+    Assert.False(World.hasEvent doneEvent scene.DebugWorld)
+    Assert.False(scene.CanCapture)
+
+    tickFade 4
+    let midFadeBrightness = renderBrightness (scene :> Scene)
+    Assert.True(midFadeBrightness < baselineBrightness * 0.75, sprintf "mid fade brightness %f was not below baseline %f" midFadeBrightness baselineBrightness)
+
+    tickFade 4
+    Assert.False(World.hasEvent doneEvent scene.DebugWorld)
+    let blackBrightness = renderBrightness (scene :> Scene)
+    Assert.True(blackBrightness < 1.0, sprintf "fade-in should begin from black, brightness was %f" blackBrightness)
+
+    tickFade 8
+    Assert.True(World.hasEvent doneEvent scene.DebugWorld)
+    Assert.True(scene.CanCapture)
+    let restoredBrightness = renderBrightness (scene :> Scene)
+    Assert.True(restoredBrightness > baselineBrightness * 0.8, sprintf "fade-in did not restore scene brightness %f vs %f" restoredBrightness baselineBrightness)
 
 [<Fact>]
 let ``money and coin script effects mutate player state`` () =
