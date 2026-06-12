@@ -1756,6 +1756,86 @@ let private findSeed pred =
         seed <- seed + 1u
     seed
 
+// --- Workstream C1: first battle-surface move-effect audit --------------------
+
+[<Fact>]
+let ``C1 audited battle-surface effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_NORMAL_HIT", [ Damage ]
+          "EFFECT_ACCURACY_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat Accuracy) ]
+          "EFFECT_CONFUSE_HIT", [ Damage; EffectChance InflictConfuse ]
+          "EFFECT_THUNDER", [ Damage; EffectChance InflictParalyze ]
+          "EFFECT_SLEEP", [ InflictSleep ]
+          "EFFECT_PARALYZE", [ InflictParalyze ]
+          "EFFECT_BURN_HIT", [ Damage; EffectChance InflictBurn ]
+          "EFFECT_ATTACK_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat Attack) ]
+          "EFFECT_HYPER_BEAM", [ Damage; BeginRecharge ]
+          "EFFECT_PRIORITY_HIT", [ Damage ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C1 secondary hit effects damage first and apply their effect on success`` () =
+    let smoke =
+        { move "SMOKESCREEN_HIT" "EFFECT_ACCURACY_DOWN_HIT" 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+    let punch =
+        { move "DYNAMICPUNCH" "EFFECT_CONFUSE_HIT" 40 (ty "FIGHTING") with Accuracy = 100; EffectChance = 255 }
+    let ember =
+        { move "EMBER_HIT" "EFFECT_BURN_HIT" 40 (ty "FIRE") with Accuracy = 100; EffectChance = 255 }
+
+    let apply move =
+        let user = { mon "USER" (ty "FIRE") (ty "FIRE") 50 200 100 100 200 with Moves = [ move ]; Pp = [ 35 ] }
+        let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
+        Battle.create user foe 42u |> Battle.chooseMove 0
+
+    let afterSmoke = apply smoke
+    Assert.True(afterSmoke.Enemy.Hp < 200)
+    Assert.Equal(-1, afterSmoke.Enemy.AccStage)
+
+    let afterPunch = apply punch
+    Assert.True(afterPunch.Enemy.Hp < 200)
+    Assert.True(afterPunch.Enemy.Volatile.Confusion.IsSome)
+
+    let afterEmber = apply ember
+    Assert.True(afterEmber.Enemy.Hp < 200)
+    Assert.Equal(Burn, afterEmber.Enemy.Status)
+
+[<Fact>]
+let ``C1 Thunder follows rain and sun accuracy overrides`` () =
+    let thunder = { Moves.byName "THUNDER" with Accuracy = 0 }
+    let user = { mon "USER" (ty "ELECTRIC") (ty "ELECTRIC") 50 200 100 100 200 with Moves = [ thunder ]; Pp = [ 10 ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
+
+    let rainy = { Battle.create user foe 42u with WeatherType = Some "RAIN" }
+    let afterRain = Battle.chooseMove 0 rainy
+    Assert.True(afterRain.Enemy.Hp < foe.Hp)
+
+    let sunnyThunder = { Moves.byName "THUNDER" with Accuracy = 100 }
+    let sunnyUser = { user with Moves = [ sunnyThunder ] }
+    let missSeed = findSeed (fun draw -> draw >= 128)
+    let sunny = { Battle.create sunnyUser foe missSeed with WeatherType = Some "SUN" }
+    let afterSun = Battle.chooseMove 0 sunny
+    Assert.Contains(afterSun.Messages, fun m -> m.Contains "attack missed!")
+    Assert.Equal(foe.Hp, afterSun.Enemy.Hp)
+
+[<Fact>]
+let ``C1 Hyper Beam recharge and priority hit follow battle-order gates`` () =
+    let beam = { Moves.byName "HYPER_BEAM" with Accuracy = 100 }
+    let slowBeamUser = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ beam ]; Pp = [ 5 ] }
+    let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
+    let afterBeam = Battle.create slowBeamUser foe 42u |> Battle.chooseMove 0
+    Assert.True(afterBeam.Player.Volatile.Recharge)
+
+    let quick = { Moves.byName "QUICK_ATTACK" with Accuracy = 100 }
+    let slowQuickUser = { mon "SLOW" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ quick ]; Pp = [ 30 ] }
+    let fastFoe = { mon "FAST" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ growl ]; Pp = [ 40 ] }
+    let afterQuick = Battle.create slowQuickUser fastFoe 42u |> Battle.chooseMove 0
+    let quickIndex = afterQuick.Messages |> List.findIndex (fun m -> m.Contains "SLOW used QUICK_ATTACK")
+    let growlIndex = afterQuick.Messages |> List.findIndex (fun m -> m.Contains "FAST used GROWL")
+    Assert.True(quickIndex < growlIndex)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

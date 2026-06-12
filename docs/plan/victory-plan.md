@@ -219,6 +219,11 @@ ordering; write one worked-example test in `BattleTests.fs` (fixed seed, fixed r
 asserted exact damage/state); flip the ledger entry to `FaithfulTested` with the test name.
 Batch ~10 effects per commit.
 
+Progress:
+- ✅ C1 batch 1: `EFFECT_NORMAL_HIT`, `EFFECT_ACCURACY_DOWN_HIT`, `EFFECT_CONFUSE_HIT`,
+  `EFFECT_THUNDER`, `EFFECT_SLEEP`, `EFFECT_PARALYZE`, `EFFECT_BURN_HIT`,
+  `EFFECT_ATTACK_DOWN_HIT`, `EFFECT_HYPER_BEAM`, `EFFECT_PRIORITY_HIT`.
+
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 
 Instead of hand-transcribing examples from the ASM, they can be machine-generated: this

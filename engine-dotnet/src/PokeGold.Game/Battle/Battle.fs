@@ -216,13 +216,19 @@ module Battle =
 
     /// Accuracy/miss check, faithful to `BattleCommand_CheckHit` in
     /// `engine/battle/effect_commands.asm`. Returns `(hit, rng')`.
-    let private checkHit (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng)
+    let private checkHit (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng) (weatherType: string option)
         : bool * Rng =
         if move.Effect = "EFFECT_ALWAYS_HIT" then
             (true, rng)
+        elif move.Effect = "EFFECT_THUNDER" && weatherType = Some "RAIN" then
+            (true, rng)
         else
 
-        let accByte = move.Accuracy * 255 / 100
+        let accByte =
+            if move.Effect = "EFFECT_THUNDER" && weatherType = Some "SUN" then
+                128
+            else
+                move.Accuracy * 255 / 100
 
         let modifiedAcc =
             let staged = BattleMon.applyAccEvaStages accByte user.AccStage foe.EvaStage
@@ -268,7 +274,7 @@ module Battle =
         // Struggle always hits (effect_commands.asm: EFFECT_ALWAYS_HIT path).
         let hit, rng =
             if isStruggle then (true, rng)
-            else checkHit user foe move rng
+            else checkHit user foe move rng battle.WeatherType
 
         if not hit then
             let msgs = [ intro; $"{user.Species.Name}'s attack missed!" ]
