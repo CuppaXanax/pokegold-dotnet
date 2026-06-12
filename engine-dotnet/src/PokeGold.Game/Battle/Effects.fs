@@ -104,6 +104,19 @@ module Effects =
         else
             { defender with Hp = max 0 (defender.Hp - dmg) }, dmg, []
 
+    let futureSightStoredDamage (user: BattleMon) (foe: BattleMon) (move: MoveData) =
+        let atk, def =
+            if TypeChart.isPhysical move.Type then
+                BattleMon.effectiveAttack user, BattleMon.effectiveDefense foe
+            else
+                BattleMon.effectiveSpAttack user, BattleMon.effectiveSpDefense foe
+        let mutable dmg = user.Level * 2 / 5 + 2
+        dmg <- dmg * move.Power
+        dmg <- dmg * atk
+        dmg <- dmg / max 1 def
+        dmg <- dmg / 50
+        min 997 dmg + 2
+
     let private safeguardBlocked (ctx: MoveContext) : bool =
         let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
         defenderSide.SafeguardTimer.IsSome && defenderSide.SafeguardTimer.Value > 0
@@ -1111,8 +1124,17 @@ module Effects =
             { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} is locked into a rampage!" ] }
 
         | BeginFutureSight ->
-            let user = { ctx.User with Volatile = { ctx.User.Volatile with FutureSightCounter = Some 2; FutureSightMove = Some ctx.Move } }
-            { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} laid a Future Sight!" ] }
+            if ctx.User.Volatile.FutureSightCounter.IsSome then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ]; LastDamage = 0 }
+            else
+                let storedDamage = futureSightStoredDamage ctx.User ctx.Foe ctx.Move
+                let vol =
+                    { ctx.User.Volatile with
+                        FutureSightCounter = Some 4
+                        FutureSightMove = Some ctx.Move
+                        FutureSightDamage = Some storedDamage }
+                let user = { ctx.User with Volatile = vol }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} foresaw an attack!" ]; LastDamage = 0 }
 
         // --- M13.5: damage-shaping & fixed damage family ---
 

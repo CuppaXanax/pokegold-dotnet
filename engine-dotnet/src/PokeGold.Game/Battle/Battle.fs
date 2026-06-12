@@ -362,6 +362,8 @@ module Battle =
 
         if move.Effect = "EFFECT_BEAT_UP" && not isStruggle then
             runBeatUp rng
+        elif move.Effect = "EFFECT_FUTURE_SIGHT" && not isStruggle then
+            runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType
@@ -503,17 +505,29 @@ module Battle =
             | None -> m, []
 
     /// Future Sight payoff: countdown at end-of-turn and damage the foe on expiry.
-    let private applyFutureSight (m: BattleMon) (other: BattleMon) : BattleMon * BattleMon * string list =
-        match m.Volatile.FutureSightCounter, m.Volatile.FutureSightMove with
-        | Some turns, Some move when turns > 1 ->
-            let vol = { m.Volatile with FutureSightCounter = Some (turns - 1) }
-            ({ m with Volatile = vol }, other, [ $"{m.Species.Name}'s Future Sight is still charging!" ])
-        | Some 1, Some move ->
-            let dmg = Damage.calc m other move false Damage.MaxRoll false
-            let other' = { other with Hp = max 0 (other.Hp - dmg) }
-            let m' = { m with Volatile = { m.Volatile with FutureSightCounter = None; FutureSightMove = None } }
-            (m', other', [ $"{other'.Species.Name} was hit by Future Sight!" ])
-        | _ -> (m, other, [])
+    let private applyFutureSight (m: BattleMon) (other: BattleMon) (rng: Rng) (weatherType: string option) : BattleMon * BattleMon * string list * Rng =
+        match m.Volatile.FutureSightCounter, m.Volatile.FutureSightMove, m.Volatile.FutureSightDamage with
+        | Some turns, Some move, Some storedDamage ->
+            let remaining = turns - 1
+            if remaining = 1 then
+                let vol = { m.Volatile with FutureSightCounter = None; FutureSightMove = None; FutureSightDamage = None }
+                let m = { m with Volatile = vol }
+                let hit, rng = checkHit m other move rng weatherType
+                if hit then
+                    let spread, rng = Rng.next rng
+                    let roll = Damage.MinRoll + spread % (Damage.MaxRoll - Damage.MinRoll + 1)
+                    let dmg = storedDamage * roll / Damage.MaxRoll
+                    let other' = { other with Hp = max 0 (other.Hp - dmg) }
+                    (m, other', [ $"{other'.Species.Name} was hit by Future Sight!" ], rng)
+                else
+                    (m, other, [ $"{m.Species.Name}'s Future Sight missed!" ], rng)
+            elif remaining > 0 then
+                let vol = { m.Volatile with FutureSightCounter = Some remaining }
+                ({ m with Volatile = vol }, other, [], rng)
+            else
+                let vol = { m.Volatile with FutureSightCounter = None; FutureSightMove = None; FutureSightDamage = None }
+                ({ m with Volatile = vol }, other, [], rng)
+        | _ -> (m, other, [], rng)
 
     /// Wrap/Bind/Clamp chip (HandleWrap, core.asm l.1153).
     /// Decrement trap counter; at 0 release, else chip MaxHP/16 (min 1).
@@ -588,8 +602,10 @@ module Battle =
         e <- { e with Volatile = { e.Volatile with Protect = false; Endure = false } }
 
         // Slot 1: Future Sight countdown.
-        let p', e', futureMsgs = applyFutureSight p e
-        p <- p'; e <- e'; msgs <- msgs @ futureMsgs
+        let p', e', futureMsgs, r' = applyFutureSight p e r wtType
+        p <- p'; e <- e'; r <- r'; msgs <- msgs @ futureMsgs
+        let e', p', futureMsgs, r' = applyFutureSight e p r wtType
+        p <- p'; e <- e'; r <- r'; msgs <- msgs @ futureMsgs
 
         // Slot 2: Weather (sandstorm chip, timer).
         if wt.IsSome && wt.Value > 0 then

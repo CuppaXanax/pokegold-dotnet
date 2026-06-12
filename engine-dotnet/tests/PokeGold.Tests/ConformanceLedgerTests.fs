@@ -273,9 +273,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C24 BattleTests audit Encore's previous-last-move targeting, excluded move failures, 3-6 turn count, and same-turn forced move behavior against BattleCommand_Encore."
             [ "EFFECT_ENCORE" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C25 BattleTests audit Future Sight's stored pre-variation damage, four-count setup, payoff-turn accuracy/variation, and counter cleanup against future_sight.asm and HandleFutureSight."
+            [ "EFFECT_FUTURE_SIGHT" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_FUTURE_SIGHT"
-              "EFFECT_MIRROR_COAT"
+            [ "EFFECT_MIRROR_COAT"
               "EFFECT_OHKO"
               "EFFECT_RAMPAGE"
               "EFFECT_SKETCH"

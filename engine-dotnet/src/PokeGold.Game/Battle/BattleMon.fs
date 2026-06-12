@@ -63,6 +63,7 @@ type VolatileStatus =
       /// Future Sight countdown and move for the end-of-turn payoff.
       FutureSightCounter: int option
       FutureSightMove: MoveData option
+      FutureSightDamage: int option
       /// Last move that reached the move animation path.
       LastMove: MoveData option
       /// Last move eligible for Counter/Disable targeting.
@@ -127,6 +128,7 @@ module VolatileStatus =
           RageCounter = 0
           FutureSightCounter = None
           FutureSightMove = None
+          FutureSightDamage = None
           LastMove = None
           LastCounterMove = None
           Mist = false

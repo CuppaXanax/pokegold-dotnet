@@ -3021,6 +3021,50 @@ let ``C24 Encore fails for excluded last moves`` () =
     Assert.True(after.Enemy.Volatile.EncoreMoveIndex.IsNone)
     Assert.Contains(after.Messages, fun m -> m.Contains("didn't affect"))
 
+[<Fact>]
+let ``C25 Future Sight stores pre-variation damage and starts a four-count timer`` () =
+    let futureSight = { Moves.byName "FUTURE_SIGHT" with Accuracy = 100 }
+    let user = mon "USER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 50 200 80 70 100
+    let foe = mon "FOE" (ty "DARK") (ty "DARK") 50 200 80 90 100
+    let expected = Effects.futureSightStoredDamage user foe futureSight
+
+    let applied = Effects.applyCtx (mkCtx user foe futureSight) BeginFutureSight
+
+    Assert.Equal(Some 4, applied.User.Volatile.FutureSightCounter)
+    Assert.Equal(Some futureSight, applied.User.Volatile.FutureSightMove)
+    Assert.Equal(Some expected, applied.User.Volatile.FutureSightDamage)
+    Assert.Equal(0, applied.LastDamage)
+
+[<Fact>]
+let ``C25 Future Sight payoff uses stored damage with payoff turn variation`` () =
+    let futureSight = { Moves.byName "FUTURE_SIGHT" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player = { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 50 200 100 100 200 with Moves = [ splash ]; Pp = [ splash.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ splash ]; Pp = [ splash.Pp ] }
+    let stored = Effects.futureSightStoredDamage player enemy futureSight
+    let player =
+        { player with
+            Volatile =
+                { VolatileStatus.empty with
+                    FutureSightCounter = Some 2
+                    FutureSightMove = Some futureSight
+                    FutureSightDamage = Some stored } }
+    let seed = 41u
+    let _, rng = Rng.next (Rng.create seed)
+    let _, rng = Rng.next rng
+    let _, rng = Rng.next rng
+    let _, rng = Rng.next rng
+    let spreadByte, _ = Rng.next rng
+    let roll = Damage.MinRoll + spreadByte % (Damage.MaxRoll - Damage.MinRoll + 1)
+    let expected = stored * roll / Damage.MaxRoll
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy seed)
+
+    Assert.Equal(enemy.Hp - expected, after.Enemy.Hp)
+    Assert.True(after.Player.Volatile.FutureSightCounter.IsNone)
+    Assert.True(after.Player.Volatile.FutureSightDamage.IsNone)
+    Assert.Contains(after.Messages, fun m -> m.Contains("was hit by Future Sight"))
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
