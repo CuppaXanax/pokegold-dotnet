@@ -419,3 +419,92 @@ let ``A4 Slowpoke Well rocket grunts are present before well is cleared`` () =
 
     Assert.Equal(0, visibleGruntsAfter.Length)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A5 — Slowpoke Well clear; Kurt leaves; Azalea Gym → Bugsy; rival ambush
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A5 AzaleaTown gym warp loads AzaleaGym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // AzaleaTown warp 5 at (10,15) leads to AzaleaGym.
+    driver.Apply(Warp("AzaleaTown", 10, 14, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "AzaleaGym"), 100)
+
+    Assert.Equal("AzaleaGym", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A5 Bugsy gives HiveBadge and TM49 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_BEAT_BUGSY", true))
+    driver.Apply(SetFlag("ENGINE_HIVEBADGE", true))
+    // Bugsy at (5,7); stand south facing up.
+    driver.Apply(Warp("AzaleaGym", 5, 8, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM49_FURY_CUTTER"
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM49_FURY_CUTTER",
+                "Bugsy should give TM49 FURY CUTTER after badge")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_HIVEBADGE",
+                "HIVEBADGE should be set")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A5 Azalea rival coord event fires at scene 1`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Rival ambush: coord events at (5,10)/(5,11) fire at
+    // SCENE_AZALEATOWN_RIVAL_BATTLE (scene 1).
+    driver.Apply(SetScene("AZALEA_TOWN", 1))
+    driver.Apply(SetEvent("EVENT_GOT_A_POKEMON_FROM_ELM", true))
+    driver.Apply(SetEvent("EVENT_GOT_TOTODILE_FROM_ELM", true))
+    driver.Apply(SetEvent("EVENT_CLEARED_SLOWPOKE_WELL", true))
+    // Place one cell east of the coord trigger at (5,10)
+    driver.Apply(Warp("AzaleaTown", 6, 10, Some Left))
+
+    driver.Step Left
+
+    // The coord trigger should start the rival scene.
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+    while frame < 2000 && not sawBattle do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Rival should show text before battle at (5,10)")
+    Assert.True(sawBattle, "Rival encounter should start a battle")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
