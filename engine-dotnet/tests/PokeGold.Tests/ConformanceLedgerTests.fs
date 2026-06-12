@@ -118,6 +118,8 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "MoveDeletion" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B3 tests cover script effect routing and the move deleter scene's party-pick, move-pick, confirmation, and move/PP compaction behavior."
 
+          yield entry ScriptSpecial "InitRoamMons" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B4 tests cover script effect routing, disassembly starting species/routes/levels, save persistence through World, and roamer encounter override on matching grass routes."
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -129,7 +131,7 @@ module ConformanceLedger =
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
-              "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
+              "MagikarpHouseSign"; "MagnetTrain"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
               "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
 

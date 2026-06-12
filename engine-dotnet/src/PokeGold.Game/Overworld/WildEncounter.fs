@@ -6,6 +6,71 @@ open PokeGold.Game.Player
 open PokeGold.Game.Battle
 open PokeGold.Game.Overworld.Script
 
+type Roamer =
+    { Slot: int
+      Species: string
+      Level: int
+      MapId: string
+      Hp: int }
+
+module Roaming =
+
+    let private key slot field = sprintf "__roamer_%d_%s" slot field
+
+    let private initialRoamers =
+        [ { Slot = 1; Species = "RAIKOU"; Level = 40; MapId = "Route42"; Hp = 0 }
+          { Slot = 2; Species = "ENTEI"; Level = 40; MapId = "Route37"; Hp = 0 }
+          { Slot = 3; Species = "SUICUNE"; Level = 40; MapId = "Route38"; Hp = 0 } ]
+
+    let init (world: World) =
+        initialRoamers
+        |> List.fold (fun w roamer ->
+            w
+            |> World.setBuffer (key roamer.Slot "species") roamer.Species
+            |> World.setBuffer (key roamer.Slot "map") roamer.MapId
+            |> World.setVar (key roamer.Slot "level") roamer.Level
+            |> World.setVar (key roamer.Slot "hp") roamer.Hp) world
+
+    let active (world: World) =
+        [ 1..3 ]
+        |> List.choose (fun slot ->
+            let species = World.getBuffer (key slot "species") world
+            let mapId = World.getBuffer (key slot "map") world
+
+            if species = "" || mapId = "" then
+                None
+            else
+                Some
+                    { Slot = slot
+                      Species = species
+                      Level = World.getVar (key slot "level") world
+                      MapId = mapId
+                      Hp = World.getVar (key slot "hp") world })
+
+    let private canonicalMapId mapId =
+        Maps.canonicalConst mapId
+        |> Option.orElse (MapsData.byName mapId |> Option.map (fun map -> map.Meta.Const))
+        |> Option.defaultValue mapId
+
+    let tryEncounter (mapName: string) (isWater: bool) (rng: System.Random) (world: World) =
+        if isWater then
+            None
+        else
+            let roll = rng.Next(256)
+
+            if roll >= 100 then
+                None
+            else
+                match roll &&& 0x03 with
+                | 0 -> None
+                | selected ->
+                    let currentMap = canonicalMapId mapName
+
+                    active world
+                    |> List.tryItem (selected - 1)
+                    |> Option.filter (fun roamer -> canonicalMapId roamer.MapId = currentMap)
+                    |> Option.map (fun roamer -> roamer.Species, roamer.Level)
+
 /// Wild encounter trigger logic.
 /// Source: engine/overworld/wildmons.asm::TryWildEncounter
 module WildEncounter =
@@ -107,7 +172,7 @@ module WildEncounter =
     let waterRate = 15
 
     /// Try to trigger a wild encounter. Returns Some (species, level) or None.
-    let tryEncounter (mapName: string) (collId: byte) (rng: System.Random) (player: PokeGold.Game.Player.PlayerState) : (string * int) option =
+    let tryEncounter (mapName: string) (collId: byte) (rng: System.Random) (player: PokeGold.Game.Player.PlayerState) (world: World) : (string * int) option =
         if not (isEncounterTile collId) then
             None
         else
@@ -129,14 +194,17 @@ module WildEncounter =
                 if not (shouldEncounter rate encounterRoll) then
                     None
                 else
-                    let slotRoll = rng.Next(100)
-                    let slot = selectSlot slotRoll
-                    let entry = table.Water.[min slot (table.Water.Length - 1)]
+                    match Roaming.tryEncounter mapName (collId = CollWater) rng world with
+                    | Some roamer -> Some roamer
+                    | None ->
+                        let slotRoll = rng.Next(100)
+                        let slot = selectSlot slotRoll
+                        let entry = table.Water.[min slot (table.Water.Length - 1)]
 
-                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
-                        None
-                    else
-                        Some(entry.Species, entry.Level)
+                        if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                            None
+                        else
+                            Some(entry.Species, entry.Level)
             | Some table when collId <> CollWater && table.GrassRate <> (0, 0, 0) ->
                 let encounterRoll = rng.Next(256)
                 let rate = currentGrassRate table |> effectiveRate player
@@ -144,14 +212,17 @@ module WildEncounter =
                 if not (shouldEncounter rate encounterRoll) then
                     None
                 else
-                    let slotRoll = rng.Next(100)
-                    let slot = selectSlot slotRoll
-                    let entry = currentGrassTable table |> fun slots -> slots.[min slot (slots.Length - 1)]
+                    match Roaming.tryEncounter mapName (collId = CollWater) rng world with
+                    | Some roamer -> Some roamer
+                    | None ->
+                        let slotRoll = rng.Next(100)
+                        let slot = selectSlot slotRoll
+                        let entry = currentGrassTable table |> fun slots -> slots.[min slot (slots.Length - 1)]
 
-                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
-                        None
-                    else
-                        Some(entry.Species, entry.Level)
+                        if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                            None
+                        else
+                            Some(entry.Species, entry.Level)
             | _ ->
                 let encounterRoll = rng.Next(256)
 
@@ -160,11 +231,14 @@ module WildEncounter =
                 if not (shouldEncounter fallbackRate encounterRoll) then
                     None
                 else
-                    let slotRoll = rng.Next(100)
-                    let slot = selectSlot slotRoll
-                    let entry = fallbackTable.[min slot (fallbackTable.Length - 1)]
+                    match Roaming.tryEncounter mapName (collId = CollWater) rng world with
+                    | Some roamer -> Some roamer
+                    | None ->
+                        let slotRoll = rng.Next(100)
+                        let slot = selectSlot slotRoll
+                        let entry = fallbackTable.[min slot (fallbackTable.Length - 1)]
 
-                    if PokeGold.Game.Player.Repel.blocks player entry.Level then
-                        None
-                    else
-                        Some(entry.Species, entry.Level)
+                        if PokeGold.Game.Player.Repel.blocks player entry.Level then
+                            None
+                        else
+                            Some(entry.Species, entry.Level)

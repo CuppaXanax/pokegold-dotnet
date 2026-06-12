@@ -900,6 +900,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             |> List.tryHead
                             |> Option.exists Breeding.isEgg
                         resume (Some(if isEgg then 1 else 0)) vm
+                    | InitRoamMons ->
+                        world <- Roaming.init world
+                        resume None vm
                     | CheckMoney amount ->
                         resume (Some(if Money.canAfford player.Money amount then 1 else 0)) vm
                     | GiveMoney amount ->
@@ -1637,7 +1640,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let mutable encounterTransition = Stay
                         let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors (fst after) (snd after)
 
-                        match WildEncounter.tryEncounter state.MapId collId encounterRng player with
+                        match WildEncounter.tryEncounter state.MapId collId encounterRng player world with
                         | Some(species, level) ->
                             stagedWild <- Some(species, level)
                             stagedTrainer <- None

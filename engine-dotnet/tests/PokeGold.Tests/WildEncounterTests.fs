@@ -1,9 +1,23 @@
 module PokeGold.Tests.WildEncounterTests
 
 open Xunit
+open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
 open PokeGold.Game.Player
+open PokeGold.Game.Save
+
+type private FixedRandom(values: int list) =
+    inherit System.Random()
+    let mutable remaining = values
+
+    override _.Next(maxValue: int) =
+        match remaining with
+        | value :: rest ->
+            remaining <- rest
+            value % maxValue
+        | [] -> 0
 
 [<Fact>]
 let ``isEncounterTile identifies grass and water tiles`` () =
@@ -61,3 +75,31 @@ let ``RUINS_OF_ALPH_OUTSIDE has water encounters`` () =
         Assert.Equal(3, t.Water.Length)
         Assert.Equal("WOOPER", t.Water.[0].Species)
     | None -> Assert.Fail("should have data")
+
+[<Fact>]
+let ``InitRoamMons seeds beasts at disassembly starting routes`` () =
+    let roamers = Roaming.init World.empty |> Roaming.active
+
+    Assert.Equal(3, roamers.Length)
+    Assert.Equal(("RAIKOU", 40, "Route42", 0), (roamers.[0].Species, roamers.[0].Level, roamers.[0].MapId, roamers.[0].Hp))
+    Assert.Equal(("ENTEI", 40, "Route37", 0), (roamers.[1].Species, roamers.[1].Level, roamers.[1].MapId, roamers.[1].Hp))
+    Assert.Equal(("SUICUNE", 40, "Route38", 0), (roamers.[2].Species, roamers.[2].Level, roamers.[2].MapId, roamers.[2].Hp))
+
+[<Fact>]
+let ``roamer world state survives save capture`` () =
+    let content = Content()
+    let state = OverworldState.loadByIdAt content "Route42" 10 10 Down
+    let world = Roaming.init World.empty
+    let save = SaveData.captureWith state world PlayerStateOps.initial
+
+    Assert.Equal<Roamer list>(Roaming.active world, Roaming.active (SaveData.worldOf save))
+
+[<Fact>]
+let ``roamer on current grass route overrides ordinary encounter`` () =
+    let rng = FixedRandom([ 0; 1 ])
+    let world = Roaming.init World.empty
+
+    let encountered =
+        WildEncounter.tryEncounter "Route42" WildEncounter.CollTallGrass rng PlayerStateOps.initial world
+
+    Assert.Equal(Some("RAIKOU", 40), encountered)

@@ -699,6 +699,18 @@ let ``MoveDeletion emits runtime effect`` () =
     Assert.Equal<ScriptEffect list>([ MoveDeletion ], effects)
 
 [<Fact>]
+let ``InitRoamMons emits runtime effect`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial InitRoamMons\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>([ InitRoamMons ], effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse
