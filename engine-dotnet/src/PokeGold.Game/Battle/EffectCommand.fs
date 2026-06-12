@@ -229,7 +229,7 @@ type EffectCommand =
     | PayDayDamage
     /// EFFECT_RAPID_SPIN: damage + clear leech seed/trap on user.
     | RapidSpinDamage
-    /// EFFECT_THIEF: damage + steal item message (item model is stub).
+    /// EFFECT_THIEF: damage + held-item steal when the user can receive it.
     | ThiefDamage
     /// EFFECT_RAGE: damage + set rage flag (atk-up-on-hit is M13.7 turn-state).
     | RageDamage

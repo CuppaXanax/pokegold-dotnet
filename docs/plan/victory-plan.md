@@ -279,6 +279,7 @@ Progress:
 - ✅ C1 batch 30: `EFFECT_SLEEP_TALK`.
 - ✅ C1 batch 31: `EFFECT_SPITE`.
 - ✅ C1 batch 32: `EFFECT_TELEPORT`.
+- ✅ C1 batch 33: `EFFECT_THIEF`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

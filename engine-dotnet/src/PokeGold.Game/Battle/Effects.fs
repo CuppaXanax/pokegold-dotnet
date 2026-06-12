@@ -202,6 +202,19 @@ module Effects =
           "EFFECT_BIDE" ]
         |> Set.ofList
 
+    let private mailItems =
+        [ "FLOWER_MAIL"
+          "SURF_MAIL"
+          "LITEBLUEMAIL"
+          "PORTRAITMAIL"
+          "LOVELY_MAIL"
+          "EON_MAIL"
+          "MORPH_MAIL"
+          "BLUESKY_MAIL"
+          "MUSIC_MAIL"
+          "MIRAGE_MAIL" ]
+        |> Set.ofList
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -1662,9 +1675,19 @@ module Effects =
 
         | ThiefDamage ->
             // BattleCommand_Thief (move_effects/thief.asm).
-            // Normal damage + steal item (item model stub: just message).
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            let foeAfterDamage = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+            let user, foe, stealNotes =
+                match ctx.User.HeldItem, foeAfterDamage.HeldItem with
+                | None, Some itemId when dmg > 0 && not (Set.contains itemId mailItems) ->
+                    let itemName =
+                        Items.byId
+                        |> Map.tryFind itemId
+                        |> Option.map (fun item -> item.Name)
+                        |> Option.defaultValue itemId
+                    { ctx.User with HeldItem = Some itemId }, { foeAfterDamage with HeldItem = None }, [ $"{ctx.User.Species.Name} stole {itemName}!" ]
+                | _ ->
+                    ctx.User, foeAfterDamage, []
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
@@ -1672,11 +1695,8 @@ module Effects =
                       | 0 -> $"It doesn't affect {foe.Species.Name}..."
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."
-                      | _ -> ()
-                  // Item steal stub: M13.5 documents this as needing in-battle item model.
-                  // "Stole <item>!" would go here when items are implemented.
-                  ]
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+                      | _ -> () ]
+            { ctx with User = user; Foe = foe; Messages = ctx.Messages @ notes @ stealNotes; LastDamage = dmg }
 
         | RageDamage ->
             // BattleCommand_Rage (move_effects/rage.asm).

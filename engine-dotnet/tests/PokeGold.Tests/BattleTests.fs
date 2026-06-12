@@ -4296,6 +4296,56 @@ let ``C32 Wild enemy Teleport succeeds regardless of level difference`` () =
     Assert.Contains(after.Messages, fun msg -> msg.Contains("fled from battle"))
 
 [<Fact>]
+let ``C33 Thief transfers a non-mail held item after damaging the target`` () =
+    let thief = { Moves.byName "THIEF" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "DARK") (ty "DARK") 50 200 120 100 200 with
+            Moves = [ thief ]
+            Pp = [ thief.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ]
+            HeldItem = Some "GOLD_BERRY"
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 127u)
+
+    Assert.True(after.Enemy.Hp < enemy.Hp)
+    Assert.Equal(Some "GOLD_BERRY", after.Player.HeldItem)
+    Assert.Equal(None, after.Enemy.HeldItem)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("stole GOLD BERRY"))
+
+[<Fact>]
+let ``C33 Thief does not steal mail or when the user already holds an item`` () =
+    let thief = { Moves.byName "THIEF" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let basePlayer =
+        { mon "PLAYER" (ty "DARK") (ty "DARK") 50 200 120 100 200 with
+            Moves = [ thief ]
+            Pp = [ thief.Pp ] }
+    let mailEnemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ]
+            HeldItem = Some "FLOWER_MAIL"
+            Status = Sleep 2 }
+
+    let afterMail = Battle.chooseMove 0 (Battle.create basePlayer mailEnemy 131u)
+    Assert.Equal(None, afterMail.Player.HeldItem)
+    Assert.Equal(Some "FLOWER_MAIL", afterMail.Enemy.HeldItem)
+
+    let itemHoldingPlayer =
+        { basePlayer with HeldItem = Some "CHARCOAL" }
+    let berryEnemy =
+        { mailEnemy with HeldItem = Some "GOLD_BERRY" }
+
+    let afterAlreadyHolding = Battle.chooseMove 0 (Battle.create itemHoldingPlayer berryEnemy 137u)
+    Assert.Equal(Some "CHARCOAL", afterAlreadyHolding.Player.HeldItem)
+    Assert.Equal(Some "GOLD_BERRY", afterAlreadyHolding.Enemy.HeldItem)
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50
