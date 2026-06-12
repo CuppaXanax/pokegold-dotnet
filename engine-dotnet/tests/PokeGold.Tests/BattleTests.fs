@@ -2168,6 +2168,22 @@ let ``C5 fixed-damage and utility effects apply disassembly state`` () =
     Assert.Equal(150, substitute.User.Hp)
     Assert.Equal(Some 50, substitute.User.Volatile.Substitute)
 
+[<Fact>]
+let ``C6 audited random and multi-hit damage effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_PSYWAVE", [ PsywaveDamage ]
+          "EFFECT_REVERSAL", [ ReversalDamage ]
+          "EFFECT_PRESENT", [ PresentDamage ]
+          "EFFECT_MAGNITUDE", [ MagnitudeDamage ]
+          "EFFECT_TRIPLE_KICK", [ TripleKickDamage ]
+          "EFFECT_MULTI_HIT", [ MultiHitDamage ]
+          "EFFECT_DOUBLE_HIT", [ DoubleHitDamage ]
+          "EFFECT_POISON_MULTI_HIT", [ PoisonMultiHitDamage ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 20 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
