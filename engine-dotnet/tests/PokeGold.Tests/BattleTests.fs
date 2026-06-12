@@ -1950,6 +1950,82 @@ let ``C2 trap drain and recoil use disassembly HP side effects`` () =
     Assert.True(recoiled.Foe.Hp < 200)
     Assert.True(recoiled.User.Hp < 200)
 
+[<Fact>]
+let ``C3 audited stat-stage effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_ATTACK_UP", [ RaiseUserStat Attack ]
+          "EFFECT_DEFENSE_UP", [ RaiseUserStat Defense ]
+          "EFFECT_SP_ATK_UP", [ RaiseUserStat SpAttack ]
+          "EFFECT_EVASION_UP", [ RaiseUserStat Evasion ]
+          "EFFECT_ATTACK_UP_2", [ RaiseUserStat Attack; RaiseUserStat Attack ]
+          "EFFECT_DEFENSE_UP_2", [ RaiseUserStat Defense; RaiseUserStat Defense ]
+          "EFFECT_SPEED_UP_2", [ RaiseUserStat Speed; RaiseUserStat Speed ]
+          "EFFECT_SP_DEF_UP_2", [ RaiseUserStat SpDefense; RaiseUserStat SpDefense ]
+          "EFFECT_ATTACK_DOWN", [ LowerTargetStat Attack ]
+          "EFFECT_DEFENSE_DOWN", [ LowerTargetStat Defense ]
+          "EFFECT_SPEED_DOWN", [ LowerTargetStat Speed ]
+          "EFFECT_ACCURACY_DOWN", [ LowerTargetStat Accuracy ]
+          "EFFECT_EVASION_DOWN", [ LowerTargetStat Evasion ]
+          "EFFECT_ATTACK_DOWN_2", [ LowerTargetStat Attack; LowerTargetStat Attack ]
+          "EFFECT_DEFENSE_DOWN_2", [ LowerTargetStat Defense; LowerTargetStat Defense ]
+          "EFFECT_SPEED_DOWN_2", [ LowerTargetStat Speed; LowerTargetStat Speed ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C3 stat-stage commands raise the user and lower the target by exact stages`` () =
+    let apply effect =
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+        let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+        let ctx =
+            { User = user
+              Foe = foe
+              Move = audited
+              Crit = false
+              Roll = Damage.MaxRoll
+              Rng = Rng.create 0u
+              Messages = []
+              LastDamage = 0
+              IsStruggle = false
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None
+              WeatherType = None }
+        Effects.forMove audited |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    let atkUp = apply "EFFECT_ATTACK_UP"
+    Assert.Equal(1, atkUp.User.AtkStage)
+    Assert.Equal(0, atkUp.Foe.AtkStage)
+
+    let evasionUp = apply "EFFECT_EVASION_UP"
+    Assert.Equal(1, evasionUp.User.EvaStage)
+    Assert.Equal(0, evasionUp.Foe.EvaStage)
+
+    let spDefUp2 = apply "EFFECT_SP_DEF_UP_2"
+    Assert.Equal(2, spDefUp2.User.SpDefStage)
+    Assert.Equal(0, spDefUp2.Foe.SpDefStage)
+
+    let attackDown = apply "EFFECT_ATTACK_DOWN"
+    Assert.Equal(0, attackDown.User.AtkStage)
+    Assert.Equal(-1, attackDown.Foe.AtkStage)
+
+    let speedDown2 = apply "EFFECT_SPEED_DOWN_2"
+    Assert.Equal(-2, speedDown2.Foe.SpdStage)
+
+    let accuracyDown = apply "EFFECT_ACCURACY_DOWN"
+    Assert.Equal(-1, accuracyDown.Foe.AccStage)
+
+    let evasionDown = apply "EFFECT_EVASION_DOWN"
+    Assert.Equal(-1, evasionDown.Foe.EvaStage)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
