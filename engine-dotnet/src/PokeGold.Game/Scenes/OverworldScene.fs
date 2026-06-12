@@ -881,6 +881,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         pending <- Some(vm, effect)
                         lastText <- Some(sprintf "DayCareMon%d" slot, rendered)
                         stop (Push(TextBoxScene.Of(content, rendered + "<DONE>") :> Scene))
+                    | MoveDeletion ->
+                        pending <- Some(vm, effect)
+                        stop (Push(MoveDeletionScene(content, player, fun p -> player <- p) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -1405,6 +1408,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | DayCareResident _ -> dayCareResult
                     | DayCareManOutside -> dayCareResult
                     | DayCareMon _ -> None
+                    | MoveDeletion -> None
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

@@ -687,6 +687,18 @@ let ``daycare specials emit runtime effects`` () =
         effects)
 
 [<Fact>]
+let ``MoveDeletion emits runtime effect`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial MoveDeletion\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>([ MoveDeletion ], effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

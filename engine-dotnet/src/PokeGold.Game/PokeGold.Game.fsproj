@@ -162,6 +162,7 @@
     <Compile Include="Scenes\SummaryScene.fs" />
     <Compile Include="Scenes\PartyScene.fs" />
     <Compile Include="Scenes\DayCareScene.fs" />
+    <Compile Include="Scenes\MoveDeletionScene.fs" />
     <Compile Include="Scenes\PackScene.fs" />
     <Compile Include="Scenes\MartScene.fs" />
     <Compile Include="Scenes\PCBoxScene.fs" />

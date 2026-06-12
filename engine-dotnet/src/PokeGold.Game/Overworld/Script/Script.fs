@@ -130,6 +130,8 @@ type ScriptEffect =
     | DayCareMon of slot: int
     /// `special CheckFirstMonIsEgg` — true when the lead party member is an egg.
     | CheckFirstMonIsEgg
+    /// `special MoveDeletion` — pick a party mon and delete one move.
+    | MoveDeletion
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
@@ -383,6 +385,7 @@ module Script =
             | Special "DayCareMon1" -> suspend next world (DayCareMon 1)
             | Special "DayCareMon2" -> suspend next world (DayCareMon 2)
             | Special "CheckFirstMonIsEgg" -> suspend next world CheckFirstMonIsEgg
+            | Special "MoveDeletion" -> suspend next world MoveDeletion
             | Special "OverworldTownMap" -> suspend next world (OpenPokegear(MapTab, vm.MapId, None))
             | Special "MapRadio" -> suspend next world (OpenPokegear(RadioTab, vm.MapId, Some vm.ScriptVar))
             | Special "DisplayMoneyAndCoinBalance" -> suspend next world (DisplayBalance MoneyAndCoins)

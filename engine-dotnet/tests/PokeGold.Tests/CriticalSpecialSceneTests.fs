@@ -53,7 +53,8 @@ let private runModalScene (scene: Scene) maxFrames =
             match top.GetType().Name with
             | "TextBoxScene"
             | "YesNoScene"
-            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | "PartyScene"
+            | "MoveDeletionScene" when frame % 2 = 0 -> { Buttons.none with A = true }
             | _ -> Buttons.none
 
         tickStack stack buttons
@@ -273,3 +274,18 @@ let ``daycare outside egg pickup adds generated egg and clears egg state`` () =
     Assert.False(changed.DayCare.HasEgg)
     Assert.Equal(2, changed.Party.Length)
     Assert.Equal("EGG", (List.last changed.Party).Nickname)
+
+[<Fact>]
+let ``move deleter removes selected move and compacts remaining moves`` () =
+    let content = Content()
+    let cyndaquil =
+        { PartyMon.create 155 10 with
+            Moves = [ 33, 35; 45, 30; 52, 25 ] }
+
+    let initial = { PlayerStateOps.initial with Party = [ cyndaquil ] }
+    let mutable changed = initial
+    let scene = MoveDeletionScene(content, initial, fun p -> changed <- p) :> Scene
+
+    runModalScene scene 2500
+
+    Assert.Equal<(int * int) list>([ 45, 30; 52, 25 ], changed.Party.Head.Moves)
