@@ -3065,6 +3065,60 @@ let ``C25 Future Sight payoff uses stored damage with payoff turn variation`` ()
     Assert.True(after.Player.Volatile.FutureSightDamage.IsNone)
     Assert.Contains(after.Messages, fun m -> m.Contains("was hit by Future Sight"))
 
+[<Fact>]
+let ``C26 Mirror Coat doubles the special damage just taken when moving second`` () =
+    let mirrorCoat = Moves.byName "MIRROR_COAT"
+    let ember = { Moves.byName "EMBER" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 50 200 100 100 1 with
+            Moves = [ mirrorCoat ]
+            Pp = [ mirrorCoat.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "FIRE") (ty "FIRE") 50 200 100 100 200 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ] }
+    let seed = 43u
+    let critByte, rng = Rng.next (Rng.create seed)
+    let spreadByte, _ = Rng.next rng
+    let threshold = CriticalHit.thresholds.[CriticalHit.critStage enemy.Volatile.FocusEnergy ember]
+    let spread = Damage.MinRoll + spreadByte % (Damage.MaxRoll - Damage.MinRoll + 1)
+    let incoming = Damage.calc enemy player ember (critByte < threshold) spread false
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy seed)
+
+    Assert.Equal(player.Hp - incoming, after.Player.Hp)
+    Assert.Equal(enemy.Hp - incoming * 2, after.Enemy.Hp)
+    Assert.Contains(after.Messages, fun m -> m.Contains("Mirror Coated the attack"))
+
+[<Fact>]
+let ``C26 Mirror Coat fails for physical damage or when moving first`` () =
+    let mirrorCoat = Moves.byName "MIRROR_COAT"
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let ember = { Moves.byName "EMBER" with Accuracy = 100 }
+    let slowMirrorUser =
+        { mon "PLAYER" (ty "PSYCHIC_TYPE") (ty "PSYCHIC_TYPE") 50 200 100 100 1 with
+            Moves = [ mirrorCoat ]
+            Pp = [ mirrorCoat.Pp ] }
+    let physicalEnemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let afterPhysical = Battle.chooseMove 0 (Battle.create slowMirrorUser physicalEnemy 47u)
+    Assert.Equal(physicalEnemy.Hp, afterPhysical.Enemy.Hp)
+    Assert.Contains(afterPhysical.Messages, fun m -> m = "But it failed!")
+
+    let fastMirrorUser =
+        { slowMirrorUser with
+            Speed = 200
+            Hp = slowMirrorUser.MaxHp }
+    let slowEnemy =
+        { mon "ENEMY" (ty "FIRE") (ty "FIRE") 50 200 100 100 1 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ] }
+    let afterFirst = Battle.chooseMove 0 (Battle.create fastMirrorUser slowEnemy 53u)
+    Assert.Equal(slowEnemy.Hp, afterFirst.Enemy.Hp)
+    Assert.Contains(afterFirst.Messages, fun m -> m = "But it failed!")
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

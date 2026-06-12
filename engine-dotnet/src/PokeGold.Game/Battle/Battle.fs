@@ -1134,6 +1134,28 @@ module Battle =
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "Countered the attack!" ], rng, playerSide, enemySide, weatherTimer, weatherType, dmg, true
                                     else
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_MIRROR_COAT" then
+                                    let lastOppMove =
+                                        if playerIsUser then enemyLastCounterMove else playerLastCounterMove
+                                    let damageTaken =
+                                        if playerIsUser then playerDamageTaken else enemyDamageTaken
+                                    let mirrorCoatWorks =
+                                        match lastOppMove with
+                                        | Some lastMove ->
+                                            opponentWentFirst
+                                            && lastMove.Effect <> "EFFECT_MIRROR_COAT"
+                                            && lastMove.Power > 0
+                                            && not (TypeChart.isPhysical lastMove.Type)
+                                            && damageTaken > 0
+                                            && Damage.effectivenessTimesTen moveToUse foe <> 0
+                                        | None -> false
+
+                                    if mirrorCoatWorks then
+                                        let dmg = min 65535 (damageTaken * 2)
+                                        let foe = { foe with Hp = max 0 (foe.Hp - dmg) }
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "Mirror Coated the attack!" ], rng, playerSide, enemySide, weatherTimer, weatherType, dmg, true
+                                    else
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif usesProtectCounter moveToUse && opponentWentFirst then
                                     let user = { user with Volatile = { user.Volatile with ProtectCount = 0 } }
                                     user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false

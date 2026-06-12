@@ -906,9 +906,12 @@ module Effects =
                 { ctx with Foe = foe; Messages = ctx.Messages @ [ "Countered the attack!" ]; LastDamage = dmg }
 
         | MirrorCoatDamage ->
-            let dmg = max 0 (ctx.LastDamage * 2)
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-            { ctx with Foe = foe; Messages = ctx.Messages @ [ "Mirror Coated the attack!" ]; LastDamage = dmg }
+            if ctx.LastDamage <= 0 then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ]; LastDamage = 0 }
+            else
+                let dmg = max 0 (ctx.LastDamage * 2)
+                let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+                { ctx with Foe = foe; Messages = ctx.Messages @ [ "Mirror Coated the attack!" ]; LastDamage = dmg }
 
         | HealBellEffect ->
             let user =
