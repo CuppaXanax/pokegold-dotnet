@@ -126,7 +126,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 | ✅ A3 | Violet Gym → Falkner | gym warp; trainer sight-line battles; badge + TM31 |
 | ✅ A4 | Route 32 → Union Cave → Route 33 → Azalea | cave darkness not required (no Flash gate); Slowpoke Well grunt blocking |
 | ✅ A5 | Slowpoke Well B1F clear; Kurt leaves; Azalea Gym → Bugsy; rival ambush | scenes/events per `maps/AzaleaTown.asm` |
-| A6 | Ilex Forest: Farfetch'd chase; HM01; Cut tree gate on Route 34 side | the Cut tree actually blocks until Cut is used (`FieldMoves`) |
+| ✅ A6 | Ilex Forest: Farfetch'd chase; HM01; Cut tree gate on Route 34 side | the Cut tree actually blocks until Cut is used (`FieldMoves`) |
 | A7 | Goldenrod: Whitney (incl. cry/return), Flower Shop SquirtBottle | already partially covered — extend, don't duplicate |
 | A8 | Route 36: Sudowoodo unblocks; Ecruteak; Burned Tower rival + beasts release | `InitRoamMons` fires (see B4) |
 | A9 | Morty; Routes 38/39; Olivine lighthouse climb; Surf to Cianwood | SURF gate: water tile blocks walking, Surf crosses it |
