@@ -1836,6 +1836,120 @@ let ``C1 Hyper Beam recharge and priority hit follow battle-order gates`` () =
     let growlIndex = afterQuick.Messages |> List.findIndex (fun m -> m.Contains "FAST used GROWL")
     Assert.True(quickIndex < growlIndex)
 
+[<Fact>]
+let ``C2 audited secondary hit effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_PARALYZE_HIT", [ Damage; EffectChance InflictParalyze ]
+          "EFFECT_FREEZE_HIT", [ Damage; EffectChance InflictFreeze ]
+          "EFFECT_FLINCH_HIT", [ Damage; EffectChance SetFlinch ]
+          "EFFECT_POISON_HIT", [ Damage; EffectChance InflictPoison ]
+          "EFFECT_DEFENSE_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat Defense) ]
+          "EFFECT_SPEED_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat Speed) ]
+          "EFFECT_SP_ATK_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat SpAttack) ]
+          "EFFECT_SP_DEF_DOWN_HIT", [ Damage; EffectChance(LowerTargetStat SpDefense) ]
+          "EFFECT_TRAP_TARGET", [ Damage; TrapTarget ]
+          "EFFECT_LEECH_HIT", [ DrainDamage ]
+          "EFFECT_RECOIL_HIT", [ Damage; Recoil ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C2 status and stat secondary hits damage first and apply the follow-up`` () =
+    let apply effect =
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200
+        let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+        let ctx =
+            { User = user
+              Foe = foe
+              Move = audited
+              Crit = false
+              Roll = Damage.MaxRoll
+              Rng = Rng.create 0u
+              Messages = []
+              LastDamage = 0
+              IsStruggle = false
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None
+              WeatherType = None }
+        Effects.forMove audited |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    let para = apply "EFFECT_PARALYZE_HIT"
+    Assert.True(para.Foe.Hp < 200)
+    Assert.Equal(Paralysis, para.Foe.Status)
+
+    let freeze = apply "EFFECT_FREEZE_HIT"
+    Assert.True(freeze.Foe.Hp < 200)
+    Assert.Equal(Freeze, freeze.Foe.Status)
+
+    let flinch = apply "EFFECT_FLINCH_HIT"
+    Assert.True(flinch.Foe.Hp < 200)
+    Assert.True(flinch.Foe.Volatile.Flinch)
+
+    let defense = apply "EFFECT_DEFENSE_DOWN_HIT"
+    Assert.True(defense.Foe.Hp < 200)
+    Assert.Equal(-1, defense.Foe.DefStage)
+
+    let speed = apply "EFFECT_SPEED_DOWN_HIT"
+    Assert.Equal(-1, speed.Foe.SpdStage)
+
+    let spAtk = apply "EFFECT_SP_ATK_DOWN_HIT"
+    Assert.Equal(-1, spAtk.Foe.SpAtkStage)
+
+    let spDef = apply "EFFECT_SP_DEF_DOWN_HIT"
+    Assert.Equal(-1, spDef.Foe.SpDefStage)
+
+[<Fact>]
+let ``C2 trap drain and recoil use disassembly HP side effects`` () =
+    let apply move userHp =
+        let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Hp = userHp }
+        let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1
+        let ctx =
+            { User = user
+              Foe = foe
+              Move = move
+              Crit = false
+              Roll = Damage.MaxRoll
+              Rng = Rng.create 0u
+              Messages = []
+              LastDamage = 0
+              IsStruggle = false
+              FuryCutterCount = 0
+              RolloutCount = 0
+              DefenseCurlUsed = false
+              Friendship = 0
+              UserIsPlayer = true
+              PlayerSide = SideState.Empty
+              EnemySide = SideState.Empty
+              WeatherTimer = None
+              WeatherType = None }
+        Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    let wrap = { Moves.byName "WRAP" with Accuracy = 100 }
+    let trapped = apply wrap 200
+    Assert.True(trapped.Foe.Hp < 200)
+    match trapped.Foe.Volatile.Trapped with
+    | Some turns -> Assert.InRange(turns, 3, 6)
+    | None -> Assert.Fail("Wrap should set the trap counter.")
+
+    let drain = { Moves.byName "MEGA_DRAIN" with Accuracy = 100 }
+    let drained = apply drain 100
+    Assert.True(drained.Foe.Hp < 200)
+    Assert.True(drained.User.Hp > 100)
+
+    let recoil = { Moves.byName "TAKE_DOWN" with Accuracy = 100 }
+    let recoiled = apply recoil 200
+    Assert.True(recoiled.Foe.Hp < 200)
+    Assert.True(recoiled.User.Hp < 200)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
