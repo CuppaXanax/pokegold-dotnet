@@ -4749,6 +4749,58 @@ let ``C41 Mimic fails against hidden or already-known last counter moves`` () =
     Assert.True(afterDuplicate.Player.Volatile.LastCounterMove.IsNone)
 
 [<Fact>]
+let ``C42 Mirror Move replays the opponent last counter move and records the called move`` () =
+    let mirrorMove = Moves.byName "MIRROR_MOVE"
+    let tackle = Moves.byName "TACKLE"
+    let ember = Moves.byName "EMBER"
+    let player =
+        { mon "PLAYER" (ty "FLYING") (ty "FLYING") 50 300 120 100 200 with
+            Moves = [ mirrorMove ]
+            Pp = [ mirrorMove.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some mirrorMove; LastCounterMove = Some mirrorMove } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle }
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 0u)
+
+    Assert.True(after.Enemy.Hp < enemy.Hp)
+    Assert.Equal(mirrorMove.Pp - 1, after.Player.Pp.[0])
+    Assert.Equal(Some "TACKLE", after.Player.Volatile.LastMove |> Option.map (fun move -> move.Name))
+    Assert.Equal(Some "TACKLE", after.Player.Volatile.LastCounterMove |> Option.map (fun move -> move.Name))
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("mirrored TACKLE"))
+
+[<Fact>]
+let ``C42 Mirror Move fails when there is no opponent last counter move or the user knows it`` () =
+    let mirrorMove = Moves.byName "MIRROR_MOVE"
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { mon "PLAYER" (ty "FLYING") (ty "FLYING") 50 300 120 100 200 with
+            Moves = [ mirrorMove ]
+            Pp = [ mirrorMove.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some mirrorMove; LastCounterMove = Some mirrorMove } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Status = Sleep 2 }
+    let duplicatePlayer = { player with Moves = [ mirrorMove; tackle ]; Pp = [ mirrorMove.Pp; tackle.Pp ] }
+    let duplicateEnemy = { enemy with Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let afterNoLast = Battle.chooseMove 0 (Battle.create player enemy 0u)
+    let afterDuplicate = Battle.chooseMove 0 (Battle.create duplicatePlayer duplicateEnemy 0u)
+
+    Assert.Equal(enemy.Hp, afterNoLast.Enemy.Hp)
+    Assert.Equal(mirrorMove.Pp - 1, afterNoLast.Player.Pp.[0])
+    Assert.True(afterNoLast.Player.Volatile.LastCounterMove.IsNone)
+    Assert.Equal(enemy.Hp, afterDuplicate.Enemy.Hp)
+    Assert.Equal<int list>([ mirrorMove.Pp - 1; tackle.Pp ], afterDuplicate.Player.Pp)
+    Assert.True(afterDuplicate.Player.Volatile.LastCounterMove.IsNone)
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

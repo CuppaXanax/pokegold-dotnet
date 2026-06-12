@@ -324,8 +324,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C41 BattleTests audit Mimic's ClearLastMove behavior, checkhit-owned RNG path, hidden-target/duplicate failure gates, last-counter-move source, and 5-PP copied slot against BattleCommand_Mimic."
             [ "EFFECT_MIMIC" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C42 BattleTests audit Mirror Move's ClearLastMove behavior, opponent last-counter-move source, user-known/no-last failure gates, called-move execution, PP consumption, and called-move last-move tracking against BattleCommand_MirrorMove."
+            [ "EFFECT_MIRROR_MOVE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
+            [ "EFFECT_PURSUIT" ]
 
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."
             []

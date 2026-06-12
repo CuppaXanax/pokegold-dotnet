@@ -372,6 +372,8 @@ module Battle =
             runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_METRONOME" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_MIRROR_MOVE" && not isStruggle then
+            runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_MIMIC" && not isStruggle then
             let hit, rng = checkHit user foe move rng battle.WeatherType
             if hit then
@@ -1334,6 +1336,7 @@ module Battle =
                                 | "EFFECT_MIMIC"
                                 | "EFFECT_TRANSFORM" -> ()
                                 | "EFFECT_SLEEP_TALK"
+                                | "EFFECT_MIRROR_MOVE"
                                 | "EFFECT_METRONOME" ->
                                     match user.Volatile.LastCounterMove with
                                     | Some called ->
@@ -1357,7 +1360,7 @@ module Battle =
                                         playerDamageTaken <- lastDamage
 
                             let user =
-                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_MIMIC" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" && moveToUse.Effect <> "EFFECT_METRONOME" && moveToUse.Effect <> "EFFECT_TRANSFORM" then
+                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_MIMIC" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" && moveToUse.Effect <> "EFFECT_MIRROR_MOVE" && moveToUse.Effect <> "EFFECT_METRONOME" && moveToUse.Effect <> "EFFECT_TRANSFORM" then
                                     { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
                                 else
                                     user

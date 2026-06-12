@@ -1104,10 +1104,19 @@ module Effects =
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} sketched {copied.Name}!" ] }
 
         | MirrorTargetMove ->
-            match ctx.Foe.Moves |> List.tryFind (fun move -> move.Effect <> "EFFECT_MIRROR_MOVE") with
-            | None -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            | Some called ->
-                runCalledMove called $"{ctx.User.Species.Name} mirrored {called.Name}!" ctx
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with LastMove = None; LastCounterMove = None } }
+            let fail () =
+                { ctx with User = user; Messages = ctx.Messages @ [ "The Mirror Move failed!" ] }
+
+            match ctx.Foe.Volatile.LastCounterMove with
+            | Some called when not (user.Moves |> List.exists (fun move -> move.Name = called.Name)) ->
+                let calledCtx =
+                    runCalledMove called $"{ctx.User.Species.Name} mirrored {called.Name}!" { ctx with User = user }
+                let user =
+                    { calledCtx.User with
+                        Volatile = { calledCtx.User.Volatile with LastMove = Some called; LastCounterMove = Some called } }
+                { calledCtx with User = user }
+            | _ -> fail ()
 
         | MetronomeMove ->
             let clearLast user =
