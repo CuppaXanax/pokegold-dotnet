@@ -1487,28 +1487,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match objectScriptAt fx fy with
                     | Some label when state.Script.Labels.ContainsKey label -> startScript label
                     | _ ->
-                        match collId with
-                        | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
-                            this.UseFieldMove "CUT"
-                        | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
-                            this.UseFieldMove "SURF"
-                        | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->
-                            this.UseFieldMove "WHIRLPOOL"
-                        | id when
-                            id = FieldMoves.CollWaterfallRight
-                            || id = FieldMoves.CollWaterfallLeft
-                            || id = FieldMoves.CollWaterfallUp
-                            || id = FieldMoves.CollWaterfall ->
-                            this.UseFieldMove "WATERFALL"
-                        | _ ->
-                            // A counter/desk tile in front of the player: GSC reaches one tile
-                            // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
-                            let isCounter fx fy =
-                                Collision.isCounterId (
-                                    MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
+                        // A counter/desk tile in front of the player: GSC reaches one tile
+                        // past it to the NPC behind (the Mart clerk, Center nurse, etc.).
+                        let isCounter fx fy =
+                            Collision.isCounterId (
+                                MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
 
-                            match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
-                            | Some label when state.Script.Labels.ContainsKey label -> startScript label
+                        match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
+                        | Some label when state.Script.Labels.ContainsKey label -> startScript label
+                        | _ ->
+                            match collId with
+                            | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
+                                this.UseFieldMove "CUT"
+                            | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
+                                this.UseFieldMove "SURF"
+                            | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->
+                                this.UseFieldMove "WHIRLPOOL"
+                            | id when
+                                id = FieldMoves.CollWaterfallRight
+                                || id = FieldMoves.CollWaterfallLeft
+                                || id = FieldMoves.CollWaterfallUp
+                                || id = FieldMoves.CollWaterfall ->
+                                this.UseFieldMove "WATERFALL"
                             | _ -> Stay
                 else
                     let playerBefore = state.Player

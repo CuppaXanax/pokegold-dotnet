@@ -142,7 +142,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 |---|---|---|
 | ✅ A15 | Elm ticket → Olivine Port (S.S. Ticket check at gangway) → ship → Vermilion Port | sailor blocks without ticket; granddaughter quest on foot |
 | ✅ A16 | Vermilion: Surge; Saffron gates (closed pre-power, open post); Sabrina | Route 5/6/7/8 Saffron gate guards honour `EVENT_RETURNED_MACHINE_PART` |
-| A17 | Cerulean/Power Plant machine-part chain on foot | hidden item via A-press on the gym tile (BGEVENT_ITEM dispatch) |
+| ✅ A17 | Cerulean/Power Plant machine-part chain on foot | hidden item via A-press on the gym tile (BGEVENT_ITEM dispatch) |
 | A18 | Lavender EXPN card; radio tune via Pokégear UI; Snorlax wake battle | tune through the real radio tab (it writes `__radio_station`) |
 | A19 | Diglett's Cave → Pewter → Brock; Celadon → Erika; Fuchsia → Janine | — |
 | A20 | Cinnabar (Blue) → Seafoam (Blaine) → Viridian (Blue) | Blue object visibility flips per `EVENT_VIRIDIAN_GYM_BLUE` |

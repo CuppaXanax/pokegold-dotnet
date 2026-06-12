@@ -2418,3 +2418,117 @@ let ``A16 Saffron Gym teleport path reaches Sabrina and awards MarshBadge`` () =
     Assert.True(ow.Events |> List.contains "EVENT_BEAT_SABRINA", "Sabrina battle should set EVENT_BEAT_SABRINA")
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_MARSHBADGE", "Sabrina battle should set MARSHBADGE")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A17 Cerulean and Power Plant Machine Part chain works on foot`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+
+    // PowerPlant.asm: manager at 14,10 starts the theft investigation.
+    driver.Apply(Warp("PowerPlant", 14, 11, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        3000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_MET_MANAGER_AT_POWER_PLANT"
+                && not (ow.Events |> List.contains "EVENT_CERULEAN_GYM_ROCKET")
+                && Map.tryFind "CERULEAN_GYM" ow.Scenes = Some 1
+            | None -> false)
+
+    let afterManager = owOf driver.Snapshot
+    Assert.True(afterManager.Events |> List.contains "EVENT_MET_MANAGER_AT_POWER_PLANT")
+    Assert.False(afterManager.Events |> List.contains "EVENT_CERULEAN_GYM_ROCKET")
+    Assert.Equal(Some 1, Map.tryFind "CERULEAN_GYM" afterManager.Scenes)
+
+    // CeruleanCity.asm: gym door at 30,23 leads to CeruleanGym; scene 1 runs the Rocket out.
+    driver.Apply(Warp("CeruleanCity", 30, 24, Some Up))
+    driver.Step Up
+
+    advanceRuntimeUntil
+        driver
+        6000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.MapId = "CeruleanGym"
+                && ow.Events |> List.contains "EVENT_MET_ROCKET_GRUNT_AT_CERULEAN_GYM"
+                && not (ow.Events |> List.contains "EVENT_ROUTE_24_ROCKET")
+                && not (ow.Events |> List.contains "EVENT_ROUTE_25_MISTY_BOYFRIEND")
+                && Map.tryFind "CERULEAN_GYM" ow.Scenes = Some 0
+            | None -> false)
+
+    let afterGymRocket = owOf driver.Snapshot
+    Assert.True(afterGymRocket.Events |> List.contains "EVENT_MET_ROCKET_GRUNT_AT_CERULEAN_GYM")
+    Assert.False(afterGymRocket.Events |> List.contains "EVENT_ROUTE_24_ROCKET")
+    Assert.Equal(Some 0, Map.tryFind "CERULEAN_GYM" afterGymRocket.Scenes)
+
+    // Route24.asm: Rocket at 8,7 tells the player the part is hidden in Cerulean Gym.
+    driver.Apply(Warp("Route24", 8, 8, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        6000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.LastTextLabel = Some "Route24RocketDisappearsText"
+                && ow.Actors
+                   |> List.exists (fun a -> a.Script = "Route24RocketScript" && not a.Visible)
+            | None -> false)
+
+    let afterRoute24Rocket = owOf driver.Snapshot
+    Assert.Equal(Some "Route24RocketDisappearsText", afterRoute24Rocket.LastTextLabel)
+    Assert.Contains(
+        afterRoute24Rocket.Actors,
+        fun a -> a.Script = "Route24RocketScript" && not a.Visible)
+
+    // CeruleanGym.asm: bg_event 3,8 is BGEVENT_ITEM CeruleanGymHiddenMachinePart.
+    driver.Apply(Warp("CeruleanGym", 3, 9, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        3000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM"
+                && ow.LastTextLabel = Some "VerboseGiveItem"
+            | None -> false)
+
+    let afterHiddenItem = owOf driver.Snapshot
+    Assert.True(afterHiddenItem.Events |> List.contains "EVENT_FOUND_MACHINE_PART_IN_CERULEAN_GYM")
+    Assert.Equal(Some "VerboseGiveItem", afterHiddenItem.LastTextLabel)
+
+    // PowerPlant.asm: returning MACHINE_PART consumes it, restores Kanto power, and awards TM07.
+    driver.Apply(Warp("PowerPlant", 14, 11, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_RETURNED_MACHINE_PART"
+                && ow.Events |> List.contains "EVENT_RESTORED_POWER_TO_KANTO"
+                && ow.Events |> List.contains "EVENT_GOT_TM07_ZAP_CANNON"
+            | None -> false)
+
+    let afterReturn = owOf driver.Snapshot
+    Assert.True(afterReturn.Events |> List.contains "EVENT_RETURNED_MACHINE_PART")
+    Assert.True(afterReturn.Events |> List.contains "EVENT_RESTORED_POWER_TO_KANTO")
+    Assert.True(afterReturn.Events |> List.contains "EVENT_GOT_TM07_ZAP_CANNON")
+    Assert.True(afterReturn.Events |> List.contains "EVENT_ROUTE_5_6_POKEFAN_M_BLOCKS_UNDERGROUND_PATH")
+    // CeruleanGymGruntRunsIntoYouMovement intentionally overlaps the player during the bump cutscene.
+    assertHold core driver.Snapshot

@@ -139,7 +139,9 @@ module ConformanceLedger =
             [ "OBJECTTYPE_SCRIPT"; "OBJECTTYPE_TRAINER"; "OBJECTTYPE_ITEMBALL" ]
 
           yield! many BgEventKind ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated BG event kind is known; dispatch semantics need per-kind tests."
-            [ "BGEVENT_READ"; "BGEVENT_IFSET"; "BGEVENT_IFNOTSET"; "BGEVENT_ITEM"; "BGEVENT_UP"; "BGEVENT_LEFT"; "BGEVENT_RIGHT" ]
+            [ "BGEVENT_READ"; "BGEVENT_IFSET"; "BGEVENT_IFNOTSET"; "BGEVENT_UP"; "BGEVENT_LEFT"; "BGEVENT_RIGHT" ]
+
+          yield entry BgEventKind "BGEVENT_ITEM" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A17 Cerulean Gym hidden Machine Part runtime test covers A-press BG item dispatch, event gating, item grant, and return-to-manager consumption."
 
           yield! many MapCallbackKind ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Map-entry callbacks run through the scheduler, but callback-kind ordering still needs conformance tests."
             [ "MAPCALLBACK_NEWMAP"; "MAPCALLBACK_TILES"; "MAPCALLBACK_OBJECTS"; "MAPCALLBACK_CMDQUEUE" ]
