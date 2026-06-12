@@ -270,6 +270,7 @@ Progress:
 - ✅ C1 batch 21: `EFFECT_BEAT_UP`.
 - ✅ C1 batch 22: `EFFECT_COUNTER`.
 - ✅ C1 batch 23: `EFFECT_DISABLE`.
+- ✅ C1 batch 24: `EFFECT_ENCORE`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

@@ -63,6 +63,10 @@ type VolatileStatus =
       /// Future Sight countdown and move for the end-of-turn payoff.
       FutureSightCounter: int option
       FutureSightMove: MoveData option
+      /// Last move that reached the move animation path.
+      LastMove: MoveData option
+      /// Last move eligible for Counter/Disable targeting.
+      LastCounterMove: MoveData option
       /// Mist is active: blocks opponent's stat-lowering moves.
       /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
       /// Accuracy, and Evasion.
@@ -84,6 +88,8 @@ type VolatileStatus =
       DestinyBond: bool
       /// Encore countdown on this mon; 0 means inactive.
       EncoreTimer: int option
+      /// The move index forced by Encore.
+      EncoreMoveIndex: int option
       /// Disable countdown on this mon; 0 means inactive.
       DisableTimer: int option
       /// The move index disabled by Disable.
@@ -121,6 +127,8 @@ module VolatileStatus =
           RageCounter = 0
           FutureSightCounter = None
           FutureSightMove = None
+          LastMove = None
+          LastCounterMove = None
           Mist = false
           CantEscape = false
           Nightmare = false
@@ -130,6 +138,7 @@ module VolatileStatus =
           ProtectCount = 0
           DestinyBond = false
           EncoreTimer = None
+          EncoreMoveIndex = None
           DisableTimer = None
           DisabledMoveIndex = None
           LockOn = false

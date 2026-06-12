@@ -2977,6 +2977,50 @@ let ``C23 Disable fails before the opponent has a last move`` () =
     Assert.True(after.Enemy.Volatile.DisabledMoveIndex.IsNone)
     Assert.Contains(after.Messages, fun m -> m = "But it failed!")
 
+[<Fact>]
+let ``C24 Encore targets the opponent's previous last move and forces it this turn`` () =
+    let encore = { Moves.byName "ENCORE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ encore ]
+            Pp = [ encore.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle; splash ]
+            Pp = [ tackle.Pp; splash.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some splash } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 29u)
+
+    Assert.Equal(Some 1, after.Enemy.Volatile.EncoreMoveIndex)
+    Assert.True(after.Enemy.Volatile.EncoreTimer.Value >= 2)
+    Assert.True(after.Enemy.Volatile.EncoreTimer.Value <= 5)
+    Assert.Equal(player.Hp, after.Player.Hp)
+    Assert.Contains(after.Messages, fun m -> m.Contains("SPLASH got an encore"))
+    Assert.Contains(after.Messages, fun m -> m.Contains("ENEMY used SPLASH"))
+
+[<Fact>]
+let ``C24 Encore fails for excluded last moves`` () =
+    let encore = { Moves.byName "ENCORE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ encore ]
+            Pp = [ encore.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle; encore ]
+            Pp = [ tackle.Pp; encore.Pp ]
+            Volatile = { VolatileStatus.empty with LastMove = Some encore } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 31u)
+
+    Assert.True(after.Enemy.Volatile.EncoreTimer.IsNone)
+    Assert.True(after.Enemy.Volatile.EncoreMoveIndex.IsNone)
+    Assert.Contains(after.Messages, fun m -> m.Contains("didn't affect"))
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

@@ -270,9 +270,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C23 BattleTests audit Disable's last-counter-move targeting, PP/non-active failure gates, random 2-8 turn count, and disabled-move pre-turn block against BattleCommand_Disable."
             [ "EFFECT_DISABLE" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C24 BattleTests audit Encore's previous-last-move targeting, excluded move failures, 3-6 turn count, and same-turn forced move behavior against BattleCommand_Encore."
+            [ "EFFECT_ENCORE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_ENCORE"
-              "EFFECT_FUTURE_SIGHT"
+            [ "EFFECT_FUTURE_SIGHT"
               "EFFECT_MIRROR_COAT"
               "EFFECT_OHKO"
               "EFFECT_RAMPAGE"

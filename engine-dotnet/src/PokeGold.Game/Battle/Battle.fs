@@ -699,8 +699,8 @@ module Battle =
         // Slot 14: Encore timer.
         let pEncore = if p.Volatile.EncoreTimer.IsSome then Some (p.Volatile.EncoreTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
         let eEncore = if e.Volatile.EncoreTimer.IsSome then Some (e.Volatile.EncoreTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
-        p <- { p with Volatile = { p.Volatile with EncoreTimer = pEncore } }
-        e <- { e with Volatile = { e.Volatile with EncoreTimer = eEncore } }
+        p <- { p with Volatile = { p.Volatile with EncoreTimer = pEncore; EncoreMoveIndex = if pEncore.IsSome then p.Volatile.EncoreMoveIndex else None } }
+        e <- { e with Volatile = { e.Volatile with EncoreTimer = eEncore; EncoreMoveIndex = if eEncore.IsSome then e.Volatile.EncoreMoveIndex else None } }
 
         (p, e, ps, es, wt, wtType, msgs, r)
 
@@ -881,8 +881,12 @@ module Battle =
         let mutable skipEnemyAction = false
         let mutable playerDamageTaken = 0
         let mutable enemyDamageTaken = 0
-        let mutable playerLastCounterMove: MoveData option = None
-        let mutable enemyLastCounterMove: MoveData option = None
+        let mutable playerLastCounterMove = player.Volatile.LastCounterMove
+        let mutable enemyLastCounterMove = enemy.Volatile.LastCounterMove
+        let mutable playerLastMove = player.Volatile.LastMove
+        let mutable enemyLastMove = enemy.Volatile.LastMove
+        let mutable forcedPlayerMoveIndex: int option = None
+        let mutable forcedEnemyMoveIndex: int option = None
 
         let priorityOf (move: MoveData) =
             if move.Effect = "EFFECT_PRIORITY_HIT" then 1 else 0
@@ -929,9 +933,20 @@ module Battle =
                 skipEnemyAction <- false
                 false
             else
-                let user, foe, move, mvIndex, isStruggle =
+                let user, foe, selectedMove, selectedMoveIndex, isStruggle =
                     if playerIsUser then player, enemy, playerMv, playerMvIndex, playerStruggle
                     else enemy, player, enemyMv, enemyMvIndex, enemyStruggle
+
+                let forcedMoveIndex =
+                    match if playerIsUser then forcedPlayerMoveIndex else forcedEnemyMoveIndex with
+                    | Some index -> Some index
+                    | None when user.Volatile.EncoreTimer.IsSome -> user.Volatile.EncoreMoveIndex
+                    | None -> None
+
+                let move, mvIndex =
+                    match forcedMoveIndex with
+                    | Some index when index >= 0 && index < user.Moves.Length -> user.Moves.[index], index
+                    | _ -> selectedMove, selectedMoveIndex
 
                 let storedCharge = chargingMoveOf user
                 let chargeTurn = storedCharge.IsSome
@@ -1027,7 +1042,33 @@ module Battle =
                             // ProtectChance fails if the opponent already moved.
                             let opponentWentFirst = not userMovedFirst
                             let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit =
-                                if moveToUse.Effect = "EFFECT_DISABLE" then
+                                if moveToUse.Effect = "EFFECT_ENCORE" then
+                                    let hit, rng = checkHit user foe moveToUse rng weatherType
+                                    if not hit then
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                    else
+                                        let lastOppMove =
+                                            if playerIsUser then enemyLastMove else playerLastMove
+                                        let encoreResult =
+                                            match lastOppMove with
+                                            | Some lastMove when foe.Volatile.EncoreTimer.IsNone && lastMove.Name <> "STRUGGLE" && lastMove.Effect <> "EFFECT_ENCORE" && lastMove.Effect <> "EFFECT_MIRROR_MOVE" ->
+                                                foe.Moves
+                                                |> List.tryFindIndex (fun candidate -> candidate.Name = lastMove.Name)
+                                                |> Option.bind (fun idx ->
+                                                    if idx < foe.Pp.Length && foe.Pp.[idx] > 0 then Some(idx, lastMove) else None)
+                                            | _ -> None
+
+                                        match encoreResult with
+                                        | Some(index, encoredMove) ->
+                                            let roll, rng = Rng.next rng
+                                            let duration = (roll &&& 3) + 3
+                                            let foe = { foe with Volatile = { foe.Volatile with EncoreTimer = Some duration; EncoreMoveIndex = Some index } }
+                                            if not opponentWentFirst then
+                                                if playerIsUser then forcedEnemyMoveIndex <- Some index else forcedPlayerMoveIndex <- Some index
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{encoredMove.Name} got an encore!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                        | None ->
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_DISABLE" then
                                     let hit, rng = checkHit user foe moveToUse rng weatherType
                                     if not hit then
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
@@ -1098,10 +1139,18 @@ module Battle =
                             if hit then
                                 if playerIsUser then
                                     playerLastCounterMove <- Some moveToUse
+                                    playerLastMove <- Some moveToUse
                                     enemyDamageTaken <- lastDamage
                                 else
                                     enemyLastCounterMove <- Some moveToUse
+                                    enemyLastMove <- Some moveToUse
                                     playerDamageTaken <- lastDamage
+
+                            let user =
+                                if hit then
+                                    { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
+                                else
+                                    user
 
                             // Clear the charge window after the second-turn execution.
                             let user =
