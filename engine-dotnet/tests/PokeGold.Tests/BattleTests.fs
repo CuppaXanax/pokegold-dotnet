@@ -4130,6 +4130,55 @@ let ``C29 Sketch fails for protected targets and already known last moves`` () =
     Assert.Contains(afterDuplicate.Messages, fun msg -> msg.Contains("didn't affect"))
 
 [<Fact>]
+let ``C30 Sleep Talk samples slots until it calls a usable non two-turn move`` () =
+    let sleepTalk = Moves.byName "SLEEP_TALK"
+    let fly = Moves.byName "FLY"
+    let bide = Moves.byName "BIDE"
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ sleepTalk; fly; bide; tackle ]
+            Pp = [ sleepTalk.Pp; fly.Pp; bide.Pp; tackle.Pp ]
+            Status = Sleep 3 }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 83u)
+
+    Assert.Equal(Sleep 2, after.Player.Status)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("is fast asleep"))
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("Sleep Talk called TACKLE"))
+    Assert.True(after.Enemy.Hp < enemy.Hp)
+    Assert.Equal(Some "TACKLE", after.Player.Volatile.LastMove |> Option.map (fun move -> move.Name))
+    Assert.Equal(Some "TACKLE", after.Player.Volatile.LastCounterMove |> Option.map (fun move -> move.Name))
+
+[<Fact>]
+let ``C30 Sleep Talk excludes the disabled slot and records the called move`` () =
+    let sleepTalk = Moves.byName "SLEEP_TALK"
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ sleepTalk; tackle; splash ]
+            Pp = [ sleepTalk.Pp; tackle.Pp; splash.Pp ]
+            Status = Sleep 3
+            Volatile = { VolatileStatus.empty with DisabledMoveIndex = Some 1 } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 89u)
+
+    Assert.Equal(enemy.Hp, after.Enemy.Hp)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("Sleep Talk called SPLASH"))
+    Assert.Equal(Some "SPLASH", after.Player.Volatile.LastMove |> Option.map (fun move -> move.Name))
+    Assert.Equal(Some "SPLASH", after.Player.Volatile.LastCounterMove |> Option.map (fun move -> move.Name))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

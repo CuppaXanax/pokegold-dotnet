@@ -193,6 +193,15 @@ module Effects =
             && move.Effect <> "EFFECT_SLEEP_TALK")
         |> List.sortBy (fun move -> move.Name)
 
+    let private sleepTalkBlockedEffects =
+        [ "EFFECT_SKULL_BASH"
+          "EFFECT_RAZOR_WIND"
+          "EFFECT_SKY_ATTACK"
+          "EFFECT_SOLARBEAM"
+          "EFFECT_FLY"
+          "EFFECT_BIDE" ]
+        |> Set.ofList
+
     /// Map a move's effect constant to its command sequence. Damaging moves
     /// with no special effect are a single `Damage`; the recognised stat moves
     /// drop the target's stat. Unknown effects fall back to `Damage` when the
@@ -1039,18 +1048,39 @@ module Effects =
                 runCalledMove called $"{ctx.User.Species.Name}'s Metronome called {called.Name}!" { ctx with Rng = rng' }
 
         | SleepTalkMove ->
+            let clearLast user =
+                { user with Volatile = { user.Volatile with LastMove = None; LastCounterMove = None } }
+            let ctx = { ctx with User = clearLast ctx.User }
+            let disabledIndex = ctx.User.Volatile.DisabledMoveIndex
+            let isCallable index (move: MoveData) =
+                move.Name <> ctx.Move.Name
+                && not (disabledIndex = Some index)
+                && not (Set.contains move.Effect sleepTalkBlockedEffects)
+
             match ctx.User.Status with
             | Sleep _ ->
                 let candidates =
                     ctx.User.Moves
-                    |> List.filter (fun move -> move.Effect <> "EFFECT_SLEEP_TALK" && move.Effect <> "EFFECT_MIRROR_MOVE")
+                    |> List.indexed
+                    |> List.filter (fun (index, move) -> isCallable index move)
 
                 match candidates with
                 | [] -> { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
                 | _ ->
-                    let roll, rng' = Rng.next ctx.Rng
-                    let called = candidates.[roll % candidates.Length]
-                    runCalledMove called $"{ctx.User.Species.Name}'s Sleep Talk called {called.Name}!" { ctx with Rng = rng' }
+                    let rec sample rng =
+                        let roll, rng' = Rng.next rng
+                        let index = roll &&& 3
+                        match ctx.User.Moves |> List.tryItem index with
+                        | Some called when isCallable index called -> called, rng'
+                        | _ -> sample rng'
+
+                    let called, rng' = sample ctx.Rng
+                    let calledCtx =
+                        runCalledMove called $"{ctx.User.Species.Name}'s Sleep Talk called {called.Name}!" { ctx with Rng = rng' }
+                    let user =
+                        { calledCtx.User with
+                            Volatile = { calledCtx.User.Volatile with LastMove = Some called; LastCounterMove = Some called } }
+                    { calledCtx with User = user }
             | _ ->
                 { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 

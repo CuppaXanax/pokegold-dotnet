@@ -104,7 +104,7 @@ module Battle =
             let remaining = turnsLeft - 1
             if selectedMove.Effect = "EFFECT_SLEEP_TALK" && remaining > 0 then
                 let user' = { user with Status = Sleep remaining }
-                (true, false, user', [], rng)
+                (true, false, user', [ $"{user.Species.Name} is fast asleep!" ], rng)
             elif remaining = 0 then
                 let user' = { user with Status = Healthy }
                 (true, false, user', [ $"{user.Species.Name} woke up!" ], rng)
@@ -1203,18 +1203,33 @@ module Battle =
                                 else
                                     foe
 
-                            if hit && moveToUse.Effect <> "EFFECT_SKETCH" then
-                                if playerIsUser then
-                                    playerLastCounterMove <- Some moveToUse
-                                    playerLastMove <- Some moveToUse
-                                    enemyDamageTaken <- lastDamage
-                                else
-                                    enemyLastCounterMove <- Some moveToUse
-                                    enemyLastMove <- Some moveToUse
-                                    playerDamageTaken <- lastDamage
+                            if hit then
+                                match moveToUse.Effect with
+                                | "EFFECT_SKETCH" -> ()
+                                | "EFFECT_SLEEP_TALK" ->
+                                    match user.Volatile.LastCounterMove with
+                                    | Some called ->
+                                        if playerIsUser then
+                                            playerLastCounterMove <- Some called
+                                            playerLastMove <- Some called
+                                            enemyDamageTaken <- lastDamage
+                                        else
+                                            enemyLastCounterMove <- Some called
+                                            enemyLastMove <- Some called
+                                            playerDamageTaken <- lastDamage
+                                    | None -> ()
+                                | _ ->
+                                    if playerIsUser then
+                                        playerLastCounterMove <- Some moveToUse
+                                        playerLastMove <- Some moveToUse
+                                        enemyDamageTaken <- lastDamage
+                                    else
+                                        enemyLastCounterMove <- Some moveToUse
+                                        enemyLastMove <- Some moveToUse
+                                        playerDamageTaken <- lastDamage
 
                             let user =
-                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" then
+                                if hit && moveToUse.Effect <> "EFFECT_SKETCH" && moveToUse.Effect <> "EFFECT_SLEEP_TALK" then
                                     { user with Volatile = { user.Volatile with LastCounterMove = Some moveToUse; LastMove = Some moveToUse } }
                                 else
                                     user
