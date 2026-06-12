@@ -94,7 +94,9 @@ type VolatileStatus =
       /// Bide lock-in turns remaining; damage taken while active is released at
       /// double power when the counter expires.
       BideTurns: int option
-      BideDamage: int }
+      BideDamage: int
+      /// Defense Curl substatus, used to double Rollout's damage ramp.
+      Curled: bool }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -126,7 +128,8 @@ module VolatileStatus =
           Foresight = false
           Attracted = false
           BideTurns = None
-          BideDamage = 0 }
+          BideDamage = 0
+          Curled = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;

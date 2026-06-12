@@ -251,6 +251,8 @@ Progress:
   `EFFECT_RESET_STATS`, `EFFECT_DREAM_EATER`, `EFFECT_PAIN_SPLIT`,
   `EFFECT_SPLASH`.
 - ✅ C1 batch 10: `EFFECT_SELFDESTRUCT`, `EFFECT_TRI_ATTACK`.
+- ✅ C1 batch 11: `EFFECT_ALL_UP_HIT`, `EFFECT_ATTACK_UP_HIT`,
+  `EFFECT_DEFENSE_UP_HIT`, `EFFECT_DEFENSE_CURL`, `EFFECT_ROLLOUT`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

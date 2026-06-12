@@ -67,6 +67,8 @@ type EffectCommand =
     | Damage
     | LowerTargetStat of Stat
     | RaiseUserStat of Stat
+    | RaiseAllUserStats
+    | SetDefenseCurl
     /// Recoil: user takes 1/4 of the damage dealt (min 1 HP).
     /// Used by EFFECT_RECOIL_HIT (Struggle, Take Down, Double-Edge, etc.).
     | Recoil

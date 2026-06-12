@@ -2336,6 +2336,56 @@ let ``C10 Tri Attack chooses paralysis freeze or burn after effect chance succee
 
     Assert.Equal(Freeze, after.Foe.Status)
 
+[<Fact>]
+let ``C11 audited stat-up-hit curl and rollout effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_ATTACK_UP_HIT", [ Damage; EffectChance(RaiseUserStat Attack) ]
+          "EFFECT_DEFENSE_UP_HIT", [ Damage; EffectChance(RaiseUserStat Defense) ]
+          "EFFECT_ALL_UP_HIT", [ Damage; EffectChance RaiseAllUserStats ]
+          "EFFECT_DEFENSE_CURL", [ RaiseUserStat Defense; SetDefenseCurl ]
+          "EFFECT_ROLLOUT", [ RolloutDamage ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 60 (ty "ROCK") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C11 AncientPower uses one effect chance gate for all five stat raises`` () =
+    let ancientPower = { Moves.byName "ANCIENTPOWER" with EffectChance = 255 }
+    let user = mon "USER" (ty "ROCK") (ty "ROCK") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after =
+        Effects.forMove ancientPower
+        |> List.fold (fun ctx cmd -> Effects.applyCtx ctx cmd) (mkCtx user foe ancientPower)
+
+    Assert.True(after.Foe.Hp < foe.Hp)
+    Assert.Equal(1, after.User.AtkStage)
+    Assert.Equal(1, after.User.DefStage)
+    Assert.Equal(1, after.User.SpdStage)
+    Assert.Equal(1, after.User.SpAtkStage)
+    Assert.Equal(1, after.User.SpDefStage)
+
+[<Fact>]
+let ``C11 Defense Curl marks the user curled and Rollout doubles after STAB`` () =
+    let defenseCurl = Moves.byName "DEFENSE_CURL"
+    let rollout = Moves.byName "ROLLOUT"
+    let user = mon "USER" (ty "ROCK") (ty "ROCK") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let curled =
+        Effects.forMove defenseCurl
+        |> List.fold (fun ctx cmd -> Effects.applyCtx ctx cmd) (mkCtx user foe defenseCurl)
+
+    Assert.Equal(1, curled.User.DefStage)
+    Assert.True(curled.User.Volatile.Curled)
+
+    let afterRollout =
+        Effects.applyCtx { mkCtx curled.User foe rollout with DefenseCurlUsed = curled.User.Volatile.Curled } RolloutDamage
+
+    Assert.Equal(44, afterRollout.LastDamage)
+    Assert.Equal(56, afterRollout.Foe.Hp)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

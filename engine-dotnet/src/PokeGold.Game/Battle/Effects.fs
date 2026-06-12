@@ -200,7 +200,7 @@ module Effects =
         | "EFFECT_TELEPORT" -> [ TeleportAway ]
         | "EFFECT_SOLARBEAM" -> [ Damage; BeginCharging ]
         | "EFFECT_THUNDER" -> [ Damage; EffectChance InflictParalyze ]
-        | "EFFECT_DEFENSE_CURL" -> [ RaiseUserStat Defense ]
+        | "EFFECT_DEFENSE_CURL" -> [ RaiseUserStat Defense; SetDefenseCurl ]
         | "EFFECT_FLAME_WHEEL" -> [ Damage; EffectChance InflictBurn ]
         | "EFFECT_SACRED_FIRE" -> [ Damage; EffectChance InflictBurn ]
         | "EFFECT_HEAL" -> [ HealUser ]
@@ -217,7 +217,7 @@ module Effects =
         | "EFFECT_PSYCH_UP" -> [ PsychUp ]
         | "EFFECT_DESTINY_BOND" -> [ DestinyBond ]
         | "EFFECT_PAIN_SPLIT" -> [ PainSplit ]
-        | "EFFECT_ALL_UP_HIT" -> [ Damage; EffectChance (RaiseUserStat Attack); EffectChance (RaiseUserStat Defense); EffectChance (RaiseUserStat Speed); EffectChance (RaiseUserStat SpAttack); EffectChance (RaiseUserStat SpDefense) ]
+        | "EFFECT_ALL_UP_HIT" -> [ Damage; EffectChance RaiseAllUserStats ]
         | "EFFECT_FAKE_OUT" -> [ Damage; SetFlinch ]
         | "EFFECT_SNORE" -> [ SnoreDamage ]
         | "EFFECT_ENCORE" -> [ SetEncore ]
@@ -399,6 +399,14 @@ module Effects =
             else
                 let user = shiftStage s 1 ctx.User
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name}'s {statName s} rose!" ] }
+
+        | RaiseAllUserStats ->
+            [ Attack; Defense; Speed; SpAttack; SpDefense ]
+            |> List.fold (fun c stat -> applyCtx c (RaiseUserStat stat)) ctx
+
+        | SetDefenseCurl ->
+            let user = { ctx.User with Volatile = { ctx.User.Volatile with Curled = true } }
+            { ctx with User = user; DefenseCurlUsed = true }
 
         | InflictSleep ->
             if safeguardBlocked ctx then
@@ -1267,20 +1275,19 @@ module Effects =
 
         | RolloutDamage ->
             // BattleCommand_RolloutPower (move_effects/rollout.asm).
-            // Power doubles each turn (count 1-5). Defense Curl adds +1 to the
-            // doubling exponent. Lock-in turn management is M13.7.
+            // Damage doubles each turn after STAB/type, before variation.
+            // Defense Curl adds +1 to the doubling exponent.
             let count = min 5 (ctx.RolloutCount + 1)
-            let doublings = if ctx.DefenseCurlUsed then count else count - 1
-            let mutable power = ctx.Move.Power
-            for _ in 1 .. doublings do
-                power <- power * 2
-            let m = { ctx.Move with Power = power }
-            let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
+            let b = count + (if ctx.DefenseCurlUsed || ctx.User.Volatile.Curled then 1 else 0)
+            let mutable dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit Damage.MaxRoll ctx.IsStruggle
+            for _ in 2 .. b do
+                dmg <- min 65535 (dmg * 2)
+            let dmg = dmg * ctx.Roll / Damage.MaxRoll
             let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then
-                      match Damage.effectivenessTimesTen m foe with
+                      match Damage.effectivenessTimesTen ctx.Move foe with
                       | 0 -> $"It doesn't affect {foe.Species.Name}..."
                       | e when e > 10 -> "It's super effective!"
                       | e when e < 10 -> "It's not very effective..."
