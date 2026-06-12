@@ -1526,8 +1526,13 @@ module Effects =
 
         | RageDamage ->
             // BattleCommand_Rage (move_effects/rage.asm).
-            // Normal damage + set rage flag. The atk-up-on-hit mechanic is M13.7 turn-state.
-            let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
+            // BattleCommand_RageDamage adds base damage once per RageCounter
+            // before damage variation; BattleCommand_Rage then sets the flag.
+            let baseDamage = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit Damage.MaxRoll ctx.IsStruggle
+            let mutable dmg = baseDamage
+            for _ in 1 .. ctx.User.Volatile.RageCounter do
+                dmg <- min 65535 (dmg + baseDamage)
+            let dmg = dmg * ctx.Roll / Damage.MaxRoll
             let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
             let user = { ctx.User with Volatile = { ctx.User.Volatile with Rage = true } }
             let notes =

@@ -56,8 +56,10 @@ type VolatileStatus =
       Recharge: bool
       /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
       Rampage: int option
-      /// Rage mode: this mon's Attack rises each time it is hit.
+      /// Rage mode: this mon's damage counter rises each time it is hit.
       Rage: bool
+      /// Rage damage counter, incremented when a raging mon is hit.
+      RageCounter: int
       /// Future Sight countdown and move for the end-of-turn payoff.
       FutureSightCounter: int option
       FutureSightMove: MoveData option
@@ -114,6 +116,7 @@ module VolatileStatus =
           Recharge = false
           Rampage = None
           Rage = false
+          RageCounter = 0
           FutureSightCounter = None
           FutureSightMove = None
           Mist = false

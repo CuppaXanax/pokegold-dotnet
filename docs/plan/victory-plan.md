@@ -265,6 +265,7 @@ Progress:
   `EFFECT_RAZOR_WIND`, `EFFECT_SKULL_BASH`, `EFFECT_SKY_ATTACK`.
 - ✅ C1 batch 18: `EFFECT_MORNING_SUN`, `EFFECT_SYNTHESIS`,
   `EFFECT_MOONLIGHT`.
+- ✅ C1 batch 19: `EFFECT_RAGE`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

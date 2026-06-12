@@ -2710,6 +2710,41 @@ let ``C18 weather heal restores half by default full in sun and quarter in rain 
     Assert.Equal(user.MaxHp, full.User.Hp)
     Assert.Contains(full.Messages, fun msg -> msg.Contains("HP is full"))
 
+[<Fact>]
+let ``C19 Rage uses its counter as a pre-variation damage multiplier`` () =
+    let rage = Moves.byName "RAGE"
+    Assert.Equal<EffectCommand list>([ RageDamage ], Effects.forMove rage)
+
+    let user =
+        { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100 with
+            Volatile = { VolatileStatus.empty with RageCounter = 2 } }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after = Effects.applyCtx (mkCtx user foe rage) RageDamage
+
+    Assert.True(after.User.Volatile.Rage)
+    Assert.Equal(45, after.LastDamage)
+    Assert.Equal(55, after.Foe.Hp)
+
+[<Fact>]
+let ``C19 hitting a raging target builds Rage counter without changing Attack stage`` () =
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let growlMove = { growl with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ tackle ]
+            Pp = [ 35 ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ growlMove ]
+            Pp = [ 40 ]
+            Volatile = { VolatileStatus.empty with Rage = true } }
+
+    let after = Battle.create player enemy 42u |> Battle.chooseMove 0
+
+    Assert.Equal(1, after.Enemy.Volatile.RageCounter)
+    Assert.Equal(0, after.Enemy.AtkStage)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

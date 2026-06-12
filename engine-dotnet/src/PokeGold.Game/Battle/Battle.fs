@@ -302,7 +302,7 @@ module Battle =
 
             let foe =
                 if ctx.Foe.Volatile.Rage && ctx.LastDamage > 0 then
-                    { ctx.Foe with AtkStage = min 6 (ctx.Foe.AtkStage + 1) }
+                    { ctx.Foe with Volatile = { ctx.Foe.Volatile with RageCounter = min 255 (ctx.Foe.Volatile.RageCounter + 1) } }
                 else
                     ctx.Foe
 
