@@ -156,6 +156,7 @@
     <Compile Include="Scenes\WeekdayScene.fs" />
     <Compile Include="Scenes\MomBankScene.fs" />
     <Compile Include="Scenes\ScriptMenuScene.fs" />
+    <Compile Include="Scenes\ApricornSelectionScene.fs" />
     <Compile Include="Scenes\StartMenuScene.fs" />
     <Compile Include="Scenes\PackUseGive.fs" />
     <Compile Include="Scenes\SummaryScene.fs" />

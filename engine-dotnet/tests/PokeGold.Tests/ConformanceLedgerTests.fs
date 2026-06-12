@@ -109,6 +109,8 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "SetDayOfWeek" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Weekday setup UI is covered by WeekdaySceneTests and OverworldSchedulerTests."
 
+          yield entry ScriptSpecial "SelectApricornForKurt" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 tests cover wScriptVar item-id resume, disassembly-order bag filtering/cancel, and KurtsHouse consuming the selected apricorn."
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -121,7 +123,7 @@ module ConformanceLedger =
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"; "DayCareLady"; "DayCareMan"; "DayCareManOutside"; "DayCareMon1"; "DayCareMon2"
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
               "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MoveDeletion"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
-              "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectApricornForKurt"; "SelectRandomBugContestContestants"
+              "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
               "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
@@ -153,6 +155,7 @@ module ConformanceLedger =
           yield entry SceneSurface "WeekdayScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "WeekdaySceneTests cover selection, confirmation, cancellation, and wrapping."
           yield entry SceneSurface "MomBankScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "CriticalSpecialSceneTests and OverworldSchedulerTests cover core Mom savings flows; exact digit/menu fidelity remains future UI work."
           yield entry SceneSurface "ScriptMenuScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Generic ROM script-menu UI is covered by CriticalSpecialSceneTests and ScriptTests; exact per-menu labels remain future menu-header decoding work."
+          yield entry SceneSurface "ApricornSelectionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 scene test covers disassembly-order picker entries, selection, and cancel."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "PokedexScene"; "SummaryScene" ]

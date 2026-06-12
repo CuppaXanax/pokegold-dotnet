@@ -121,6 +121,9 @@ type ScriptEffect =
     | CloseWindow
     /// `verticalmenu` / `2dmenu` — show the currently loaded script menu.
     | OpenScriptMenu of menu: string
+    /// `special SelectApricornForKurt` — pick an apricorn from the bag.
+    /// Resume with its numeric item id, or 0 for cancel/no apricorn.
+    | SelectApricornForKurt
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
@@ -367,6 +370,7 @@ module Script =
             | Special "InitialClearDSTFlag" -> suspend next world (SetDstFlag false)
             | Special "BankOfMom" -> suspend next world OpenMomBank
             | Special "PlayersHousePC" -> suspend { next with ScriptVar = 0 } world OpenPc
+            | Special "SelectApricornForKurt" -> suspend next world SelectApricornForKurt
             | Special "OverworldTownMap" -> suspend next world (OpenPokegear(MapTab, vm.MapId, None))
             | Special "MapRadio" -> suspend next world (OpenPokegear(RadioTab, vm.MapId, Some vm.ScriptVar))
             | Special "DisplayMoneyAndCoinBalance" -> suspend next world (DisplayBalance MoneyAndCoins)

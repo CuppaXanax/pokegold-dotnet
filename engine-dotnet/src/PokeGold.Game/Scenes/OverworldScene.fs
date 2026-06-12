@@ -88,6 +88,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable lastText: (string * string) option = None
     let mutable askPhoneResult = 1
     let mutable menuResult = 0
+    let mutable apricornResult: string option = None
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -817,6 +818,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         pending <- Some(vm, effect)
                         menuResult <- 0
                         stop (Push(ScriptMenuScene(content, menu, fun result -> menuResult <- result) :> Scene))
+                    | SelectApricornForKurt ->
+                        match Apricorns.available player.Bag with
+                        | [] -> resume (Some 0) vm
+                        | apricorns ->
+                            pending <- Some(vm, effect)
+                            apricornResult <- None
+                            stop (Push(ApricornSelectionScene(content, apricorns, fun result -> apricornResult <- result) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -1326,6 +1334,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match effect with
                     | AskYesNo -> Some yesNoResult
                     | OpenScriptMenu _ -> Some menuResult
+                    | SelectApricornForKurt ->
+                        match apricornResult with
+                        | Some apricorn ->
+                            this.RemoveItem apricorn 1
+                            Some(Apricorns.itemId apricorn)
+                        | None -> Some 0
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

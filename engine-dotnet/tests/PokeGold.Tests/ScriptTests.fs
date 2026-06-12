@@ -619,6 +619,52 @@ let ``phone and rival specials emit runtime effects`` () =
         effects)
 
 [<Fact>]
+let ``SelectApricornForKurt resumes with the selected apricorn item id`` () =
+    let constants = Map.ofList [ "BLU_APRICORN", 0x59 ]
+
+    let prog =
+        ScriptParser.parseTextWithConstants
+           constants
+           "S:\n\
+            \tspecial SelectApricornForKurt\n\
+            \tifequal BLU_APRICORN, .Blue\n\
+            \tifequal 0, .Cancel\n\
+            \twritetext Other\n\
+            \tend\n\
+            .Blue:\n\
+            \twritetext Blue\n\
+            \tend\n\
+            .Cancel:\n\
+            \twritetext Cancel\n\
+            \tend\n"
+
+    let _, selected =
+        drive
+           (function
+            | SelectApricornForKurt -> Some 0x59
+            | _ -> None)
+           World.empty
+           "S"
+           prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ SelectApricornForKurt; ShowText("Blue", false) ],
+        selected)
+
+    let _, cancelled =
+        drive
+           (function
+            | SelectApricornForKurt -> Some 0
+            | _ -> None)
+           World.empty
+           "S"
+           prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ SelectApricornForKurt; ShowText("Cancel", false) ],
+        cancelled)
+
+[<Fact>]
 let ``special phone call state is stored in script world`` () =
     let prog =
         parse

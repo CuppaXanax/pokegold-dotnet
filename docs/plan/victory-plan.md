@@ -179,7 +179,7 @@ Ordered by value:
 
 | # | Special(s) | Source of truth | Needed for | Sketch |
 |---|---|---|---|---|
-| B1 | `SelectApricornForKurt` | `engine/events/specials.asm:345`, picker in `engine/menus/menu_2.asm` (`Kurt_SelectApricorn`), ball delivery in `maps/KurtsHouse.asm` | 100% (apricorn balls) | suspend on a list-pick effect over apricorns in bag; result → `wScriptVar` (item id, 0 = cancel) and the script tosses the apricorn. Apricorn→ball table: `data/items/apricorn_balls.asm` |
+| ✅ B1 | `SelectApricornForKurt` | `engine/events/specials.asm:345`, picker in `engine/menus/menu_2.asm` (`Kurt_SelectApricorn`), ball delivery in `maps/KurtsHouse.asm` | 100% (apricorn balls) | suspend on a list-pick effect over apricorns in bag; result → `wScriptVar` (item id, 0 = cancel) and the script tosses the apricorn. Apricorn→ball table: `data/items/apricorn_balls.asm` |
 | B2 | `DayCareMan`/`DayCareLady`/`DayCareManOutside`/`DayCareMon1/2`/`CheckFirstMonIsEgg` | `engine/events/daycare.asm` | 100% (breeding; Breeding logic already exists in `Player/`) | deposit/withdraw via a party-pick effect; egg generation already tested in `BreedingTests.fs` — these specials are just the script seam |
 | B3 | `MoveDeletion` | `engine/events/move_deleter.asm` (Blackthorn) | 100% (forgetting HMs) | party-pick + move-pick effect; remove move, compact list |
 | B4 | `InitRoamMons` | `engine/events/specials.asm` | 100% dex (Raikou/Entei) | seed roamer state (species, level 40, random route) into world/save; encounter hook reads it |
