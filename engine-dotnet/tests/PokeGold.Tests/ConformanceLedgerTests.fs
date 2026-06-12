@@ -140,6 +140,9 @@ module ConformanceLedger =
           yield! many ScriptSpecial FaithfulTested [ SideSystem; RequiredFor100Percent ] "B11 tests cover the disassembly DV/OT-id Magikarp length formula, new-record reward, too-short branch, and current-record sign text."
             [ "CheckMagikarpLength"; "MagikarpHouseSign" ]
 
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B12 tests cover UnownPuzzle returning solved truth so chamber completion scripts set the right events/flags, plus Research Center UnownPrinter UI dispatch; exact sliding-panel and Game Boy Printer UI fidelity remains future polish."
+            [ "UnownPrinter"; "UnownPuzzle" ]
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -159,7 +162,7 @@ module ConformanceLedger =
 
           yield! many ScriptSpecial StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for cosmetic/host presentation behavior."
             [ "ClearBGPalettes"; "Diploma"; "FadeInFromBlack"; "FadeInFromWhite"; "FadeOutToBlack"; "FadeOutToWhite"; "LoadUsedSpritesGFX"
-              "PlayCurMonCry"; "PlaySlowCry"; "PrintDiploma"; "ReloadSpritesNoPalettes"; "UnownPrinter"; "UnownPuzzle"; "UpdateSprites" ]
+              "PlayCurMonCry"; "PlaySlowCry"; "PrintDiploma"; "ReloadSpritesNoPalettes"; "UpdateSprites" ]
 
           yield! many ScriptSpecial StubNoOp [ LinkOnly; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for link-only systems."
             [ "CableClubCheckWhichChris"; "CheckBothSelectedSameRoom"; "CheckLinkTimeout_Receptionist"; "CheckTimeCapsuleCompatibility"; "CloseLink"

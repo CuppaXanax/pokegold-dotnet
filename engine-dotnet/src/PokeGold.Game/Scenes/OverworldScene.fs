@@ -93,6 +93,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable haircutResult = 0
     let mutable billsGrandfatherResult = 0
     let mutable magikarpLengthResult = 1
+    let mutable unownPuzzleResult = 0
     let mutable contestPartyBackup: PartyMon list option = None
     let mutable prevA = false
     let mutable prevStart = false
@@ -751,6 +752,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         world <- World.setBuffer "STRING_BUFFER_1" renderedLength world
         sprintf "CURRENT RECORD<PARA>%s caught by<LINE>%s<PROMPT>" renderedLength holder
 
+    member private _.UnownPuzzleText (puzzleId: int) =
+        let name =
+            match puzzleId with
+            | 1 -> "OMANYTE"
+            | 2 -> "AERODACTYL"
+            | 3 -> "HO-OH"
+            | _ -> "KABUTO"
+        sprintf "The %s sliding<LINE>panels clicked into<CONT>place.<PROMPT>" name
+
+    member private _.UnownPrinterText() =
+        "ALPH RUINS STAMP<PARA>All UNOWN forms are<LINE>ready to print.<PROMPT>"
+
     member private _.PlayGameCornerGame (game: string) (lucky: bool) =
         if Bag.count "COIN_CASE" player.Bag > 0 && player.Coins >= 3 then
             let win =
@@ -1163,6 +1176,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         pending <- Some(vm, effect)
                         let rendered = this.MagikarpRecordText()
                         lastText <- Some("KarpGuruRecordText", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
+                    | UnownPuzzle puzzleId ->
+                        pending <- Some(vm, effect)
+                        unownPuzzleResult <- 1
+                        let rendered = this.UnownPuzzleText puzzleId
+                        lastText <- Some("UnownPuzzle", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
+                    | UnownPrinter ->
+                        pending <- Some(vm, effect)
+                        let rendered = this.UnownPrinterText()
+                        lastText <- Some("UnownPrinter", rendered)
                         stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
@@ -1714,6 +1738,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | BillsGrandfather -> Some billsGrandfatherResult
                     | CheckMagikarpLength -> Some magikarpLengthResult
                     | MagikarpHouseSign -> None
+                    | UnownPuzzle _ -> Some unownPuzzleResult
+                    | UnownPrinter -> None
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

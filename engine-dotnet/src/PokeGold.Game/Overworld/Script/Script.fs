@@ -158,6 +158,10 @@ type ScriptEffect =
     | CheckMagikarpLength
     /// `special MagikarpHouseSign` — print the current longest-Magikarp record.
     | MagikarpHouseSign
+    /// `special UnownPuzzle` — run the Ruins of Alph sliding-panel puzzle and resume with solved truth.
+    | UnownPuzzle of puzzleId: int
+    /// `special UnownPrinter` — show the Unown stamp printer UI.
+    | UnownPrinter
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -418,6 +422,8 @@ module Script =
             | Special "BillsGrandfather" -> suspend next world BillsGrandfather
             | Special "CheckMagikarpLength" -> suspend next world CheckMagikarpLength
             | Special "MagikarpHouseSign" -> suspend next world MagikarpHouseSign
+            | Special "UnownPuzzle" -> suspend next world (UnownPuzzle vm.ScriptVar)
+            | Special "UnownPrinter" -> suspend next world UnownPrinter
             | Special "SelectRandomBugContestContestants" ->
                 let cleared =
                     bugContestantFlags

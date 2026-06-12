@@ -858,6 +858,34 @@ let ``Magikarp length specials emit measurement and sign effects`` () =
         effects)
 
 [<Fact>]
+let ``Unown puzzle and printer specials emit completion UI effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tsetval 2\n\
+             \tspecial UnownPuzzle\n\
+             \tiffalse .Failed\n\
+             \tspecial UnownPrinter\n\
+             \tend\n\
+             .Failed:\n\
+             \twritetext Failed\n\
+             \tend\n"
+
+    let _, effects =
+        drive
+            (function
+             | UnownPuzzle _ -> Some 1
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ UnownPuzzle 2
+          UnownPrinter ],
+        effects)
+
+[<Fact>]
 let ``CheckFirstMonIsEgg resumes with script var truth`` () =
     let prog =
         parse

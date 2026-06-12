@@ -623,3 +623,69 @@ let ``Magikarp house sign prints the current record`` () =
         tickStack stack buttons
 
     Assert.True(completed (), "Magikarp house sign should print the stored length record.")
+
+[<Fact>]
+let ``Unown puzzle auto-solve marks Kabuto chamber complete`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "RuinsOfAlphKabutoChamber" 3 3 Up)
+
+    overworld.Restore(World.empty, PlayerStateOps.initial)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        stack.Count = 1
+        && World.hasEvent "EVENT_SOLVED_KABUTO_PUZZLE" overworld.DebugWorld
+        && World.hasFlag "ENGINE_UNLOCKED_UNOWNS_A_TO_K" overworld.DebugWorld
+
+    let mutable frame = 0
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "Kabuto chamber puzzle should auto-solve and run the disassembly completion script.")
+
+[<Fact>]
+let ``Unown printer opens when all Unown forms are counted`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "RuinsOfAlphResearchCenter" 7 2 Up)
+    let world = World.empty |> World.setVar "VAR_UNOWNCOUNT" 26
+
+    overworld.Restore(world, PlayerStateOps.initial)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        let snapshot = overworld.RuntimeSnapshot
+        stack.Count = 1
+        && snapshot.LastTextLabel = Some "UnownPrinter"
+        && snapshot.LastRenderedText |> Option.exists (fun text -> text.Contains("ALPH RUINS STAMP"))
+
+    let mutable frame = 0
+    while frame < 4000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.True(completed (), "Research center printer should open the Unown printer when VAR_UNOWNCOUNT is complete.")
