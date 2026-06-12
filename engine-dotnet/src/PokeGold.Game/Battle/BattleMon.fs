@@ -78,6 +78,8 @@ type VolatileStatus =
       Protect: bool
       /// Endure is active for one turn.
       Endure: bool
+      /// Consecutive Protect/Endure uses; shared by both moves.
+      ProtectCount: int
       /// Destiny Bond will faint the attacker when this mon faints.
       DestinyBond: bool
       /// Encore countdown on this mon; 0 means inactive.
@@ -125,6 +127,7 @@ module VolatileStatus =
           Curse = false
           Protect = false
           Endure = false
+          ProtectCount = 0
           DestinyBond = false
           EncoreTimer = None
           DisableTimer = None

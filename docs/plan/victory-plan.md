@@ -266,6 +266,7 @@ Progress:
 - ✅ C1 batch 18: `EFFECT_MORNING_SUN`, `EFFECT_SYNTHESIS`,
   `EFFECT_MOONLIGHT`.
 - ✅ C1 batch 19: `EFFECT_RAGE`.
+- ✅ C1 batch 20: `EFFECT_PROTECT`, `EFFECT_ENDURE`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

@@ -60,6 +60,29 @@ module Effects =
         elif not (TypeChart.isPhysical ctx.Move.Type) && defenderSide.LightScreenTimer.IsSome && defenderSide.LightScreenTimer.Value > 0 then max 1 (dmg / 2)
         else dmg
 
+    let private resetProtectCount (m: BattleMon) =
+        { m with Volatile = { m.Volatile with ProtectCount = 0 } }
+
+    let private protectChance (ctx: MoveContext) =
+        if ctx.User.Volatile.Substitute.IsSome then
+            None
+        else
+            let threshold =
+                let mutable b = 0xff
+                for _ in 1 .. ctx.User.Volatile.ProtectCount do
+                    b <- b >>> 1
+                b
+
+            if threshold = 0 then
+                None
+            else
+                let rec nonzero rng =
+                    let roll, rng' = Rng.next rng
+                    if roll = 0 then nonzero rng' else roll, rng'
+
+                let roll, rng = nonzero ctx.Rng
+                if roll - 1 < threshold then Some rng else None
+
     let private safeguardBlocked (ctx: MoveContext) : bool =
         let defenderSide = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
         defenderSide.SafeguardTimer.IsSome && defenderSide.SafeguardTimer.Value > 0
@@ -327,25 +350,31 @@ module Effects =
             let dmg = damageToUserSide ctx dmg
             // Substitute absorbs damage (effect_commands.asm CheckSubstitute).
             let foe, subBroke, focusMsgs, rng =
-                match ctx.Foe.Volatile.Substitute with
-                | Some subHp ->
-                    let remaining = subHp - dmg
-                    if remaining <= 0 then
-                        let vol = { ctx.Foe.Volatile with Substitute = None }
-                        { ctx.Foe with Volatile = vol }, true, [], ctx.Rng
-                    else
-                        let vol = { ctx.Foe.Volatile with Substitute = Some remaining }
-                        { ctx.Foe with Volatile = vol }, false, [], ctx.Rng
-                | None ->
-                    match heldParam "HELD_FOCUS_BAND" ctx.Foe with
-                    | Some chance when ctx.Foe.Hp > 1 && dmg >= ctx.Foe.Hp ->
-                        let roll, rng' = Rng.next ctx.Rng
-                        if roll < chance then
-                            { ctx.Foe with Hp = 1 }, false, [ $"{ctx.Foe.Species.Name} hung on with FOCUS BAND!" ], rng'
+                if ctx.Foe.Volatile.Protect then
+                    ctx.Foe, false, [ $"{ctx.Foe.Species.Name} is protecting itself!" ], ctx.Rng
+                else
+                    match ctx.Foe.Volatile.Substitute with
+                    | Some subHp ->
+                        let remaining = subHp - dmg
+                        if remaining <= 0 then
+                            let vol = { ctx.Foe.Volatile with Substitute = None }
+                            { ctx.Foe with Volatile = vol }, true, [], ctx.Rng
                         else
-                            { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], rng'
-                    | _ ->
-                        { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], ctx.Rng
+                            let vol = { ctx.Foe.Volatile with Substitute = Some remaining }
+                            { ctx.Foe with Volatile = vol }, false, [], ctx.Rng
+                    | None ->
+                        if ctx.Foe.Volatile.Endure && ctx.Foe.Hp > 1 && dmg >= ctx.Foe.Hp then
+                            { ctx.Foe with Hp = 1 }, false, [ $"{ctx.Foe.Species.Name} endured the hit!" ], ctx.Rng
+                        else
+                            match heldParam "HELD_FOCUS_BAND" ctx.Foe with
+                            | Some chance when ctx.Foe.Hp > 1 && dmg >= ctx.Foe.Hp ->
+                                let roll, rng' = Rng.next ctx.Rng
+                                if roll < chance then
+                                    { ctx.Foe with Hp = 1 }, false, [ $"{ctx.Foe.Species.Name} hung on with FOCUS BAND!" ], rng'
+                                else
+                                    { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], rng'
+                            | _ ->
+                                { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }, false, [], ctx.Rng
 
             let foe, flinchMsgs, rng =
                 if not (BattleMon.isFainted foe) && ctx.Move.Power > 0 then
@@ -370,7 +399,8 @@ module Effects =
                       | _ -> ()
                   if subBroke then $"{foe.Species.Name}'s substitute faded!" ]
 
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes @ focusMsgs @ flinchMsgs; LastDamage = dmg; Rng = rng }
+            let lastDamage = if ctx.Foe.Volatile.Protect then 0 else dmg
+            { ctx with Foe = foe; Messages = ctx.Messages @ notes @ focusMsgs @ flinchMsgs; LastDamage = lastDamage; Rng = rng }
 
         | Recoil ->
             // Recoil = 1/4 of damage dealt, min 1 HP.
@@ -746,12 +776,24 @@ module Effects =
             { ctx with User = user; Foe = foe; Messages = ctx.Messages @ [ "All stat changes were eliminated!" ] }
 
         | Protect ->
-            if ctx.User.Volatile.Protect then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            else { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with Protect = true } }; Messages = ctx.Messages @ [ "protected itself!" ] }
+            match protectChance ctx with
+            | None -> { ctx with User = resetProtectCount ctx.User; Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some rng ->
+                let vol =
+                    { ctx.User.Volatile with
+                        Protect = true
+                        ProtectCount = ctx.User.Volatile.ProtectCount + 1 }
+                { ctx with User = { ctx.User with Volatile = vol }; Rng = rng; Messages = ctx.Messages @ [ "protected itself!" ] }
 
         | Endure ->
-            if ctx.User.Volatile.Endure then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
-            else { ctx with User = { ctx.User with Volatile = { ctx.User.Volatile with Endure = true } }; Messages = ctx.Messages @ [ "braced itself!" ] }
+            match protectChance ctx with
+            | None -> { ctx with User = resetProtectCount ctx.User; Messages = ctx.Messages @ [ "But it failed!" ] }
+            | Some rng ->
+                let vol =
+                    { ctx.User.Volatile with
+                        Endure = true
+                        ProtectCount = ctx.User.Volatile.ProtectCount + 1 }
+                { ctx with User = { ctx.User with Volatile = vol }; Rng = rng; Messages = ctx.Messages @ [ "braced itself!" ] }
 
         | BellyDrum ->
             if ctx.User.AtkStage >= 6 then { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }

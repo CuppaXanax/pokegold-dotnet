@@ -812,10 +812,17 @@ module Battle =
             [ if playerStruggle then $"{s.Player.Species.Name} has no moves left!"
               if enemyStruggle then $"{s.Enemy.Species.Name} has no moves left!" ]
 
-        let mutable player = s.Player
-        let mutable enemy = preEnemy
-        let mutable playerTeam = s.PlayerTeam
-        let mutable enemyTeam = preEnemyTeam
+        let usesProtectCounter (move: MoveData) =
+            move.Effect = "EFFECT_PROTECT" || move.Effect = "EFFECT_ENDURE"
+
+        let resetProtectCountIfNeeded (move: MoveData) (mon: BattleMon) =
+            if usesProtectCounter move then mon
+            else { mon with Volatile = { mon.Volatile with ProtectCount = 0 } }
+
+        let mutable player = resetProtectCountIfNeeded playerMv s.Player
+        let mutable enemy = resetProtectCountIfNeeded enemyMv preEnemy
+        let mutable playerTeam = s.PlayerTeam |> List.mapi (fun i m -> if i = 0 then player else m)
+        let mutable enemyTeam = preEnemyTeam |> List.mapi (fun i m -> if i = 0 then enemy else m)
         let mutable rng = s.Rng
         let mutable weatherTimer = s.WeatherTimer
         let mutable weatherType = s.WeatherType
@@ -966,8 +973,14 @@ module Battle =
                             msgs <- msgs @ [ $"{user'.Species.Name} is charging up!" ]
                             true
                         else
-                            // Phase: execute move
-                            let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit = executeMove user foe moveToUse isStruggle rng playerIsUser s
+                            // ProtectChance fails if the opponent already moved.
+                            let opponentWentFirst = not userMovedFirst
+                            let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit =
+                                if usesProtectCounter moveToUse && opponentWentFirst then
+                                    let user = { user with Volatile = { user.Volatile with ProtectCount = 0 } }
+                                    user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                else
+                                    executeMove user foe moveToUse isStruggle rng playerIsUser s
                             rng <- rng'
                             playerSide <- playerSide'
                             enemySide <- enemySide'

@@ -1074,6 +1074,14 @@ let private mkCtx user foe move : MoveContext =
       WeatherTimer = None
       WeatherType = None }
 
+let private firstProtectRollSeed predicate =
+    let rec firstNonzero rng =
+        let roll, rng' = Rng.next rng
+        if roll = 0 then firstNonzero rng' else roll
+
+    Seq.init 10000 uint32
+    |> Seq.find (fun seed -> predicate (firstNonzero (Rng.create seed)))
+
 [<Fact>]
 let ``EFFECT_SPEED_UP maps correctly`` () =
     let mv = { move "SPEED_UP" "EFFECT_SPEED_UP" 0 (ty "NORMAL") with EffectChance = 0 }
@@ -1162,10 +1170,77 @@ let ``EFFECT_RAIN_DANCE sets weather`` () =
     Assert.Equal(Some "RAIN", applied.WeatherType)
 
 [<Fact>]
-let ``EFFECT_PROTECT sets protect flag`` () =
+let ``EFFECT_PROTECT uses shared ProtectChance substitute and consecutive-use gates`` () =
     let mv = Moves.byName "PROTECT"
-    let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx (mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200) (mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1) mv)
-    Assert.True(applied.User.Volatile.Protect)
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1
+    let blockedUser =
+        { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with
+            Volatile = { VolatileStatus.empty with Substitute = Some 10; ProtectCount = 2 } }
+    let blocked = Effects.applyCtx (mkCtx blockedUser foe mv) Protect
+    Assert.False(blocked.User.Volatile.Protect)
+    Assert.Equal(0, blocked.User.Volatile.ProtectCount)
+
+    let repeatedUser =
+        { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with
+            Volatile = { VolatileStatus.empty with ProtectCount = 1 } }
+    let failSeed = firstProtectRollSeed (fun roll -> roll >= 128)
+    let failed = Effects.applyCtx { mkCtx repeatedUser foe mv with Rng = Rng.create failSeed } Protect
+    Assert.False(failed.User.Volatile.Protect)
+    Assert.Equal(0, failed.User.Volatile.ProtectCount)
+
+    let successSeed = firstProtectRollSeed (fun roll -> roll <= 127)
+    let succeeded = Effects.applyCtx { mkCtx repeatedUser foe mv with Rng = Rng.create successSeed } Protect
+    Assert.True(succeeded.User.Volatile.Protect)
+    Assert.Equal(2, succeeded.User.Volatile.ProtectCount)
+
+[<Fact>]
+let ``EFFECT_ENDURE shares ProtectChance and clamps lethal damage to one HP`` () =
+    let mv = Moves.byName "ENDURE"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1
+    let applied = Effects.forMove mv |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe mv)
+    Assert.True(applied.User.Volatile.Endure)
+    Assert.Equal(1, applied.User.Volatile.ProtectCount)
+
+    let tackle = Moves.byName "TACKLE"
+    let attacker = mon "ATTACKER" (ty "NORMAL") (ty "NORMAL") 50 100 250 30 200
+    let enduring =
+        { mon "TARGET" (ty "NORMAL") (ty "NORMAL") 50 100 30 30 1 with
+            Hp = 20
+            Volatile = { VolatileStatus.empty with Endure = true } }
+    let hit = Effects.applyCtx (mkCtx attacker enduring tackle) Damage
+    Assert.Equal(1, hit.Foe.Hp)
+    Assert.Contains(hit.Messages, fun m -> m.Contains("endured the hit"))
+
+[<Fact>]
+let ``EFFECT_PROTECT blocks damage after a successful brace`` () =
+    let tackle = Moves.byName "TACKLE"
+    let attacker = mon "ATTACKER" (ty "NORMAL") (ty "NORMAL") 50 100 250 30 200
+    let protectedTarget =
+        { mon "TARGET" (ty "NORMAL") (ty "NORMAL") 50 100 30 30 1 with
+            Hp = 20
+            Volatile = { VolatileStatus.empty with Protect = true } }
+    let hit = Effects.applyCtx (mkCtx attacker protectedTarget tackle) Damage
+    Assert.Equal(20, hit.Foe.Hp)
+    Assert.Equal(0, hit.LastDamage)
+    Assert.Contains(hit.Messages, fun m -> m.Contains("protecting itself"))
+
+[<Fact>]
+let ``EFFECT_PROTECT fails if the opponent already moved`` () =
+    let protect = Moves.byName "PROTECT"
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1 with
+            Moves = [ protect ]
+            Pp = [ protect.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let after = Battle.chooseMove 0 (Battle.create player enemy 0u)
+    Assert.Contains(after.Messages, fun m -> m = "But it failed!")
+    Assert.DoesNotContain(after.Messages, fun m -> m.Contains("protected itself"))
+    Assert.True(after.Player.Hp < player.Hp)
 
 [<Fact>]
 let ``EFFECT_DESTINY_BOND sets flag`` () =

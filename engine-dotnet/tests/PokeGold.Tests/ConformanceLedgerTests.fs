@@ -258,14 +258,16 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C19 BattleTests audit Rage's dedicated damage counter and opponent-hit counter build behavior against BattleCommand_RageDamage and BuildOpponentRage."
             [ "EFFECT_RAGE" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C20 BattleTests audit Protect and Endure through the shared ProtectChance helper, covering substitute failure, consecutive-use chance reset, opponent-went-first failure, damage blocking, and Endure's 1 HP clamp."
+            [ "EFFECT_PROTECT"; "EFFECT_ENDURE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
               "EFFECT_DISABLE"
-              "EFFECT_ENCORE"; "EFFECT_ENDURE"
+              "EFFECT_ENCORE"
               "EFFECT_FUTURE_SIGHT"
               "EFFECT_MIRROR_COAT"
               "EFFECT_OHKO"
-              "EFFECT_PROTECT"
               "EFFECT_RAMPAGE"
               "EFFECT_SKETCH"
               "EFFECT_SLEEP_TALK"; "EFFECT_SPITE"
