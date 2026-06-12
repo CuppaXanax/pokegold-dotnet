@@ -4179,6 +4179,58 @@ let ``C30 Sleep Talk excludes the disabled slot and records the called move`` ()
     Assert.Equal(Some "SPLASH", after.Player.Volatile.LastCounterMove |> Option.map (fun move -> move.Name))
 
 [<Fact>]
+let ``C31 Spite reduces PP from the opponent last counter move`` () =
+    let spite = { Moves.byName "SPITE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "GHOST") (ty "GHOST") 50 200 100 100 200 with
+            Moves = [ spite ]
+            Pp = [ spite.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle; splash ]
+            Pp = [ 10; splash.Pp ]
+            Status = Sleep 2
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 97u)
+
+    Assert.True(after.Enemy.Pp.[0] >= 5 && after.Enemy.Pp.[0] <= 8)
+    Assert.Equal(splash.Pp, after.Enemy.Pp.[1])
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("TACKLE's PP was reduced"))
+
+[<Fact>]
+let ``C31 Spite fails without a last counter move or with zero target PP`` () =
+    let spite = { Moves.byName "SPITE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "GHOST") (ty "GHOST") 50 200 100 100 200 with
+            Moves = [ spite ]
+            Pp = [ spite.Pp ] }
+    let noLastMoveEnemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ 10 ]
+            Status = Sleep 2 }
+
+    let afterNoLastMove = Battle.chooseMove 0 (Battle.create player noLastMoveEnemy 101u)
+    Assert.Equal(10, afterNoLastMove.Enemy.Pp.[0])
+    Assert.Contains(afterNoLastMove.Messages, fun msg -> msg.Contains("didn't affect"))
+
+    let zeroPpEnemy =
+        { noLastMoveEnemy with
+            Pp = [ 0; splash.Pp ]
+            Moves = [ tackle; splash ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some tackle } }
+
+    let afterZeroPp = Battle.chooseMove 0 (Battle.create player zeroPpEnemy 103u)
+    Assert.Equal(0, afterZeroPp.Enemy.Pp.[0])
+    Assert.Equal(splash.Pp, afterZeroPp.Enemy.Pp.[1])
+    Assert.Contains(afterZeroPp.Messages, fun msg -> msg.Contains("didn't affect"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

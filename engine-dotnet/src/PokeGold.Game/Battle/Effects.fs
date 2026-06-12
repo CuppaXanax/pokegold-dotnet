@@ -898,13 +898,24 @@ module Effects =
             { ctx with Foe = foe; Messages = ctx.Messages @ [ "The foe thawed out!" ] }
 
         | ReducePP ->
-            let roll, rng' = Rng.next ctx.Rng
-            let amount = 2 + (roll % 4)
-            let idxRoll, rng'' = Rng.next rng'
-            let idx = if ctx.Foe.Pp.IsEmpty then 0 else idxRoll % ctx.Foe.Pp.Length
-            let pp' = ctx.Foe.Pp |> List.mapi (fun i pp -> if i = idx then max 0 (pp - amount) else pp)
-            let foe = { ctx.Foe with Pp = pp' }
-            { ctx with Foe = foe; Rng = rng''; Messages = ctx.Messages @ [ "PP was reduced!" ] }
+            let spiteResult =
+                match ctx.Foe.Volatile.LastCounterMove with
+                | Some lastMove when lastMove.Name <> "STRUGGLE" ->
+                    ctx.Foe.Moves
+                    |> List.tryFindIndex (fun move -> move.Name = lastMove.Name)
+                    |> Option.bind (fun index ->
+                        if index < ctx.Foe.Pp.Length && ctx.Foe.Pp.[index] > 0 then Some(index, lastMove) else None)
+                | _ -> None
+
+            match spiteResult with
+            | None ->
+                { ctx with Messages = ctx.Messages @ [ "It didn't affect the target!" ] }
+            | Some(index, spiteMove) ->
+                let roll, rng' = Rng.next ctx.Rng
+                let amount = min ctx.Foe.Pp.[index] ((roll &&& 3) + 2)
+                let pp' = ctx.Foe.Pp |> List.mapi (fun i pp -> if i = index then pp - amount else pp)
+                let foe = { ctx.Foe with Pp = pp' }
+                { ctx with Foe = foe; Rng = rng'; Messages = ctx.Messages @ [ $"{spiteMove.Name}'s PP was reduced by {amount}!" ] }
 
         | CounterDamage ->
             if ctx.LastDamage <= 0 then

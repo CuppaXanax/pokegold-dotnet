@@ -277,6 +277,7 @@ Progress:
 - ✅ C1 batch 28: `EFFECT_RAMPAGE`.
 - ✅ C1 batch 29: `EFFECT_SKETCH`.
 - ✅ C1 batch 30: `EFFECT_SLEEP_TALK`.
+- ✅ C1 batch 31: `EFFECT_SPITE`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

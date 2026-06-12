@@ -1087,6 +1087,31 @@ module Battle =
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
                                     | None ->
                                         clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_SPITE" then
+                                    let hit, rng = checkHit user foe moveToUse rng weatherType
+                                    if not hit then
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                    else
+                                        let lastOppMove =
+                                            if playerIsUser then enemyLastCounterMove else playerLastCounterMove
+                                        let spiteResult =
+                                            match lastOppMove with
+                                            | Some lastMove when lastMove.Name <> "STRUGGLE" ->
+                                                foe.Moves
+                                                |> List.tryFindIndex (fun move -> move.Name = lastMove.Name)
+                                                |> Option.bind (fun index ->
+                                                    if index < foe.Pp.Length && foe.Pp.[index] > 0 then Some(index, lastMove) else None)
+                                            | _ -> None
+
+                                        match spiteResult with
+                                        | Some(index, spiteMove) ->
+                                            let roll, rng = Rng.next rng
+                                            let amount = min foe.Pp.[index] ((roll &&& 3) + 2)
+                                            let foe =
+                                                { foe with Pp = foe.Pp |> List.mapi (fun i pp -> if i = index then pp - amount else pp) }
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{spiteMove.Name}'s PP was reduced by {amount}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                        | None ->
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif moveToUse.Effect = "EFFECT_ENCORE" then
                                     let hit, rng = checkHit user foe moveToUse rng weatherType
                                     if not hit then

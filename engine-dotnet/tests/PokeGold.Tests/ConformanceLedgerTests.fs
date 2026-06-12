@@ -291,9 +291,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C30 BattleTests audit Sleep Talk's asleep-only gate, slot resampling, disabled/two-turn exclusions, sleep decrement messaging, and called-move last-move tracking against BattleCommand_SleepTalk."
             [ "EFFECT_SLEEP_TALK" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C31 BattleTests audit Spite's last-counter-move target, Struggle/no-last/zero-PP failure gates, and random clamped 2-5 PP drain against BattleCommand_Spite."
+            [ "EFFECT_SPITE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_SPITE"
-              "EFFECT_TELEPORT"; "EFFECT_THIEF"
+            [ "EFFECT_TELEPORT"; "EFFECT_THIEF"
               "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
