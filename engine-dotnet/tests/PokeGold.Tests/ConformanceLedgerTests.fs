@@ -124,7 +124,7 @@ module ConformanceLedger =
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectApricornForKurt"; "SelectRandomBugContestContestants"
               "SlotMachine"; "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift"; "YoungerHaircutBrother" ]
 
-          yield entry ScriptSpecial "SnorlaxAwake" ImplementedApproximate [ CriticalPathKanto; RequiredFor100Percent ] "Checks the tuned `__radio_station` world buffer (Poké Flute channel) written by the Pokégear radio; covered by the G12 story gate and ScriptTests."
+          yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 
           yield! many ScriptSpecial StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for cosmetic/host presentation behavior."
             [ "ClearBGPalettes"; "Diploma"; "FadeInFromBlack"; "FadeInFromWhite"; "FadeOutToBlack"; "FadeOutToWhite"; "LoadUsedSpritesGFX"

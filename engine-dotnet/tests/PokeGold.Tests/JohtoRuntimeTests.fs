@@ -2532,3 +2532,84 @@ let ``A17 Cerulean and Power Plant Machine Part chain works on foot`` () =
     Assert.True(afterReturn.Events |> List.contains "EVENT_ROUTE_5_6_POKEFAN_M_BLOCKS_UNDERGROUND_PATH")
     // CeruleanGymGruntRunsIntoYouMovement intentionally overlaps the player during the bump cutscene.
     assertHold core driver.Snapshot
+
+[<Fact>]
+let ``A18 EXPN Card Pokegear radio tune wakes Vermilion Snorlax`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_RETURNED_MACHINE_PART", true))
+
+    // LavRadioTower1F.asm: gentleman at 9,1 gives EXPN CARD after the Machine Part is returned.
+    driver.Apply(Warp("LavRadioTower1F", 9, 2, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        4000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.EngineFlags |> List.contains "ENGINE_EXPN_CARD"
+                && ow.LastTextLabel = Some "LavRadioTower1FGentlemanText_GotExpnCard"
+            | None -> false)
+
+    let afterExpn = owOf driver.Snapshot
+    Assert.True(afterExpn.EngineFlags |> List.contains "ENGINE_EXPN_CARD")
+
+    // VermilionCity.asm: Snorlax remains asleep unless special SnorlaxAwake sees POKE_FLUTE.
+    driver.Apply(Warp("VermilionCity", 33, 8, Some Right))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        2000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.LastTextLabel = Some "VermilionCitySnorlaxSleepingText"
+                && not (ow.Events |> List.contains "EVENT_FOUGHT_SNORLAX")
+            | None -> false)
+
+    let tunePokeFluteThroughPokegear () =
+        driver.Press({ Buttons.none with Start = true })
+        driver.RunUntil((fun s -> s.TopScene = "StartMenuScene"), 100) |> ignore
+
+        for _ in 1..3 do
+            driver.Press(directionButton Down)
+
+        driver.Press(press "a")
+        driver.RunUntil((fun s -> s.TopScene = "PokegearScene"), 100) |> ignore
+
+        for _ in 1..4 do
+            driver.Press(directionButton Down)
+
+        driver.Press(press "a")
+        driver.Press(press "b")
+        driver.RunUntil((fun s -> s.TopScene = "StartMenuScene"), 100) |> ignore
+        driver.Press(press "b")
+        driver.RunUntil((fun s -> s.TopScene = "OverworldScene"), 100) |> ignore
+
+    tunePokeFluteThroughPokegear ()
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        6000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_FOUGHT_SNORLAX"
+                && ow.Events |> List.contains "EVENT_VERMILION_CITY_SNORLAX"
+            | None -> false)
+
+    let afterSnorlax = owOf driver.Snapshot
+    Assert.True(afterSnorlax.Events |> List.contains "EVENT_FOUGHT_SNORLAX")
+    Assert.True(afterSnorlax.Events |> List.contains "EVENT_VERMILION_CITY_SNORLAX")
+    Assert.Contains(
+        afterSnorlax.Actors,
+        fun a -> a.Script = "VermilionSnorlax" && not a.Visible)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
