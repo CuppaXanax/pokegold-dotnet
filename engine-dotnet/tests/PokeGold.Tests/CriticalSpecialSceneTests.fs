@@ -428,3 +428,36 @@ let ``celadon prize counter exchanges coins for Porygon and registers dex`` () =
         tickStack stack buttons
 
     Assert.True(completed (), "Celadon prize counter should sell Porygon for 9999 coins and register it in the dex.")
+
+[<Fact>]
+let ``name rater renames selected owned party mon`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "GoldenrodNameRater" 2 5 Up)
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 155 10 ] }
+
+    overworld.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+
+    let tap buttons =
+        tickStack stack buttons
+        tickStack stack Buttons.none
+
+    tap { Buttons.none with A = true }
+    tap { Buttons.none with A = true }
+    tap { Buttons.none with A = true }
+    tap { Buttons.none with A = true }
+    tap { Buttons.none with A = true }
+    tap { Buttons.none with Start = true }
+
+    let mutable frame = 0
+    while frame < 60 && stack.Count <> 1 do
+        frame <- frame + 1
+        tickStack stack Buttons.none
+
+    Assert.Equal("AAA", overworld.DebugPlayer.Party.Head.Nickname)

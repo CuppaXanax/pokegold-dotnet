@@ -144,6 +144,8 @@ type ScriptEffect =
     | Haircut of brother: string
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
+    /// `special NameRater` — pick an owned party mon and rename it.
+    | NameRater
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -383,6 +385,7 @@ module Script =
             | Special "HealParty" -> suspend next world HealParty
             | Special "PokemonCenterPC" -> suspend next world OpenPc
             | Special "NameRival" -> suspend next world NameRival
+            | Special "NameRater" -> suspend next world NameRater
             | Special "SetDayOfWeek" -> suspend next world SetDayOfWeek
             | Special "InitialSetDSTFlag" -> suspend next world (SetDstFlag true)
             | Special "InitialClearDSTFlag" -> suspend next world (SetDstFlag false)

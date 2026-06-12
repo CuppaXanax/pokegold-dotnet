@@ -681,6 +681,23 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     DexSeen = Set.add dex player.DexSeen
                     DexOwn = Set.add dex player.DexOwn }
 
+    member private _.CanNameRate (mon: PartyMon) =
+        not (Breeding.isEgg mon)
+        && (mon.OtName = player.Name || mon.OtName = "PLAYER")
+        && mon.OtId = 0
+
+    member private _.RenamePartyMon (partyIndex: int) (nickname: string) =
+        let nickname = nickname.Trim()
+
+        if nickname <> "" then
+            let party =
+                player.Party
+                |> List.mapi (fun i mon ->
+                    if i = partyIndex && mon.Nickname <> nickname then { mon with Nickname = nickname }
+                    else mon)
+
+            player <- { player with Party = party }
+
     member private _.SyncBattleParty (battle: BattleState) =
         lastBattleOutcome <- battle.Outcome
         let statusCode (status: StatusCondition) : string =
@@ -858,6 +875,24 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stop (Push(NamingScene(content.Font, "RIVAL'S NAME", fun name ->
                             world <- World.setBuffer "__rival_name" name world
                             Pop) :> Scene))
+                    | NameRater ->
+                        pending <- Some(vm, effect)
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onSelect = (fun idx ->
+                                        let mon = List.item idx player.Party
+
+                                        if this.CanNameRate mon then
+                                            Replace(
+                                                NamingScene(content.Font, "NICKNAME", fun name ->
+                                                    this.RenamePartyMon idx name
+                                                    Pop) :> Scene)
+                                        else
+                                            Pop)) :> Scene))
                     | StartBattle ->
                         pending <- Some(vm, effect)
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")

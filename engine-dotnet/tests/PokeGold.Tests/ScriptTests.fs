@@ -851,6 +851,7 @@ let ``critical specials emit runtime UI effects`` () =
              \tspecial OverworldTownMap\n\
              \tsetval 4\n\
              \tspecial MapRadio\n\
+             \tspecial NameRater\n\
              \tspecial DisplayMoneyAndCoinBalance\n\
              \tspecial DisplayCoinCaseBalance\n\
              \tspecial PlaceMoneyTopRight\n\
@@ -864,6 +865,7 @@ let ``critical specials emit runtime UI effects`` () =
         [ OpenMomBank
           OpenPokegear(MapTab, "", None)
           OpenPokegear(RadioTab, "", Some 4)
+          NameRater
           DisplayBalance MoneyAndCoins
           DisplayBalance CoinCase
           DisplayBalance MoneyTopRight

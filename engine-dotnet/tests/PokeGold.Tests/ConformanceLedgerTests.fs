@@ -130,6 +130,8 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B7 tests cover SlotMachine/CardFlip script dispatch and a minimal fair coin-game runtime seam; exact reel/card UI remains future Game Corner polish."
             [ "SlotMachine"; "CardFlip" ]
 
+          yield entry ScriptSpecial "NameRater" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B8 tests cover Goldenrod Name Rater runtime selection and renaming through NamingScene; exact internal text prompts remain UI polish."
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -141,7 +143,7 @@ module ConformanceLedger =
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
               "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
-              "MagikarpHouseSign"; "MrChrono"; "NameRater"; "PhotoStudio"
+              "MagikarpHouseSign"; "MrChrono"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
               "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 
