@@ -20,8 +20,10 @@ module SaveFile =
         let root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
         Path.Combine(root, "PokeGold")
 
+    let pathIn (directory: string) : string = Path.Combine(directory, "pokegold.sav")
+
     /// Full path to the single save slot.
-    let path () : string = Path.Combine(directory (), "pokegold.sav")
+    let path () : string = pathIn (directory ())
 
     /// Serialize a save to a JSON string. Pure; useful for round-trip tests.
     let serialize (save: SaveData) : string =
@@ -38,11 +40,17 @@ module SaveFile =
             None
 
     /// Write the save to disk, creating the directory if needed.
+    let writeTo (directory: string) (save: SaveData) : unit =
+        Directory.CreateDirectory(directory) |> ignore
+        File.WriteAllText(pathIn directory, serialize save)
+
     let write (save: SaveData) : unit =
-        Directory.CreateDirectory(directory ()) |> ignore
-        File.WriteAllText(path (), serialize save)
+        writeTo (directory ()) save
 
     /// Read the save from disk, or None if it's missing or unreadable.
-    let tryRead () : SaveData option =
-        let p = path ()
+    let tryReadFrom (directory: string) : SaveData option =
+        let p = pathIn directory
         if File.Exists p then deserialize (File.ReadAllText p) else None
+
+    let tryRead () : SaveData option =
+        tryReadFrom (directory ())

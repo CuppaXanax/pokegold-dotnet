@@ -322,7 +322,7 @@ over `constants/collision_constants.asm`, text control codes, and trainer AI lay
 | ✅ Screen fades | no-ops | palette lerp in scene shell (also closes the Fade* specials) |
 | ✅ Pokémon cries | silent | pitch/length-modulated base cry through the existing 4-channel synth (`audio/cries.asm`) |
 | ✅ Pokédex area/search, dex sprites | stubs | needed for "complete-feeling" dex UI |
-| Title→continue polish | works | verify Continue→save→exact-state with a runtime test |
+| ✅ Title→continue polish | works | verify Continue→save→exact-state with a runtime test |
 
 ---
 

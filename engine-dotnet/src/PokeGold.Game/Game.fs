@@ -18,14 +18,24 @@ open PokeGold.Game.Debug
 ///
 /// The scene stack is what lets later modes (text boxes, menus, battles) layer
 /// over the overworld and pop back without growing a monolithic update routine.
-type Game() =
+type Game(?saveDirectory: string) =
     let framebuffer = Framebuffer()
     let content = Content()
     let audio = AudioEngine(44100)
     let scenes = Stack<Scene>()
     let mutable frame = 0UL
     let mutable overworld: OverworldScene option = None
-    let hasSave = SaveFile.tryRead() |> Option.isSome
+    let readSave () =
+        match saveDirectory with
+        | Some directory -> SaveFile.tryReadFrom directory
+        | None -> SaveFile.tryRead()
+
+    let writeSave save =
+        match saveDirectory with
+        | Some directory -> SaveFile.writeTo directory save
+        | None -> SaveFile.write save
+
+    let hasSave = readSave() |> Option.isSome
 
     /// Run the std-script InitializeEventsScript to set the ~60 event flags GSC
     /// expects at new-game time (hides cops, Rockets, rivals in wrong positions).
@@ -54,7 +64,7 @@ type Game() =
                     hasSave,
                     (fun () -> Replace(NamingScene(content.Font, "ENTER NAME", fun name -> Replace(newGameScene name)))),
                     (fun () ->
-                        match SaveFile.tryRead() with
+                        match readSave() with
                         | Some save ->
                             let ow = OverworldScene.OfSave(content, audio, save)
                             overworld <- Some ow
@@ -99,13 +109,13 @@ type Game() =
     /// Capture the current overworld and write it to the save slot.
     member _.Save() =
         match overworld with
-        | Some ow when ow.CanCapture -> SaveFile.write (ow.Capture())
+        | Some ow when ow.CanCapture -> writeSave (ow.Capture())
         | _ -> ()
 
     /// Load the save slot, if present, replacing the scene stack with the
     /// restored overworld. No-op when there's no readable save.
     member this.Load() =
-        match SaveFile.tryRead () with
+        match readSave () with
         | Some save -> this.ResetTo(OverworldScene.OfSave(content, audio, save))
         | None -> ()
 

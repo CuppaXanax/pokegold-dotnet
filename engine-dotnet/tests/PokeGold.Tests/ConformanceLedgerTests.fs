@@ -188,9 +188,11 @@ module ConformanceLedger =
             [ "MAPCALLBACK_NEWMAP"; "MAPCALLBACK_TILES"; "MAPCALLBACK_OBJECTS"; "MAPCALLBACK_CMDQUEUE" ]
 
           yield! many SceneSurface ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work."
-            [ "BattleScene"; "MainMenuScene"; "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
-              "PokegearScene"; "SaveMenuScene"; "StartMenuScene"; "TextBoxScene"; "TitleScene"; "YesNoScene" ]
+            [ "BattleScene"; "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
+              "PokegearScene"; "SaveMenuScene"; "StartMenuScene"; "TextBoxScene"; "YesNoScene" ]
 
+          yield entry SceneSurface "TitleScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test drives Start through the real title/menu input path; exact title animation timing remains future UI polish."
+          yield entry SceneSurface "MainMenuScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test covers save-present CONTINUE ordering from engine/menus/main_menu.asm and verifies Continue then Save preserves the exact persistent JSON state."
           yield entry SceneSurface "WeekdayScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "WeekdaySceneTests cover selection, confirmation, cancellation, and wrapping."
           yield entry SceneSurface "CreditsScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Credits scene parses data/credits_script.asm and data/credits_strings.asm, renders the sequenced pages, and is reached from Hall of Fame and credits scripts."
           yield entry SceneSurface "MomBankScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "CriticalSpecialSceneTests and OverworldSchedulerTests cover core Mom savings flows; exact digit/menu fidelity remains future UI work."

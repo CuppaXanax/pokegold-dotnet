@@ -1,9 +1,16 @@
 module PokeGold.Tests.GameInputTests
 
+open System
+open System.IO
 open Xunit
 open PokeGold.Game
 open PokeGold.Game.Core
+open PokeGold.Game.Data
 open PokeGold.Game.Debug
+open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
+open PokeGold.Game.Save
 
 // ── Buttons masking helpers (pure) ───────────────────────────────────────────
 
@@ -40,6 +47,15 @@ let private assertApplied =
     function
     | Applied -> ()
     | Rejected reason -> failwith reason
+
+let private withTempSaveDir (test: string -> unit) =
+    let dir = Path.Combine(Path.GetTempPath(), "pokegold-save-" + Guid.NewGuid().ToString("N"))
+    Directory.CreateDirectory(dir) |> ignore
+    try
+        test dir
+    finally
+        if Directory.Exists dir then
+            Directory.Delete(dir, true)
 
 let private startMainMenu () =
     let g = Game()
@@ -123,3 +139,48 @@ let ``the A that opens the naming screen does not bleed into it`` () =
 
     g.Tick({ Buttons.none with A = true })           // A still held → masked
     Assert.Equal(child, topScene g)                  // child stays open, no bleed
+
+[<Fact>]
+let ``title Continue loads a save and saving again preserves exact persistent state`` () =
+    withTempSaveDir (fun saveDir ->
+        let content = Content()
+        let state = OverworldState.loadByIdAt content "AzaleaTown" 9 12 Left
+        let world =
+            World.empty
+            |> World.setFlag "ENGINE_FLYPOINT_AZALEA"
+            |> World.setEvent "EVENT_CLEARED_SLOWPOKE_WELL"
+            |> World.setVar "VAR_BADGES" 1
+        let player =
+            { PlayerStateOps.initial with
+                Name = "KRIS"
+                Money = 12345
+                DexSeen = Set.ofList [ 1; 4; 25 ]
+                DexOwn = Set.ofList [ 1; 25 ] }
+        let seed = SaveData.captureWith state world player
+        SaveFile.writeTo saveDir seed
+
+        let g = Game(saveDirectory = saveDir)
+        Assert.Equal("TitleScene", g.Snapshot.TopScene)
+
+        g.Tick({ Buttons.none with Start = true })
+        g.Tick(Buttons.none)
+        Assert.Equal("MainMenuScene", g.Snapshot.TopScene)
+
+        g.Tick({ Buttons.none with A = true })
+        g.Tick(Buttons.none)
+
+        let loaded = g.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected loaded overworld")
+        Assert.Equal("OverworldScene", g.Snapshot.TopScene)
+        Assert.Equal("AzaleaTown", loaded.MapId)
+        Assert.Equal((9, 12, Left), (loaded.Player.CellX, loaded.Player.CellY, loaded.Player.Facing))
+        Assert.Equal("KRIS", loaded.Player.Name)
+        Assert.Equal(12345, loaded.Player.Money)
+        Assert.Contains("EVENT_CLEARED_SLOWPOKE_WELL", loaded.Events)
+        Assert.Contains("ENGINE_FLYPOINT_AZALEA", loaded.EngineFlags)
+        Assert.Equal(1, loaded.Vars.["VAR_BADGES"])
+        Assert.True(loaded.CanCapture)
+
+        g.Save()
+
+        let savedAgain = SaveFile.tryReadFrom saveDir |> Option.defaultWith (fun () -> failwith "expected re-saved data")
+        Assert.Equal(SaveFile.serialize seed, SaveFile.serialize savedAgain))
