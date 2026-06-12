@@ -301,8 +301,8 @@ module Effects =
         | "EFFECT_DOUBLE_HIT"    -> [ DoubleHitDamage ]
         | "EFFECT_POISON_MULTI_HIT" -> [ PoisonMultiHitDamage ]
         | "EFFECT_GUST"          -> [ ConditionalDoubleDamage ]
-        | "EFFECT_TWISTER"       -> [ ConditionalDoubleDamage ]
-        | "EFFECT_STOMP"         -> [ ConditionalDoubleDamage ]
+        | "EFFECT_TWISTER"       -> [ ConditionalDoubleDamage; EffectChance SetFlinch ]
+        | "EFFECT_STOMP"         -> [ ConditionalDoubleDamage; EffectChance SetFlinch ]
         | "EFFECT_EARTHQUAKE"    -> [ ConditionalDoubleDamage ]
         | _ -> if move.Power > 0 then [ Damage ] else []
 
@@ -397,7 +397,12 @@ module Effects =
             if stage s ctx.User >= 6 then
                 { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name}'s {statName s} won't go higher!" ] }
             else
-                let user = shiftStage s 1 ctx.User
+                let user =
+                    let raised = shiftStage s 1 ctx.User
+                    if s = Evasion && ctx.Move.Name = "MINIMIZE" then
+                        { raised with Volatile = { raised.Volatile with Minimized = true } }
+                    else
+                        raised
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name}'s {statName s} rose!" ] }
 
         | RaiseAllUserStats ->
@@ -1605,11 +1610,17 @@ module Effects =
 
         | ConditionalDoubleDamage ->
             // EFFECT_GUST / EFFECT_TWISTER / EFFECT_STOMP / EFFECT_EARTHQUAKE.
-            // Normal damaging hit. Hook for 2x vs Fly/Dig/Minimize (M13.7).
-            // Flinch secondary for Twister/Stomp is M13.6.
-            let semiInvulnerable = ctx.Foe.Volatile.Charging.IsSome || ctx.Foe.EvaStage > 0
+            // Double damage only for the matching substatus:
+            // Gust/Twister vs Fly, Earthquake vs Dig, Stomp vs Minimize.
+            let chargingMove = ctx.Foe.Volatile.ChargingMove |> Option.map (fun move -> move.Name)
+            let shouldDouble =
+                match ctx.Move.Effect with
+                | "EFFECT_GUST" | "EFFECT_TWISTER" -> chargingMove = Some "FLY"
+                | "EFFECT_EARTHQUAKE" -> chargingMove = Some "DIG"
+                | "EFFECT_STOMP" -> ctx.Foe.Volatile.Minimized
+                | _ -> false
             let dmg = Damage.calc ctx.User ctx.Foe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
-            let dmg = if semiInvulnerable then dmg * 2 else dmg
+            let dmg = if shouldDouble then min 65535 (dmg * 2) else dmg
             let foe, subBroke =
                 match ctx.Foe.Volatile.Substitute with
                 | Some subHp ->

@@ -96,7 +96,9 @@ type VolatileStatus =
       BideTurns: int option
       BideDamage: int
       /// Defense Curl substatus, used to double Rollout's damage ramp.
-      Curled: bool }
+      Curled: bool
+      /// Minimize substatus, used by Stomp's double-damage check.
+      Minimized: bool }
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -129,7 +131,8 @@ module VolatileStatus =
           Attracted = false
           BideTurns = None
           BideDamage = 0
-          Curled = false }
+          Curled = false
+          Minimized = false }
 
 /// A combatant in a battle: a species at a level with derived stats, current HP,
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;

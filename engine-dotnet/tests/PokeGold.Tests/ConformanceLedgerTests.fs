@@ -237,12 +237,15 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C12 BattleTests audit Destiny Bond's user substatus and Swagger's target Attack raise before confusion against data/moves/effects.asm."
             [ "EFFECT_DESTINY_BOND"; "EFFECT_SWAGGER" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C13 BattleTests audit Gust, Earthquake, Twister, and Stomp conditional double-damage substatus checks plus Twister/Stomp flinch secondaries."
+            [ "EFFECT_EARTHQUAKE"; "EFFECT_GUST"; "EFFECT_STOMP"; "EFFECT_TWISTER" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
-              "EFFECT_DISABLE"; "EFFECT_EARTHQUAKE"
+              "EFFECT_DISABLE"
               "EFFECT_ENCORE"; "EFFECT_ENDURE"; "EFFECT_FLAME_WHEEL"
               "EFFECT_FLY"; "EFFECT_FORESIGHT"
-              "EFFECT_FURY_CUTTER"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
+              "EFFECT_FURY_CUTTER"; "EFFECT_FUTURE_SIGHT"; "EFFECT_HEAL_BELL"; "EFFECT_HIDDEN_POWER"
               "EFFECT_LOCK_ON"; "EFFECT_MIRROR_COAT"; "EFFECT_MOONLIGHT"
               "EFFECT_MORNING_SUN"; "EFFECT_NIGHTMARE"; "EFFECT_OHKO"
               "EFFECT_PERISH_SONG"
@@ -251,9 +254,8 @@ module ConformanceLedger =
               "EFFECT_SACRED_FIRE"
               "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
               "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"; "EFFECT_SPITE"
-              "EFFECT_STOMP"
               "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"
-              "EFFECT_TWISTER"; "EFFECT_TRANSFORM"
+              "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
 

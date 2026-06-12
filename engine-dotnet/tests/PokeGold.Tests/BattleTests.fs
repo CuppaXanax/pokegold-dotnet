@@ -874,7 +874,9 @@ let ``conditional double damage doubles against a semi-invulnerable foe`` () =
           EnemySide = SideState.Empty
           WeatherTimer = None; WeatherType = None }
     let baseApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) baseCtx
-    let chargedCtx = { baseCtx with Foe = { defender with Volatile = { VolatileStatus.empty with Charging = Some 1 } } }
+    let chargedCtx =
+        { baseCtx with
+            Foe = { defender with Volatile = { VolatileStatus.empty with Charging = Some 1; ChargingMove = Some (Moves.byName "FLY") } } }
     let chargedApplied = Effects.forMove (Moves.byName "GUST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) chargedCtx
     Assert.Equal(baseApplied.LastDamage * 2, chargedApplied.LastDamage)
 
@@ -2419,6 +2421,58 @@ let ``C12 Swagger raises target Attack before confusing it`` () =
     Assert.True(after.Foe.Volatile.Confusion.IsSome)
     Assert.Equal("FOE's ATTACK rose sharply!", after.Messages.[0])
     Assert.Equal("FOE became confused!", after.Messages.[1])
+
+[<Fact>]
+let ``C13 audited conditional double-damage effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_GUST", [ ConditionalDoubleDamage ]
+          "EFFECT_EARTHQUAKE", [ ConditionalDoubleDamage ]
+          "EFFECT_TWISTER", [ ConditionalDoubleDamage; EffectChance SetFlinch ]
+          "EFFECT_STOMP", [ ConditionalDoubleDamage; EffectChance SetFlinch ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C13 Gust and Earthquake only double against matching Fly and Dig substatuses`` () =
+    let normalFoe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+    let gustUser = mon "USER" (ty "FLYING") (ty "FLYING") 50 100 100 100 100
+    let groundUser = mon "USER" (ty "GROUND") (ty "GROUND") 50 100 100 100 100
+    let gust = Moves.byName "GUST"
+    let earthquake = Moves.byName "EARTHQUAKE"
+    let flyState = { VolatileStatus.empty with Charging = Some 1; ChargingMove = Some (Moves.byName "FLY") }
+    let digState = { VolatileStatus.empty with Charging = Some 1; ChargingMove = Some (Moves.byName "DIG") }
+
+    let gustVsFly = Effects.applyCtx (mkCtx gustUser { normalFoe with Volatile = flyState } gust) ConditionalDoubleDamage
+    let gustVsDig = Effects.applyCtx (mkCtx gustUser { normalFoe with Volatile = digState } gust) ConditionalDoubleDamage
+    let quakeVsDig = Effects.applyCtx (mkCtx groundUser { normalFoe with Volatile = digState } earthquake) ConditionalDoubleDamage
+    let quakeVsFly = Effects.applyCtx (mkCtx groundUser { normalFoe with Volatile = flyState } earthquake) ConditionalDoubleDamage
+
+    Assert.Equal(56, gustVsFly.LastDamage)
+    Assert.Equal(28, gustVsDig.LastDamage)
+    Assert.Equal(138, quakeVsDig.LastDamage)
+    Assert.Equal(69, quakeVsFly.LastDamage)
+
+[<Fact>]
+let ``C13 Stomp doubles only against Minimize not ordinary evasion boosts`` () =
+    let stomp = Moves.byName "STOMP"
+    let minimize = Moves.byName "MINIMIZE"
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+
+    let minimized =
+        Effects.applyCtx (mkCtx foe user minimize) (RaiseUserStat Evasion)
+
+    Assert.Equal(1, minimized.User.EvaStage)
+    Assert.True(minimized.User.Volatile.Minimized)
+
+    let evasionOnly = { foe with EvaStage = 6 }
+    let stompNormalEvasion = Effects.applyCtx (mkCtx user evasionOnly stomp) ConditionalDoubleDamage
+    let stompMinimized = Effects.applyCtx (mkCtx user minimized.User stomp) ConditionalDoubleDamage
+
+    Assert.Equal(45, stompNormalEvasion.LastDamage)
+    Assert.Equal(90, stompMinimized.LastDamage)
 
 // -- Pre-move gates ----------------------------------------------------------
 
