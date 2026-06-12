@@ -13,6 +13,7 @@ open PokeGold.Tests.GameDriver
 open PokeGold.Tests.RuntimeInvariants
 
 module ScriptWorld = PokeGold.Game.Overworld.Script.World
+module MapEvents = PokeGold.Game.Overworld.Script.MapEvents
 
 type private SilentSound() =
     interface ISoundBoard with
@@ -1460,3 +1461,302 @@ let ``A11 RadioTower5F Rocket boss coord starts takeover battle`` () =
     Assert.True(sawText, "Radio Tower boss coord should show takeover text before battle")
     Assert.True(sawBattle, "Radio Tower boss coord should start the takeover battle")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A12 — Route 44 → Ice Path → Blackthorn; Clair/Dragon's Den gates
+// ---------------------------------------------------------------------------
+
+let private mapCollision (s: OverworldState) x y =
+    Movement.collisionIdAtCell s.Map s.Collision x y
+
+let private pureTick (s: OverworldState) buttons player =
+    Movement.step s.Map s.Collision buttons player
+
+let private pureWalkOneCell (s: OverworldState) direction player =
+    let mutable p = player
+
+    for _ in 1 .. 16 do
+        p <- pureTick s (directionButton direction) p
+
+    pureTick s Buttons.none p
+
+let private pureTickNone frames (s: OverworldState) player =
+    let mutable p = player
+
+    for _ in 1 .. frames do
+        p <- pureTick s Buttons.none p
+
+    p
+
+let private findIceSlideCase (s: OverworldState) =
+    let directions = [ Up; Down; Left; Right ]
+    let maxX = s.Map.Width * 2 - 1
+    let maxY = s.Map.Height * 2 - 1
+
+    seq {
+        for x in 0 .. maxX do
+            for y in 0 .. maxY do
+                if Movement.cellWalkable s.Map s.Collision x y && not (Collision.isIceId (mapCollision s x y)) then
+                    for direction in directions do
+                        let dx, dy = directionDelta direction
+                        let iceX, iceY = x + dx, y + dy
+                        let slideX, slideY = iceX + dx, iceY + dy
+
+                        if
+                            iceX >= 0
+                            && iceY >= 0
+                            && iceX <= maxX
+                            && iceY <= maxY
+                            && slideX >= 0
+                            && slideY >= 0
+                            && slideX <= maxX
+                            && slideY <= maxY
+                            && Collision.isIceId (mapCollision s iceX iceY)
+                            && Movement.cellWalkable s.Map s.Collision slideX slideY
+                        then
+                            yield x, y, direction, iceX, iceY, slideX, slideY
+    }
+    |> Seq.tryHead
+    |> Option.defaultWith (fun () -> failwith "expected IcePath1F to contain a walkable ice-slide segment")
+
+let private partyMonWithMove moveName =
+    { PartyMon.create 158 35 with
+        Moves = MoveLearn.tryLearnMove moveName [] }
+
+let private findWhirlpoolFacingCell (s: OverworldState) =
+    let directions = [ Up; Down; Left; Right ]
+    let maxX = s.Map.Width * 2 - 1
+    let maxY = s.Map.Height * 2 - 1
+
+    seq {
+        for x in 0 .. maxX do
+            for y in 0 .. maxY do
+                let targetColl = mapCollision s x y
+
+                if targetColl = FieldMoves.CollWhirlpool || targetColl = FieldMoves.CollWhirlpool2C then
+                    for direction in directions do
+                        let dx, dy = directionDelta direction
+                        let playerX, playerY = x - dx, y - dy
+
+                        if
+                            playerX >= 0
+                            && playerY >= 0
+                            && playerX <= maxX
+                            && playerY <= maxY
+                            && FieldMoves.isSurfWater (mapCollision s playerX playerY)
+                        then
+                            yield playerX, playerY, direction
+    }
+    |> Seq.tryHead
+    |> Option.defaultWith (fun () -> failwith "expected DragonsDenB1F to contain an adjacent surf-water whirlpool")
+
+let private npcOccupies (npc: NpcObject) x y =
+    (npc.CellX = x && npc.CellY = y)
+    || (npc.Motion <> NpcStanding && npc.SrcX = x && npc.SrcY = y)
+
+let private findStrengthBoulderPush world (s: OverworldState) =
+    let directions = [ Up; Down; Left; Right ]
+
+    s.Npcs
+    |> Array.mapi (fun i npc -> i, npc)
+    |> Array.collect (fun (idx, npc) ->
+        if MapEvents.objectVisible world npc.Event && npc.Event.Movement = "SPRITEMOVEDATA_STRENGTH_BOULDER" then
+            directions
+            |> List.choose (fun direction ->
+                let dx, dy = directionDelta direction
+                let playerX, playerY = npc.CellX - dx, npc.CellY - dy
+                let boulderX, boulderY = npc.CellX + dx, npc.CellY + dy
+
+                let occupied =
+                    s.Npcs
+                    |> Array.mapi (fun i n -> i, n)
+                    |> Array.exists (fun (i, n) ->
+                        i <> idx
+                        && MapEvents.objectVisible world n.Event
+                        && npcOccupies n boulderX boulderY)
+
+                if
+                    Movement.cellWalkable s.Map s.Collision playerX playerY
+                    && Movement.cellWalkable s.Map s.Collision boulderX boulderY
+                    && not occupied
+                then
+                    Some(playerX, playerY, direction, idx, npc.CellX, npc.CellY, boulderX, boulderY)
+                else
+                    None)
+            |> List.toArray
+        else
+            [||])
+    |> Array.tryHead
+    |> Option.defaultWith (fun () -> failwith "expected IcePathB1F to contain a pushable Strength boulder")
+
+[<Fact>]
+let ``A12 Route44 cave warp loads IcePath1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route44.asm: warp_event 56, 7, ICE_PATH_1F, 1.
+    driver.Apply(Warp("Route44", 56, 8, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "IcePath1F"), 100)
+
+    Assert.Equal("IcePath1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A12 IcePath1F east exit warp loads BlackthornCity`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // IcePath1F.asm: warp_event 36, 27, BLACKTHORN_CITY, 7.
+    driver.Apply(Warp("IcePath1F", 36, 26, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "BlackthornCity"), 100)
+
+    Assert.Equal("BlackthornCity", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A12 BlackthornCity gym door loads BlackthornGym1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // BlackthornCity.asm: warp_event 18, 11, BLACKTHORN_GYM_1F, 1.
+    driver.Apply(Warp("BlackthornCity", 18, 12, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "BlackthornGym1F"), 100)
+
+    Assert.Equal("BlackthornGym1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A12 BlackthornCity Dragon's Den entrance loads DragonsDen1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // BlackthornCity.asm: warp_event 20, 1, DRAGONS_DEN_1F, 1.
+    driver.Apply(Warp("BlackthornCity", 20, 2, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "DragonsDen1F"), 100)
+
+    Assert.Equal("DragonsDen1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A12 DragonsDen1F stairs load DragonsDenB1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // DragonsDen1F.asm: warp_event 5, 15, DRAGONS_DEN_B1F, 1.
+    driver.Apply(Warp("DragonsDen1F", 5, 14, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "DragonsDenB1F"), 100)
+
+    Assert.Equal("DragonsDenB1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A12 IcePath ice tiles keep sliding the player without input`` () =
+    let content = Content()
+    let icePath = OverworldState.loadById content "IcePath1F"
+    let startX, startY, direction, iceX, iceY, slideX, slideY = findIceSlideCase icePath
+
+    let startPlayer =
+        { icePath.Player with
+            CellX = startX
+            CellY = startY
+            SrcX = startX
+            SrcY = startY
+            Facing = direction }
+
+    let onIce = pureWalkOneCell icePath direction startPlayer
+    Assert.Equal((iceX, iceY), (onIce.CellX, onIce.CellY))
+    Assert.True(Collision.isIceId (mapCollision icePath onIce.CellX onIce.CellY))
+
+    let afterSlide = pureTickNone 17 icePath onIce
+    Assert.Equal((slideX, slideY), (afterSlide.CellX, afterSlide.CellY))
+    Assert.Equal(Standing, afterSlide.Motion)
+
+[<Fact>]
+let ``A12 DragonsDenB1F Whirlpool gate uses GlacierBadge and party HM`` () =
+    let content = Content()
+    let den = OverworldState.loadById content "DragonsDenB1F"
+    let playerX, playerY, facing = findWhirlpoolFacingCell den
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "DragonsDenB1F" playerX playerY facing)
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ partyMonWithMove "WHIRLPOOL" ] }
+
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setFlag "ENGINE_GLACIERBADGE"
+        |> ScriptWorld.setVar "__surfing" 1
+
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    (scene :> Scene).Update(press "a") |> applyTransition stack
+
+    Assert.Equal("WHIRLPOOL", ScriptWorld.getBuffer "__last_field_move" scene.DebugWorld)
+    Assert.Equal(1, ScriptWorld.getVar "__whirlpool_used" scene.DebugWorld)
+    Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+
+[<Fact>]
+let ``A12 Strength-active IcePathB1F boulder pushes one cell`` () =
+    let content = Content()
+    let baseState = OverworldState.loadById content "IcePathB1F"
+    let world = ScriptWorld.setVar "__strength_active" 1 ScriptWorld.empty
+    let playerX, playerY, direction, boulderIdx, boulderStartX, boulderStartY, boulderEndX, boulderEndY =
+        findStrengthBoulderPush world baseState
+
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "IcePathB1F" playerX playerY direction)
+
+    scene.Restore(world, PlayerStateOps.initial)
+
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton direction) |> ignore
+
+    let state = scene.DebugState
+    let boulder = state.Npcs.[boulderIdx]
+
+    Assert.Equal((boulderStartX, boulderStartY), (state.Player.CellX, state.Player.CellY))
+    Assert.Equal((boulderEndX, boulderEndY), (boulder.CellX, boulder.CellY))
+    Assert.Equal(Standing, state.Player.Motion)
+    Assert.Equal(NpcStanding, boulder.Motion)
+
+[<Fact>]
+let ``A12 BlackthornGym2F Strength boulder falls through stone-table hole`` () =
+    let content = Content()
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setVar "__strength_active" 1
+
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "BlackthornGym2F" 8 1 Down)
+
+    scene.Restore(world, PlayerStateOps.initial)
+
+    // BlackthornGym2F.asm pairs boulder 1 at (8,2) with stonetable warp 5 at (8,3).
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton Down) |> ignore
+
+    let state = scene.DebugState
+    let boulder = state.Npcs.[2]
+
+    Assert.Equal((8, 2), (state.Player.CellX, state.Player.CellY))
+    Assert.Equal((8, 3), (boulder.CellX, boulder.CellY))
+    Assert.True(ScriptWorld.hasEvent "EVENT_BOULDER_IN_BLACKTHORN_GYM_1" scene.DebugWorld)
+    Assert.False(MapEvents.objectVisible scene.DebugWorld boulder.Event)

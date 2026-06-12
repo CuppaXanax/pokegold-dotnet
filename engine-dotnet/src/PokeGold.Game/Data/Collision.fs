@@ -34,6 +34,11 @@ module Collision =
     [<Literal>]
     let LedgeHiNybble = 0xA0
 
+    [<Literal>]
+    let Ice = 0x23uy
+
+    [<Literal>]
+    let Ice2B = 0x2Buy
 
     /// Load the collision model for a named tileset (e.g. "johto_modern").
     let loadNamed (name: string) : Collision =
@@ -70,6 +75,9 @@ module Collision =
     let collisionIdAt (coll: Collision) (blockId: int) (qx: int) (qy: int) : byte =
         if blockId < 0 || blockId >= coll.BlockColl.Length then 0uy
         else coll.BlockColl.[blockId].[qy * 2 + qx]
+
+    let isIceId (collId: byte) : bool =
+        collId = Ice || collId = Ice2B
 
     /// If `collId` is a ledge tile, the facings from which a hop over it is
     /// allowed (one cardinal facing, or two for the diagonal ledge ids); `None`

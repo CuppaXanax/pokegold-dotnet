@@ -132,7 +132,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 | ✅ A9 | Morty; Routes 38/39; Olivine lighthouse climb; Surf to Cianwood | SURF gate: water tile blocks walking, Surf crosses it |
 | ✅ A10 | Pharmacy; Chuck; Jasmine return; Mahogany; Lake of Rage (Gyarados, Lance) | forced Red Gyarados battle from surf tile |
 | ✅ A11 | Rocket Hideout B1–B2F; Pryce; Radio Tower takeover → clear | persistence: save/reload mid-arc keeps stage |
-| A12 | Route 44 → Ice Path → Blackthorn → Clair → Dragon's Den | ice-slide tiles; Whirlpool gate; boulder puzzle (Strength) |
+| ✅ A12 | Route 44 → Ice Path → Blackthorn → Clair → Dragon's Den | ice-slide tiles; Whirlpool gate; boulder puzzle (Strength) |
 | A13 | New Bark → Route 27/26 → Victory Road gate (badge guard) → Indigo Plateau | guard blocks at <8 badges, passes at 8 |
 | A14 | Elite Four rooms in sequence → Lance → Hall of Fame | door locks behind you; HoF scene → credits → post-game save state |
 

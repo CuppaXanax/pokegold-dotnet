@@ -135,6 +135,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Left -> -1, 0
         | Right -> 1, 0
 
+    let directionFromButtons (buttons: Buttons) : Direction option =
+        if buttons.Down then Some Down
+        elif buttons.Up then Some Up
+        elif buttons.Left then Some Left
+        elif buttons.Right then Some Right
+        else None
+
     let resetObjectPresence () =
         objectPresent <- state.Npcs |> Array.map (fun n -> MapEvents.objectVisible world n.Event)
 
@@ -244,6 +251,100 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             npcs.[idx] <- ObjectStep.step walkable (fun _ _ -> false) npcs.[idx]
             state <- { state with Npcs = npcs }
         | _ -> ()
+
+    let tryPushStrengthBoulder (buttons: Buttons) : bool =
+        match directionFromButtons buttons with
+        | None -> false
+        | Some facing when state.Player.Motion <> Standing || World.getVar "__strength_active" world <> 1 -> false
+        | Some facing ->
+            let dx, dy = deltaOf facing
+            let tx, ty = state.Player.CellX + dx, state.Player.CellY + dy
+            let bx, by = tx + dx, ty + dy
+
+            let target =
+                state.Npcs
+                |> Array.mapi (fun i n -> i, n)
+                |> Array.tryFind (fun (i, n) ->
+                    isObjectPresent i
+                    && n.Motion = NpcStanding
+                    && n.Event.Movement = "SPRITEMOVEDATA_STRENGTH_BOULDER"
+                    && n.CellX = tx
+                    && n.CellY = ty)
+
+            match target with
+            | None -> false
+            | Some(idx, npc) ->
+                let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+
+                let occupiedByOtherObject =
+                    state.Npcs
+                    |> Array.mapi (fun i n -> i, n)
+                    |> Array.exists (fun (i, n) ->
+                        i <> idx
+                        && isObjectPresent i
+                        && ((n.CellX = bx && n.CellY = by)
+                            || (n.Motion <> NpcStanding && n.SrcX = bx && n.SrcY = by)))
+
+                if walkable bx by && not occupiedByOtherObject then
+                    let player =
+                        { state.Player with
+                            Facing = facing
+                            SrcX = state.Player.CellX
+                            SrcY = state.Player.CellY
+                            CellX = tx
+                            CellY = ty
+                            Motion = Walking
+                            Progress = 0
+                            Bumped = false }
+
+                    let npcs = Array.copy state.Npcs
+                    npcs.[idx] <-
+                        { npc with
+                            Facing = facing
+                            SrcX = npc.CellX
+                            SrcY = npc.CellY
+                            CellX = bx
+                            CellY = by
+                            Motion = NpcWalking
+                            Progress = 0 }
+
+                    let camX, camY = Camera.followExt state.Map state.Neighbors player
+                    state <- { state with Player = player; Npcs = npcs; CamX = camX; CamY = camY }
+                    true
+                else
+                    false
+
+    let strengthHoleFall (mapId: string) (eventFlag: string) (x: int) (y: int) : string option option =
+        match mapId, eventFlag, x, y with
+        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_1", 11, 2 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_1A")
+        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_2", 4, 7 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_2A")
+        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_3", 5, 12 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_3A")
+        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_4", 12, 13 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_4A")
+        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_1", 8, 3 -> Some None
+        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_2", 2, 5 -> Some None
+        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_3", 8, 7 -> Some None
+        | _ -> None
+
+    let applyStrengthBoulderHoleFalls () =
+        for idx = 0 to state.Npcs.Length - 1 do
+            let npc = state.Npcs.[idx]
+
+            match npc.Event.EventFlag with
+            | Some eventFlag when
+                isObjectPresent idx
+                && npc.Motion = NpcStanding
+                && npc.Event.Movement = "SPRITEMOVEDATA_STRENGTH_BOULDER" ->
+                match strengthHoleFall state.MapId eventFlag npc.CellX npc.CellY with
+                | Some lowerFloorFlag ->
+                    world <- World.setEvent eventFlag world
+                    if idx < objectPresent.Length then
+                        objectPresent.[idx] <- false
+
+                    match lowerFloorFlag with
+                    | Some flag -> world <- World.clearEvent flag world
+                    | None -> ()
+                | None -> ()
+            | _ -> ()
 
     let setNpcFacing (idx: int) (facing: Direction) =
         let player, npcs = Actor.setFacing (ActorId.Object idx) facing state.Player state.Npcs
@@ -1403,13 +1504,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     let playerBefore = state.Player
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCell leader)
-                    state <- OverworldState.tickWithPlayerWalkable (Some this.PlayerTerrainWalkable) (fun i _ -> isObjectPresent i) buttons state
+                    if not (tryPushStrengthBoulder buttons) then
+                        state <- OverworldState.tickWithPlayerWalkable (Some this.PlayerTerrainWalkable) (fun i _ -> isObjectPresent i) buttons state
                     let after = state.Player.CellX, state.Player.CellY
                     let completedTranslation =
                         match playerBefore.Motion with
                         | Walking
                         | Hopping -> not state.Player.Moving
                         | _ -> false
+
+                    if completedTranslation then
+                        applyStrengthBoulderHoleFalls ()
 
                     match followPair, leaderBefore with
                     | Some(follower, leader), Some(lx, ly) ->

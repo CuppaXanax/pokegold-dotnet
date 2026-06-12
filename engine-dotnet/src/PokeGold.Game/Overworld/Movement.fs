@@ -66,12 +66,19 @@ module Movement =
         let next =
             match p.Motion with
             | Standing ->
-                let dir =
+                let inputDir =
                     if buttons.Down then Some Down
                     elif buttons.Up then Some Up
                     elif buttons.Left then Some Left
                     elif buttons.Right then Some Right
                     else None
+
+                let dir =
+                    if Collision.isIceId (collId p.CellX p.CellY) then
+                        let dx, dy = delta p.Facing
+                        if walkable (p.CellX + dx) (p.CellY + dy) then Some p.Facing else inputDir
+                    else
+                        inputDir
 
                 match dir with
                 | None -> { p with Bumped = false }
