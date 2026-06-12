@@ -95,7 +95,7 @@ module Battle =
     /// Returns: (canAct, confusionSelfHit, updatedUser, messages, rng)
     /// When confusionSelfHit = true, the caller must apply a 40-power typeless
     /// physical hit from the user to itself (using user's own atk/def).
-    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (selectedMove: MoveData) (userMovedFirst: bool) (rng: Rng)
+    let private preMoveStatusCheck (user: BattleMon) (_foe: BattleMon) (selectedMove: MoveData) (selectedMoveIndex: int) (userMovedFirst: bool) (rng: Rng)
         : bool * bool * BattleMon * string list * Rng =
 
         // 1. Sleep gate
@@ -134,15 +134,27 @@ module Battle =
         if flinchBlock then
             (false, false, user, [ $"{user.Species.Name} flinched!" ], rng)
         else
+            let user, disableMessages =
+                match user.Volatile.DisableTimer with
+                | Some turns ->
+                    let remaining = turns - 1
+                    if remaining <= 0 then
+                        let vol = { user.Volatile with DisableTimer = None; DisabledMoveIndex = None }
+                        { user with Volatile = vol }, [ "Disabled no more!" ]
+                    else
+                        let vol = { user.Volatile with DisableTimer = Some remaining }
+                        { user with Volatile = vol }, []
+                | None -> user, []
+
             // 4. Recharge gate: Hyper Beam-style moves force a skipped turn.
             if user.Volatile.Recharge then
                 let user' = { user with Volatile = { user.Volatile with Recharge = false } }
-                (false, false, user', [ $"{user.Species.Name} must recharge!" ], rng)
+                (false, false, user', disableMessages @ [ $"{user.Species.Name} must recharge!" ], rng)
             else
                 // 5. Paralysis full-para gate (25% = 64/256)
                 let mutable canAct = true
                 let mutable selfHit = false
-                let mutable messages: string list = []
+                let mutable messages: string list = disableMessages
                 let mutable rng' = rng
 
                 match user.Status with
@@ -151,7 +163,7 @@ module Battle =
                     rng' <- nextRng
                     if roll < 64 then
                         canAct <- false
-                        messages <- [ $"{user.Species.Name} is fully paralyzed!" ]
+                        messages <- messages @ [ $"{user.Species.Name} is fully paralyzed!" ]
                 | _ -> ()
 
                 if not canAct then
@@ -165,26 +177,32 @@ module Battle =
                             if remaining = 0 then
                                 let vol = { user.Volatile with Confusion = None }
                                 let user' = { user with Volatile = vol }
-                                (true, false, user', [ $"{user.Species.Name} snapped out of confusion!" ], rng')
+                                (true, false, user', messages @ [ $"{user.Species.Name} snapped out of confusion!" ], rng')
                             else
                                 let vol = { user.Volatile with Confusion = Some remaining }
                                 let user' = { user with Volatile = vol }
-                                let msgs = [ $"{user.Species.Name} is confused!" ]
+                                let msgs = messages @ [ $"{user.Species.Name} is confused!" ]
                                 let roll, nextRng = Rng.next rng'
                                 if roll < 128 then
                                     (false, true, user', msgs @ [ $"{user.Species.Name} hurt itself in its confusion!" ], nextRng)
                                 else
                                     (true, false, user', msgs, nextRng)
                         | None ->
-                            (true, false, user, [], rng')
+                            (true, false, user, messages, rng')
 
                     // 7. Attract gate.
-                    if canAct && user.Volatile.Attracted then
-                        let roll, rng' = Rng.next rng'
-                        if roll < 128 then
-                            (false, selfHit, user, messages @ [ $"{user.Species.Name} is immobilized by attraction!" ], rng')
+                    let canAct, selfHit, user, messages, rng' =
+                        if canAct && user.Volatile.Attracted then
+                            let roll, rng' = Rng.next rng'
+                            if roll < 128 then
+                                (false, selfHit, user, messages @ [ $"{user.Species.Name} is immobilized by attraction!" ], rng')
+                            else
+                                (true, selfHit, user, messages, rng')
                         else
-                            (true, selfHit, user, messages, rng')
+                            (canAct, selfHit, user, messages, rng')
+
+                    if canAct && user.Volatile.DisabledMoveIndex = Some selectedMoveIndex then
+                        (false, selfHit, user, messages @ [ $"{selectedMove.Name} is disabled!" ], rng')
                     else
                         (canAct, selfHit, user, messages, rng')
 
@@ -684,12 +702,6 @@ module Battle =
         p <- { p with Volatile = { p.Volatile with EncoreTimer = pEncore } }
         e <- { e with Volatile = { e.Volatile with EncoreTimer = eEncore } }
 
-        // Slot 15: Disable timer.
-        let pDisable = if p.Volatile.DisableTimer.IsSome then Some (p.Volatile.DisableTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
-        let eDisable = if e.Volatile.DisableTimer.IsSome then Some (e.Volatile.DisableTimer.Value - 1) |> Option.filter (fun n -> n > 0) else None
-        p <- { p with Volatile = { p.Volatile with DisableTimer = pDisable; DisabledMoveIndex = if pDisable.IsSome then p.Volatile.DisabledMoveIndex else None } }
-        e <- { e with Volatile = { e.Volatile with DisableTimer = eDisable; DisabledMoveIndex = if eDisable.IsSome then e.Volatile.DisabledMoveIndex else None } }
-
         (p, e, ps, es, wt, wtType, msgs, r)
 
     // -- Phase: faint check --------------------------------------------------
@@ -932,7 +944,7 @@ module Battle =
                     if playerIsUser then playerFirst else not playerFirst
 
                 // Phase: pre-move status gates
-                let canAct, selfHit, user, gateMsgs, rng' = preMoveStatusCheck user foe moveToUse userMovedFirst rng
+                let canAct, selfHit, user, gateMsgs, rng' = preMoveStatusCheck user foe moveToUse mvIndexToUse userMovedFirst rng
                 rng <- rng'
                 msgs <- msgs @ gateMsgs
 
@@ -1015,7 +1027,35 @@ module Battle =
                             // ProtectChance fails if the opponent already moved.
                             let opponentWentFirst = not userMovedFirst
                             let user, foe, moveMsgs, rng', playerSide', enemySide', weatherTimer', weatherType', lastDamage, hit =
-                                if moveToUse.Effect = "EFFECT_COUNTER" then
+                                if moveToUse.Effect = "EFFECT_DISABLE" then
+                                    let hit, rng = checkHit user foe moveToUse rng weatherType
+                                    if not hit then
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name}'s attack missed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                    else
+                                        let lastOppMove =
+                                            if playerIsUser then enemyLastCounterMove else playerLastCounterMove
+                                        let disableResult =
+                                            match lastOppMove with
+                                            | Some lastMove when foe.Volatile.DisableTimer.IsNone && lastMove.Name <> "STRUGGLE" ->
+                                                foe.Moves
+                                                |> List.tryFindIndex (fun candidate -> candidate.Name = lastMove.Name)
+                                                |> Option.bind (fun idx ->
+                                                    if idx < foe.Pp.Length && foe.Pp.[idx] > 0 then Some(idx, lastMove) else None)
+                                            | _ -> None
+
+                                        match disableResult with
+                                        | Some(index, disabledMove) ->
+                                            let rec nonzero rng =
+                                                let roll, rng' = Rng.next rng
+                                                let count = roll &&& 7
+                                                if count = 0 then nonzero rng' else count, rng'
+                                            let count, rng = nonzero rng
+                                            let duration = count + 1
+                                            let foe = { foe with Volatile = { foe.Volatile with DisableTimer = Some duration; DisabledMoveIndex = Some index } }
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{disabledMove.Name} was disabled!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
+                                        | None ->
+                                            user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_COUNTER" then
                                     let lastOppMove =
                                         if playerIsUser then enemyLastCounterMove else playerLastCounterMove
                                     let damageTaken =

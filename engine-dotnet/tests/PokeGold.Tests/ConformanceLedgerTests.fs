@@ -267,9 +267,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C22 BattleTests audit Counter's opponent-went-first, physical last-move, nonzero-damage, and doubled-damage requirements against BattleCommand_Counter."
             [ "EFFECT_COUNTER" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C23 BattleTests audit Disable's last-counter-move targeting, PP/non-active failure gates, random 2-8 turn count, and disabled-move pre-turn block against BattleCommand_Disable."
+            [ "EFFECT_DISABLE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_DISABLE"
-              "EFFECT_ENCORE"
+            [ "EFFECT_ENCORE"
               "EFFECT_FUTURE_SIGHT"
               "EFFECT_MIRROR_COAT"
               "EFFECT_OHKO"

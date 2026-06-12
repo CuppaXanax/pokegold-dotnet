@@ -2931,6 +2931,52 @@ let ``C22 Counter fails for special damage or when moving first`` () =
     Assert.Equal(slowEnemy.Hp, afterFirst.Enemy.Hp)
     Assert.Contains(afterFirst.Messages, fun m -> m = "But it failed!")
 
+[<Fact>]
+let ``C23 Disable targets the opponent's last move and blocks it on the next turn`` () =
+    let disable = { Moves.byName "DISABLE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ disable; splash ]
+            Pp = [ disable.Pp; splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+
+    let afterDisable = Battle.chooseMove 0 (Battle.create player enemy 19u)
+
+    Assert.Equal(Some 0, afterDisable.Enemy.Volatile.DisabledMoveIndex)
+    Assert.True(afterDisable.Enemy.Volatile.DisableTimer.Value >= 2)
+    Assert.True(afterDisable.Enemy.Volatile.DisableTimer.Value <= 8)
+    Assert.Contains(afterDisable.Messages, fun m -> m.Contains("TACKLE was disabled"))
+
+    let playerHpAfterDisable = afterDisable.Player.Hp
+    let afterBlocked = Battle.chooseMove 1 afterDisable
+
+    Assert.Equal(playerHpAfterDisable, afterBlocked.Player.Hp)
+    Assert.Contains(afterBlocked.Messages, fun m -> m.Contains("TACKLE is disabled"))
+
+[<Fact>]
+let ``C23 Disable fails before the opponent has a last move`` () =
+    let disable = { Moves.byName "DISABLE" with Accuracy = 100 }
+    let tackle = { Moves.byName "TACKLE" with Accuracy = 100 }
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ disable ]
+            Pp = [ disable.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 23u)
+
+    Assert.True(after.Enemy.Volatile.DisableTimer.IsNone)
+    Assert.True(after.Enemy.Volatile.DisabledMoveIndex.IsNone)
+    Assert.Contains(after.Messages, fun m -> m = "But it failed!")
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
