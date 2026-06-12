@@ -246,6 +246,27 @@ no `Apply(SetFlag …)` shortcuts — every flag earned by play — from `StartN
 Red credits, with `RuntimeInvariants.assertHold` on every frame. When that passes, tag a
 release and record a GIF from the desktop host for the README.
 
+#### What a green `dotnet test` means (and doesn't)
+
+When the victory check passes, green means: **a full 16-badge + Red playthrough is
+achievable from a fresh save, executed through the real engine at frame granularity —
+real inputs, real movement/collision/warps, real battles — deterministically, with
+invariants asserted on every frame.** Any regression to a warp, trigger, badge gate, or
+route-relevant battle mechanic turns the suite red. Call this **playthrough-soundness**.
+
+It deliberately does *not* mean:
+
+- **Frame-parity with the original GBC game.** This is a high-level port (the
+  emulator-grade plan was retired to `docs/_archive/plan-emulator-grade/`); pacing and
+  RNG are faithful-feeling approximations, so original-hardware speedrun timings don't
+  transfer tick-for-tick. (If that bar is ever wanted, the repo builds the byte-identical
+  retail ROM, so an emulator-trace diff harness is *possible* — but it is a separate
+  workstream and contradicts the project's thesis. Not planned.)
+- **All-routes coverage.** The mega-test proves the golden route. Off-route play
+  (different starter, unusual menuing, losses) is covered statistically by the
+  conformance ledger and per-system tests, not exhaustively. Off-route bugs are fixed as
+  found; they do not block victory.
+
 ### Notes for the GitHub showcase
 
 - The repo's `engine-dotnet/README.md` undersells the project — refresh it with the
