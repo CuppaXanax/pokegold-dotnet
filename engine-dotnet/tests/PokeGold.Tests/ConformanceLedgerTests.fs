@@ -279,9 +279,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C26 BattleTests audit Mirror Coat's opponent-went-first, special last-move, nonzero-damage, and doubled-damage requirements against BattleCommand_MirrorCoat."
             [ "EFFECT_MIRROR_COAT" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C27 BattleTests audit OHKO's lower-level failure, type-immunity failure, modified accuracy, and runtime command-owned hit logic against BattleCommand_OHKO."
+            [ "EFFECT_OHKO" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_OHKO"
-              "EFFECT_RAMPAGE"
+            [ "EFFECT_RAMPAGE"
               "EFFECT_SKETCH"
               "EFFECT_SLEEP_TALK"; "EFFECT_SPITE"
               "EFFECT_TELEPORT"; "EFFECT_THIEF"

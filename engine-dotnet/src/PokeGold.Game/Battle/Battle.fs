@@ -364,6 +364,8 @@ module Battle =
             runBeatUp rng
         elif move.Effect = "EFFECT_FUTURE_SIGHT" && not isStruggle then
             runHit false Damage.MaxRoll rng
+        elif move.Effect = "EFFECT_OHKO" && not isStruggle then
+            runHit false Damage.MaxRoll rng
         elif move.Effect = "EFFECT_JUMP_KICK" && not isStruggle then
             let crit, roll, rng = rollHit (critStageFor user move) rng
             let hit, rng = checkHit user foe move rng battle.WeatherType

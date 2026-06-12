@@ -1178,10 +1178,10 @@ module Effects =
 
         | OhkoDamage ->
             // BattleCommand_OHKO (effect_commands.asm l.5377-5419).
-            // Fails if target level >= user level (set missed). On success, damage = 65535.
+            // Fails if user is lower-level or the move's type has no effect. On success, damage = 65535.
             // Accuracy: (userLevel - targetLevel) * 2 + moveAccuracy (as 0-255 byte).
             // Then normal CheckHit with that modified accuracy.
-            if ctx.Foe.Level >= ctx.User.Level then
+            if Damage.effectivenessTimesTen ctx.Move ctx.Foe = 0 || ctx.User.Level < ctx.Foe.Level then
                 { ctx with Messages = ctx.Messages @ [ $"{ctx.User.Species.Name}'s attack missed!" ] }
             else
                 // Compute modified accuracy byte.

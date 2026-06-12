@@ -3963,10 +3963,10 @@ let ``EFFECT_STATIC_DAMAGE deals fixed move power`` () =
     Assert.Equal(40, c2.LastDamage)
 
 [<Fact>]
-let ``EFFECT_OHKO fails if target level >= user level`` () =
+let ``EFFECT_OHKO fails if target level is higher than user level`` () =
     let m = move "HORN_DRILL" "EFFECT_OHKO" 1 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 30 200 100 100 50
-    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 30 200 100 100 50
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 31 200 100 100 50
     let ctx : MoveContext =
         { User = user; Foe = foe; Move = m; Crit = false; Roll = 255
           Rng = Rng.create 0u; Messages = []; LastDamage = 0; IsStruggle = false
@@ -3978,6 +3978,16 @@ let ``EFFECT_OHKO fails if target level >= user level`` () =
     let ctx' = Effects.applyCtx ctx OhkoDamage
     Assert.Equal(200, ctx'.Foe.Hp)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "missed")
+
+[<Fact>]
+let ``EFFECT_OHKO fails when type matchup has no effect`` () =
+    let m = { move "FISSURE" "EFFECT_OHKO" 1 (ty "GROUND") with Accuracy = 100 }
+    let user = mon "USER" (ty "GROUND") (ty "GROUND") 50 200 100 100 50
+    let foe = mon "FOE" (ty "FLYING") (ty "FLYING") 50 200 100 100 50
+    let ctx = mkCtx user foe m
+    let ctx' = Effects.applyCtx ctx OhkoDamage
+    Assert.Equal(200, ctx'.Foe.Hp)
+    Assert.Contains(ctx'.Messages, fun msg -> msg.Contains("missed"))
 
 [<Fact>]
 let ``EFFECT_OHKO KOs when attacker level > target level and roll succeeds`` () =
@@ -3999,6 +4009,24 @@ let ``EFFECT_OHKO KOs when attacker level > target level and roll succeeds`` () 
     let ctx' = Effects.applyCtx ctx OhkoDamage
     Assert.Equal(0, ctx'.Foe.Hp)
     Assert.Contains(ctx'.Messages, fun m -> m.Contains "one-hit KO")
+
+[<Fact>]
+let ``C27 OHKO runtime bypasses generic accuracy and lets OHKO command own hit logic`` () =
+    let hornDrill = { Moves.byName "HORN_DRILL" with Accuracy = 100 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ hornDrill ]
+            Pp = [ hornDrill.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 59u)
+
+    Assert.Equal(0, after.Enemy.Hp)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("one-hit KO"))
 
 [<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
