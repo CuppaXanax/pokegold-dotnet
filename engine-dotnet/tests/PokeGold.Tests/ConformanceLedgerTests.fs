@@ -198,9 +198,10 @@ module ConformanceLedger =
           yield entry SceneSurface "ApricornSelectionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 scene test covers disassembly-order picker entries, selection, and cancel."
           yield entry SceneSurface "DayCareScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B2 scene tests cover deposit, withdraw, and egg pickup flows; exact text/level-growth fidelity remains future daycare polish."
           yield entry SceneSurface "MoveDeletionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B3 scene test covers party-pick, move-pick, confirmation, and compaction after deletion."
+          yield entry SceneSurface "PokedexScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "D Pokédex tests cover Start-driven type search, caught-only type filtering from data/types/search_types.asm, AREA wild-encounter nests via FindNest data, and front/question-mark dex pic rendering; exact Pokégear town-map nest icons remain future UI polish."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
-            [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "PokedexScene"; "SummaryScene" ]
+            [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "SummaryScene" ]
 
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C1 BattleTests audit the disassembly command families and worked battle outcomes for the first high-traffic effect batch, including Thunder weather accuracy and priority/recharge gates."
             [ "EFFECT_NORMAL_HIT"; "EFFECT_ACCURACY_DOWN_HIT"; "EFFECT_CONFUSE_HIT"; "EFFECT_THUNDER"; "EFFECT_SLEEP"

@@ -34,6 +34,17 @@ let private pressDown s = press { Buttons.none with Down = true } s
 let private pressUp   s = press { Buttons.none with Up   = true } s
 let private pressA    s = press { Buttons.none with A    = true } s
 let private pressB    s = press { Buttons.none with B    = true } s
+let private pressRight s = press { Buttons.none with Right = true } s
+let private pressStart s = press { Buttons.none with Start = true } s
+
+let private anyPixelIn (fb: Framebuffer) (x0: int) (y0: int) (x1: int) (y1: int) =
+    seq {
+        for y in y0 .. y1 do
+            for x in x0 .. x1 do
+                let b = (y * Display.Width + x) * 4
+                yield fb.Pixels.[b] <> 0uy || fb.Pixels.[b + 1] <> 0uy || fb.Pixels.[b + 2] <> 0uy
+    }
+    |> Seq.exists id
 
 // ── Pokedex pure helpers ────────────────────────────────────────────────────────
 
@@ -120,6 +131,33 @@ let ``Pokedex.descLines strips DONE token`` () =
     let lines = Pokedex.descLines desc
     Assert.Equal(1, lines.Length)
     Assert.Equal("Some text.", lines.[0])
+
+[<Fact>]
+let ``Pokedex search type labels follow disassembly order`` () =
+    Assert.Equal("----", Pokedex.searchTypeLabel 0)
+    Assert.Equal("NORMAL", Pokedex.searchTypeLabel 1)
+    Assert.Equal("FIRE", Pokedex.searchTypeLabel 2)
+    Assert.Equal("GRASS", Pokedex.searchTypeLabel 4)
+    Assert.Equal("STEEL", Pokedex.searchTypeLabel Pokedex.searchTypeCount)
+
+[<Fact>]
+let ``Pokedex search results include only owned matching species`` () =
+    let player = makePlayer ()
+    Assert.Equal<int list>([ 1 ], Pokedex.searchResults player 4 0)  // GRASS -> owned Bulbasaur
+    Assert.Equal<int list>([ 1 ], Pokedex.searchResults player 4 8)  // GRASS + POISON -> Bulbasaur
+    Assert.Equal<int list>([ 25 ], Pokedex.searchResults player 5 0) // ELECTRIC -> owned Pikachu
+
+[<Fact>]
+let ``Pokedex area locations are derived from wild encounter nests`` () =
+    let locations = Pokedex.areaLocationsForDexNum 79 // Slowpoke
+    Assert.Contains("SLOWPOKE_WELL_B1F", locations)
+    Assert.Contains("SLOWPOKE_WELL_B2F", locations)
+
+[<Fact>]
+let ``Pokedex dexSpritePath uses front pic for seen species and question mark for unseen`` () =
+    let player = makePlayer ()
+    Assert.Equal("gfx/pokemon/bulbasaur/front_gold.png", Pokedex.dexSpritePath player 1)
+    Assert.Equal("gfx/pokedex/question_mark.png", Pokedex.dexSpritePath player 5)
 
 // ── PokedexScene cursor & list ─────────────────────────────────────────────────
 
@@ -214,6 +252,58 @@ let ``PokedexScene B in DexDetail returns Stay`` () =
     pressA scene |> ignore   // enter DexDetail
     Assert.Equal(Stay, pressB scene)
 
+[<Fact>]
+let ``PokedexScene Start opens search screen with NORMAL and blank defaults`` () =
+    let scene = makeScene ()
+    pressStart scene |> ignore
+    match scene.Mode with
+    | DexSearch state ->
+        Assert.Equal(1, state.Type1)
+        Assert.Equal(0, state.Type2)
+        Assert.Equal(0, state.Cursor)
+    | other -> Assert.Fail(sprintf "Expected DexSearch, got %A" other)
+
+[<Fact>]
+let ``PokedexScene search begin shows owned type matches`` () =
+    let scene = makeScene ()
+    pressStart scene |> ignore
+    for _ in 1 .. 3 do pressRight scene |> ignore // NORMAL -> GRASS
+    pressDown scene |> ignore
+    pressDown scene |> ignore
+    pressA scene |> ignore
+    match scene.Mode with
+    | DexSearchResults state ->
+        Assert.Equal(4, state.Type1)
+        Assert.Equal<int list>([ 1 ], scene.SearchResults)
+    | other -> Assert.Fail(sprintf "Expected DexSearchResults, got %A" other)
+
+[<Fact>]
+let ``PokedexScene search without matches stays on search with not-found message`` () =
+    let scene = makeScene ()
+    pressStart scene |> ignore
+    pressDown scene |> ignore
+    pressDown scene |> ignore
+    pressA scene |> ignore
+    match scene.Mode with
+    | DexSearch state -> Assert.Equal(1, state.Type1)
+    | other -> Assert.Fail(sprintf "Expected DexSearch, got %A" other)
+    Assert.Equal(Some "The specified type was not found.", scene.SearchMessage)
+
+[<Fact>]
+let ``PokedexScene detail AREA opens nest screen and returns to detail`` () =
+    let scene = makeScene ()
+    pressA scene |> ignore
+    pressRight scene |> ignore
+    Assert.Equal(1, scene.DetailAction)
+    pressA scene |> ignore
+    match scene.Mode with
+    | DexArea 1 -> ()
+    | other -> Assert.Fail(sprintf "Expected DexArea 1, got %A" other)
+    pressB scene |> ignore
+    match scene.Mode with
+    | DexDetail 1 -> ()
+    | other -> Assert.Fail(sprintf "Expected DexDetail 1, got %A" other)
+
 // ── Render smoke tests ─────────────────────────────────────────────────────────
 
 [<Fact>]
@@ -240,3 +330,31 @@ let ``PokedexScene renders non-zero pixels in detail mode for owned entry`` () =
         if fb.Pixels.[b] <> 0uy || fb.Pixels.[b+1] <> 0uy || fb.Pixels.[b+2] <> 0uy then
             any <- true
     Assert.True(any, "Detail mode should produce non-zero pixels")
+
+[<Fact>]
+let ``PokedexScene renders dex front sprite in detail mode`` () =
+    let scene = makeScene ()
+    pressA scene |> ignore
+    let fb = Framebuffer()
+    (scene :> Scene).Render(fb)
+    Assert.True(anyPixelIn fb 112 24 143 63, "Detail sprite region should contain front-pic pixels")
+
+[<Fact>]
+let ``PokedexScene renders search results and area screens`` () =
+    let scene = makeScene ()
+    pressStart scene |> ignore
+    for _ in 1 .. 3 do pressRight scene |> ignore
+    pressDown scene |> ignore
+    pressDown scene |> ignore
+    pressA scene |> ignore
+
+    let resultsFb = Framebuffer()
+    (scene :> Scene).Render(resultsFb)
+    Assert.True(anyPixelIn resultsFb 8 32 151 111, "Search results should render list pixels")
+
+    pressA scene |> ignore
+    pressRight scene |> ignore
+    pressA scene |> ignore
+    let areaFb = Framebuffer()
+    (scene :> Scene).Render(areaFb)
+    Assert.True(anyPixelIn areaFb 8 24 151 111, "Area screen should render nest text")

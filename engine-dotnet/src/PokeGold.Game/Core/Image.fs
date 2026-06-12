@@ -12,28 +12,43 @@ open SixLabors.ImageSharp.PixelFormats
 /// them, so a tile's linear id is `ty * tilesWide + tx`.
 module Image =
 
+    type DecodedTiles =
+        { Width: int
+          Height: int
+          Tiles: Tile[] }
+
     /// Map an 8-bit gray level (one of 0/85/170/255) to a 2-bit tile index.
     let grayToIndex (gray: byte) : byte = byte ((255 - int gray) / 85)
 
     /// Decode a PNG (given as bytes) into a row-major array of 8×8 index tiles.
     /// Width and height must be multiples of 8.
-    let decodeTiles (pngBytes: byte[]) : Tile[] =
+    let decodeTilesWithSize (pngBytes: byte[]) : DecodedTiles =
         use img = Image.Load<L8>(pngBytes)
         let tilesWide = img.Width / 8
         let tilesHigh = img.Height / 8
         let count = tilesWide * tilesHigh
 
-        Array.init count (fun id ->
-            let tx = (id % tilesWide) * 8
-            let ty = (id / tilesWide) * 8
-            let px = Array.zeroCreate<byte> Tile.PixelCount
+        let tiles =
+            Array.init count (fun id ->
+                let tx = (id % tilesWide) * 8
+                let ty = (id / tilesWide) * 8
+                let px = Array.zeroCreate<byte> Tile.PixelCount
 
-            for row in 0..7 do
-                for col in 0..7 do
-                    let p = img.[tx + col, ty + row]
-                    px.[row * 8 + col] <- grayToIndex p.PackedValue
+                for row in 0..7 do
+                    for col in 0..7 do
+                        let p = img.[tx + col, ty + row]
+                        px.[row * 8 + col] <- grayToIndex p.PackedValue
 
-            { Pixels = px })
+                { Pixels = px })
+
+        { Width = img.Width
+          Height = img.Height
+          Tiles = tiles }
+
+    let decodeTiles (pngBytes: byte[]) : Tile[] =
+        (decodeTilesWithSize pngBytes).Tiles
 
     /// Decode a repo-relative PNG path into index tiles.
     let loadTiles (relative: string) : Tile[] = decodeTiles (Assets.readBytes relative)
+
+    let loadTilesWithSize (relative: string) : DecodedTiles = decodeTilesWithSize (Assets.readBytes relative)
