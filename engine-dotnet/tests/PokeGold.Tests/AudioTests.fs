@@ -29,6 +29,36 @@ let ``Sfx_Menu parses as a single noise channel`` () =
     Assert.Equal(Noise, VoiceKind.ofChannelId id)
 
 [<Fact>]
+let ``pokemon cry metadata resolves species pitch length and base script`` () =
+    let metadata = Cries.metadataForSpecies "CYNDAQUIL"
+
+    Assert.Equal("CRY_CYNDAQUIL", metadata.CryConstant)
+    Assert.Equal("Cry_Cyndaquil", metadata.BaseLabel)
+    Assert.Equal(839, metadata.Pitch)
+    Assert.Equal(128, metadata.Length)
+
+[<Fact>]
+let ``pokemon cry song applies pitch and length to non-noise channels`` () =
+    let song = Cries.songForSpecies false "CYNDAQUIL"
+    let _, pulseEntry = song.Channels |> Array.find (fun (id, _) -> id = 5)
+    let _, noiseEntry = song.Channels |> Array.find (fun (id, _) -> id = 8)
+
+    Assert.Equal(PitchOffset 839, song.Commands.[pulseEntry])
+    Assert.Equal(Tempo 128, song.Commands.[pulseEntry + 1])
+    Assert.Equal(PitchOffset 839, song.Commands.[noiseEntry])
+    match song.Commands.[noiseEntry + 1] with
+    | SoundJump _ -> ()
+    | other -> failwithf "noise cry channel should jump directly to the base script, got %A" other
+
+[<Fact>]
+let ``slow pokemon cry applies disassembly pitch and length offsets`` () =
+    let song = Cries.songForSpecies true "AMPHAROS"
+    let _, entry = song.Channels |> Array.find (fun (id, _) -> id = 5)
+
+    Assert.Equal(PitchOffset(-124 - 0x140), song.Commands.[entry])
+    Assert.Equal(Tempo(232 + 0x60), song.Commands.[entry + 1])
+
+[<Fact>]
 let ``the note-frequency table matches the GB square formula`` () =
     // Written octave 3, C#: GSC stores the octave inverted (engine octave 8-3=5)
     // and GetFrequency arithmetic-shifts the table value right by 7-5=2, giving
@@ -81,6 +111,15 @@ let ``the audio engine mixes a started track into its buffer`` () =
     Assert.Contains(buf, fun s -> s <> 0.0f)
     // Soft-clamped to a sane range.
     Assert.All(buf, fun s -> Assert.InRange(s, -1.0f, 1.0f))
+
+[<Fact>]
+let ``the audio engine mixes pokemon cries as one-shot sfx`` () =
+    let engine = AudioEngine(44100)
+    engine.PlaySfx(Cries.sfxName "CYNDAQUIL")
+    let frames = 12000
+    let buf : float32[] = Array.zeroCreate (frames * 2)
+    engine.Mix(buf, frames)
+    Assert.Contains(buf, fun s -> s <> 0.0f)
 
 // ---- Fidelity: wave instrument/volume, drums, vibrato, pitch slide ----------
 
@@ -195,4 +234,3 @@ let ``the point-sampled pulse is a two-level DAC square`` () =
     Assert.True(
         float nearExtreme / float tail.Length > 0.8,
         $"a point-sampled square should spend most time at the DAC extremes, got {nearExtreme}/{tail.Length}")
-

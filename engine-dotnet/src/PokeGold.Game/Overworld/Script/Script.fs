@@ -111,8 +111,10 @@ type ScriptEffect =
     | PlayMusic of song: string
     /// `playsound` — play a sound effect.
     | PlaySound of sound: string
-    /// `cry` — play a Pokémon cry.
-    | Cry of species: string
+    /// `cry` / `special PlaySlowCry` — play a Pokémon cry.
+    | Cry of species: string * slow: bool
+    /// `special PlayCurMonCry` — play the current party mon selected by a prior UI.
+    | CryCurrentPartyMon
     /// `waitsfx` — wait for the current sound effect to finish.
     | WaitSfx
     /// `warp` / `warpfacing` — move the player to another map cell.
@@ -290,6 +292,10 @@ module Script =
     let private suspend (vm: ScriptVm) (world: World) (effect: ScriptEffect) : ScriptStep =
         { World = world; Outcome = Suspended(vm, effect) }
 
+    let private speciesNameByDex dex =
+        Species.all
+        |> Map.tryPick (fun name stats -> if stats.Dex = dex then Some name else None)
+
     /// The VM state an `end` produces: return from the innermost `scall`, or — if
     /// unnested — a terminal pc so the next `run` completes. Used by the terminal
     /// text opcodes (`jumptext`/`jumptextfaceplayer`), which display text and then
@@ -417,7 +423,7 @@ module Script =
             | Changeblock(x, y, blockId) -> suspend next world (ChangeBlock(x, y, blockId))
             | Playmusic song -> suspend next world (PlayMusic song)
             | Playsound sound -> suspend next world (PlaySound sound)
-            | ScriptCommand.Cry species -> suspend next world (ScriptEffect.Cry species)
+            | ScriptCommand.Cry species -> suspend next world (ScriptEffect.Cry(species, false))
             | Waitsfx -> suspend next world WaitSfx
             | ScriptCommand.Warp(map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, None))
             | Warpfacing(facing, map, x, y) -> suspend next world (ScriptEffect.Warp(map, x, y, Some facing))
@@ -478,6 +484,11 @@ module Script =
             | Special "RestartMapMusic"
             | Special "PlayMapMusic" -> suspend next world (PlayMusic "__MAP_DEFAULT__")
             | Special "FadeOutMusic" -> suspend next world (PlayMusic "__STOP__")
+            | Special "PlaySlowCry" ->
+                match speciesNameByDex vm.ScriptVar with
+                | Some species -> suspend next world (ScriptEffect.Cry(species, true))
+                | None -> run world next
+            | Special "PlayCurMonCry" -> suspend next world CryCurrentPartyMon
             | Special "FadeOutToWhite" -> suspend next world (PaletteFade(FadeOut, FadeToWhite))
             | Special "FadeOutToBlack" -> suspend next world (PaletteFade(FadeOut, FadeToBlack))
             | Special "FadeInFromWhite" -> suspend next world (PaletteFade(FadeIn, FadeToWhite))

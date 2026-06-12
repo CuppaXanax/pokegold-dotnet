@@ -105,6 +105,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable apricornResult: string option = None
     let mutable dayCareResult: int option = None
     let mutable haircutResult = 0
+    let mutable currentPartyCrySpecies: string option = None
     let mutable billsGrandfatherResult = 0
     let mutable magikarpLengthResult = 1
     let mutable unownPuzzleResult = 0
@@ -117,6 +118,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         if current > amount then 0
         elif current = amount then 1
         else 2
+
+    let speciesNameByDex dex =
+        Species.all
+        |> Map.tryPick (fun name stats -> if stats.Dex = dex then Some name else None)
 
     let fadeAlpha (run: PaletteFadeRun) =
         let elapsed = min run.TotalFrames (max 0 run.ElapsedFrames)
@@ -745,6 +750,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     member private _.ApplyHaircut (brother: string) (partyIndex: int) =
         let mon = List.item partyIndex player.Party
+        currentPartyCrySpecies <- speciesNameByDex mon.SpeciesId
 
         if Breeding.isEgg mon then
             haircutResult <- 1
@@ -1497,7 +1503,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                         sfxName |> Option.iter (HostEffect.PlaySfx >> interpretHostEffect)
                         resume None vm
-                    | ScriptEffect.Cry _ ->
+                    | ScriptEffect.Cry(species, slow) ->
+                        let name = if slow then Cries.slowSfxName species else Cries.sfxName species
+                        interpretHostEffect (HostEffect.PlaySfx name)
+                        resume None vm
+                    | CryCurrentPartyMon ->
+                        let species =
+                            currentPartyCrySpecies
+                            |> Option.orElseWith (fun () ->
+                                player.Party
+                                |> List.tryHead
+                                |> Option.bind (fun mon -> speciesNameByDex mon.SpeciesId))
+
+                        species
+                        |> Option.iter (Cries.sfxName >> HostEffect.PlaySfx >> interpretHostEffect)
                         resume None vm
                     | WaitSfx ->
                         resume None vm

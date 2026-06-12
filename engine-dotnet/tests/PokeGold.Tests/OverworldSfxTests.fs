@@ -5,6 +5,8 @@ open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Audio
 open PokeGold.Game.Overworld
+open PokeGold.Game.Overworld.Script
+open PokeGold.Game.Player
 open PokeGold.Game.Scenes
 
 // M10.8 — the overworld scene turns locomotion into sound: a ledge hop and a wall
@@ -77,6 +79,20 @@ let private findOpenStep (map: GameMap) (coll: Collision) =
         else
             None)
 
+let private scriptedScene content mapId x y facing label commands =
+    let baseState = OverworldState.loadByIdAt content mapId x y facing
+
+    { baseState with
+        Events =
+            { baseState.Events with
+                Scenes = [| "SCENE_TEST" |]
+                SceneLabels = [| label |]
+                Coords = [||]
+                Callbacks = [||] }
+        Script =
+            { Commands = commands
+              Labels = Map.ofList [ label, 0 ] } }
+
 [<Fact>]
 let ``hopping a ledge plays the ledge SFX exactly once`` () =
     let content = Content()
@@ -126,3 +142,22 @@ let ``walking onto open ground is silent`` () =
 
         Assert.DoesNotContain("Sfx_JumpOverLedge", sound.Sfx)
         Assert.DoesNotContain("Sfx_Bump", sound.Sfx)
+
+[<Fact>]
+let ``script cry command plays pokemon cry sfx`` () =
+    let content = Content()
+    let sound = RecordingSound()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "CryScene"
+            [| ScriptCommand.Cry "GYARADOS"; End |]
+
+    let scene = OverworldScene(content, sound, state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    Assert.Contains(Cries.sfxName "GYARADOS", sound.Sfx)

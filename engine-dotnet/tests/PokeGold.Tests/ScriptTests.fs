@@ -424,6 +424,24 @@ let ``fade specials suspend as palette fade effects`` () =
         | other -> failwithf "expected %s to suspend, got %A" special other
 
 [<Fact>]
+let ``cry command and cry specials suspend as cry effects`` () =
+    let program commands =
+        { Commands = commands
+          Labels = Map.ofList [ "S", 0 ] }
+
+    match (Script.start "S" World.empty (program [| ScriptCommand.Cry "CYNDAQUIL"; End |]) "TestMap").Outcome with
+    | Suspended(_, effect) -> Assert.Equal(ScriptEffect.Cry("CYNDAQUIL", false), effect)
+    | other -> failwithf "expected cry command to suspend, got %A" other
+
+    match (Script.start "S" World.empty (program [| Setval 181; Special "PlaySlowCry"; End |]) "TestMap").Outcome with
+    | Suspended(_, effect) -> Assert.Equal(ScriptEffect.Cry("AMPHAROS", true), effect)
+    | other -> failwithf "expected PlaySlowCry to suspend, got %A" other
+
+    match (Script.start "S" World.empty (program [| Special "PlayCurMonCry"; End |]) "TestMap").Outcome with
+    | Suspended(_, effect) -> Assert.Equal(CryCurrentPartyMon, effect)
+    | other -> failwithf "expected PlayCurMonCry to suspend, got %A" other
+
+[<Fact>]
 let ``applymovementlasttalked maps to LAST_TALKED`` () =
     let prog =
         parse

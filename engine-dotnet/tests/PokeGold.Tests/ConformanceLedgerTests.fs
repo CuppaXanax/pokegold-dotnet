@@ -91,8 +91,10 @@ module ConformanceLedger =
               "Checkjustbattled"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Elevfloor" ]
 
+          yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
+
           yield! many ScriptCommandCase StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated command is typed, but only cosmetic/timing behavior remains."
-            [ "Cry"; "Waitsfx" ]
+            [ "Waitsfx" ]
 
           yield! many ScriptCommandCase StubNoOp [ UnknownReachability ] "Generated command is typed, but reachability and required behavior have not been triaged."
             [ "Checkver"; "Unsupported" ]
@@ -163,8 +165,11 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Screen fades route `Fade*`/`ClearBGPalettes` specials through an eight-frame scene overlay matching the four palette levels with two DelayFrames each in engine/tilesets/timeofday_pals.asm; exact CGB palette RAM mutation remains host-renderer polish."
             [ "ClearBGPalettes"; "FadeInFromBlack"; "FadeInFromWhite"; "FadeOutToBlack"; "FadeOutToWhite" ]
 
+          yield! many ScriptSpecial ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route PlaySlowCry and PlayCurMonCry through parsed cry metadata/base scripts; PlaySlowCry applies the -$140 pitch and +$60 length offsets from engine/events/play_slow_cry.asm."
+            [ "PlayCurMonCry"; "PlaySlowCry" ]
+
           yield! many ScriptSpecial StubNoOp [ Cosmetic; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for cosmetic/host presentation behavior."
-            [ "Diploma"; "LoadUsedSpritesGFX"; "PlayCurMonCry"; "PlaySlowCry"; "PrintDiploma"; "ReloadSpritesNoPalettes"; "UpdateSprites" ]
+            [ "Diploma"; "LoadUsedSpritesGFX"; "PrintDiploma"; "ReloadSpritesNoPalettes"; "UpdateSprites" ]
 
           yield! many ScriptSpecial StubNoOp [ LinkOnly; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for link-only systems."
             [ "CableClubCheckWhichChris"; "CheckBothSelectedSameRoom"; "CheckLinkTimeout_Receptionist"; "CheckTimeCapsuleCompatibility"; "CloseLink"

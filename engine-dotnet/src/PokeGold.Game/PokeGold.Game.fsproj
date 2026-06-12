@@ -14,13 +14,17 @@
     <EmbeddedResource Include="..\..\..\gfx\title\**\*" LinkBase="assets\gfx\title" />
     <EmbeddedResource Include="..\..\..\constants\charmap.asm" LinkBase="assets\constants" />
     <EmbeddedResource Include="..\..\..\audio\drumkits.asm" LinkBase="assets\audio" />
+    <EmbeddedResource Include="..\..\..\audio\cries.asm" LinkBase="assets\audio" />
+    <EmbeddedResource Include="..\..\..\audio\cry_pointers.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\audio\notes.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\audio\wave_samples.asm" LinkBase="assets\audio" />
     <EmbeddedResource Include="..\..\..\constants\credits_constants.asm" LinkBase="assets\constants" />
+    <EmbeddedResource Include="..\..\..\constants\cry_constants.asm" LinkBase="assets\constants" />
     <EmbeddedResource Include="..\..\..\data\credits_script.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\credits_strings.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\credits_strings_pointers.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\moves\animations.asm" LinkBase="assets\data\moves" />
+    <EmbeddedResource Include="..\..\..\data\pokemon\cries.asm" LinkBase="assets\data\pokemon" />
     <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
     <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
   </ItemGroup>
@@ -105,6 +109,7 @@
          channels to PCM (pure, no MonoGame; the host owns the sound device). -->
     <Compile Include="Audio\AudioData.fs" />
     <Compile Include="Audio\SongParser.fs" />
+    <Compile Include="Audio\Cries.fs" />
     <Compile Include="Audio\Apu.fs" />
     <Compile Include="Audio\ApuChip.fs" />
     <Compile Include="Audio\Synth.fs" />

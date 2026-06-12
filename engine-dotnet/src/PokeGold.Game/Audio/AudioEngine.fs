@@ -42,7 +42,13 @@ type AudioEngine(sampleRate: int) =
                 music <- Some(SongPlayer(SongParser.loadMusicFile path, true, sampleRate)))
 
     member _.PlaySfx(name: string) =
-        lock sync (fun () -> sfx.Add(SongPlayer(SongParser.loadSfx name, false, sampleRate)))
+        lock sync (fun () ->
+            let song =
+                match Cries.trySongForSfxName name with
+                | Some cry -> cry
+                | None -> SongParser.loadSfx name
+
+            sfx.Add(SongPlayer(song, false, sampleRate)))
 
     /// Play a music file once (non-looping) layered over the current track, then
     /// let it retire itself — for fanfares like the heal jingle.
