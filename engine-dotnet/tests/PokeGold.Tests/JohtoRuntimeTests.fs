@@ -572,3 +572,80 @@ let ``A6 Cut field move requires HiveBadge`` () =
     let ow = owOf driver.Snapshot
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_HIVEBADGE")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A7 — Goldenrod: Whitney, Flower Shop SquirtBottle
+// ---------------------------------------------------------------------------
+// The Flower Shop SquirtBottle test is the existing test at the top of this
+// file. A7 extends it with the gym warp and Whitney reward.
+
+[<Fact>]
+let ``A7 Route34 north connection enters GoldenrodCity`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Route34 is 20×54 cells. North connection to GoldenrodCity (40×36)
+    // has offset 5 blocks = cells 10–29 on the x-axis.
+    // Route34 north edge is y=0; walk up from near the top.
+    let mutable crossed = false
+    for tryX in [ 12; 14; 16; 18 ] do
+        if not crossed then
+            let d = GameDriver()
+            d.Apply(StartNewGame "A")
+            d.Apply(Warp("Route34", tryX, 2, Some Up))
+            for _ in 1 .. 6 do d.Step Up
+            if owMap d.Snapshot = "GoldenrodCity" then
+                crossed <- true
+                d.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+    Assert.True(crossed, "Could not cross Route34 north edge into GoldenrodCity")
+
+[<Fact>]
+let ``A7 GoldenrodCity gym warp loads GoldenrodGym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // GoldenrodCity warp 1 at (24,7) leads to GoldenrodGym.
+    driver.Apply(Warp("GoldenrodCity", 24, 8, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "GoldenrodGym"), 100)
+
+    Assert.Equal("GoldenrodGym", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A7 Whitney gives PlainBadge and TM45 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // Whitney's script: after being beaten, the player must talk to her
+    // again (she cries and returns). Pre-set: battle won, badge given.
+    driver.Apply(SetEvent("EVENT_BEAT_WHITNEY", true))
+    driver.Apply(SetFlag("ENGINE_PLAINBADGE", true))
+    // Whitney at (8,3); stand south facing up.
+    driver.Apply(Warp("GoldenrodGym", 8, 4, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM45_ATTRACT"
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM45_ATTRACT",
+                "Whitney should give TM45 ATTRACT after PlainBadge")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_PLAINBADGE",
+                "PLAINBADGE should be set")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
