@@ -4415,6 +4415,77 @@ let ``C34 Transform fails against transformed or hidden targets and clears last 
     Assert.Contains(afterHidden.Messages, fun msg -> msg.Contains("But it failed"))
 
 [<Fact>]
+let ``C35 Baton Pass preserves passable boosts but resets blocked volatile state`` () =
+    let batonPass = Moves.byName "BATON_PASS"
+    let tackle = Moves.byName "TACKLE"
+    let player =
+        { mon "PASSER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ batonPass; tackle ]
+            Pp = [ batonPass.Pp; tackle.Pp ]
+            AtkStage = 3
+            EvaStage = 2
+            Volatile =
+                { VolatileStatus.empty with
+                    FocusEnergy = true
+                    LeechSeed = true
+                    Nightmare = true
+                    Transformed = true
+                    EncoreTimer = Some 4
+                    EncoreMoveIndex = Some 0
+                    DisableTimer = Some 3
+                    DisabledMoveIndex = Some 1
+                    LastMove = Some batonPass
+                    LastCounterMove = Some batonPass
+                    Trapped = Some 3 } }
+    let bench =
+        { mon "RECEIVER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Volatile = { VolatileStatus.empty with Attracted = true; Trapped = Some 2 } }
+
+    let after = Battle.chooseMove 0 (Battle.createTeam [ player; bench ] [ enemy ] 157u)
+
+    Assert.Equal("RECEIVER", after.Player.Species.Name)
+    Assert.Equal(3, after.Player.AtkStage)
+    Assert.Equal(2, after.Player.EvaStage)
+    Assert.True(after.Player.Volatile.FocusEnergy)
+    Assert.True(after.Player.Volatile.LeechSeed)
+    Assert.False(after.Player.Volatile.Nightmare)
+    Assert.False(after.Player.Volatile.Attracted)
+    Assert.False(after.Player.Volatile.Transformed)
+    Assert.True(after.Player.Volatile.EncoreTimer.IsNone)
+    Assert.True(after.Player.Volatile.DisableTimer.IsNone)
+    Assert.True(after.Player.Volatile.LastMove.IsNone)
+    Assert.True(after.Player.Volatile.Trapped.IsNone)
+    Assert.False(after.Enemy.Volatile.Attracted)
+    Assert.True(after.Enemy.Volatile.Trapped.IsNone)
+
+[<Fact>]
+let ``C35 Baton Pass fails when there is no healthy bench target`` () =
+    let batonPass = Moves.byName "BATON_PASS"
+    let player =
+        { mon "PASSER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ batonPass ]
+            Pp = [ batonPass.Pp ] }
+    let faintedBench =
+        { mon "FAINTED" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100 with
+            Hp = 0
+            Moves = [ Moves.byName "TACKLE" ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Status = Sleep 2 }
+
+    let after = Battle.chooseMove 0 (Battle.createTeam [ player; faintedBench ] [ enemy ] 163u)
+
+    Assert.Equal("PASSER", after.Player.Species.Name)
+    Assert.Equal(batonPass.Pp - 1, after.Player.Pp.[0])
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50

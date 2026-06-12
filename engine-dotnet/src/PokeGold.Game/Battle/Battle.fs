@@ -802,6 +802,21 @@ module Battle =
         { m with Volatile = VolatileStatus.empty }
 
     let private batonPassTo (source: BattleMon) (target: BattleMon) =
+        let nightmare =
+            match target.Status with
+            | Sleep _ -> source.Volatile.Nightmare
+            | _ -> false
+        let volatile =
+            { source.Volatile with
+                Nightmare = nightmare
+                DisableTimer = None
+                DisabledMoveIndex = None
+                Attracted = false
+                Transformed = false
+                EncoreTimer = None
+                EncoreMoveIndex = None
+                LastMove = None
+                Trapped = None }
         { target with
             AtkStage = source.AtkStage
             DefStage = source.DefStage
@@ -810,7 +825,10 @@ module Battle =
             SpDefStage = source.SpDefStage
             AccStage = source.AccStage
             EvaStage = source.EvaStage
-            Volatile = { source.Volatile with BideTurns = None; BideDamage = 0 } }
+            Volatile = volatile }
+
+    let private resetBatonPassOpponentStatus (m: BattleMon) =
+        { m with Volatile = { m.Volatile with Attracted = false; Trapped = None } }
 
     let private switchTeamTo (teamIndex: int) (active: BattleMon) (team: BattleMon list) (incoming: BattleMon -> BattleMon -> BattleMon) =
         if teamIndex <= 0 || teamIndex >= team.Length then
@@ -1089,6 +1107,12 @@ module Battle =
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
                                     | None ->
                                         clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
+                                elif moveToUse.Effect = "EFFECT_BATON_PASS" then
+                                    let team = if playerIsUser then playerTeam else enemyTeam
+                                    if firstHealthyBench team |> Option.isSome then
+                                        executeMove user foe moveToUse isStruggle rng playerIsUser s
+                                    else
+                                        user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "But it failed!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
                                 elif moveToUse.Effect = "EFFECT_TELEPORT" then
                                     let rec drawBelow limit rng =
                                         let roll, rng' = Rng.next rng
@@ -1315,8 +1339,8 @@ module Battle =
                                     | Some(incoming, team') ->
                                         player <- incoming
                                         playerTeam <- team'
-                                        enemy <- foe
-                                        enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                        enemy <- resetBatonPassOpponentStatus foe
+                                        enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then enemy else m)
                                         msgs <- msgs @ [ $"Go, {incoming.Species.Name}!" ]
                                     | None ->
                                         msgs <- msgs @ [ "But it failed!" ]
@@ -1327,8 +1351,8 @@ module Battle =
                                     | Some(incoming, team') ->
                                         enemy <- incoming
                                         enemyTeam <- team'
-                                        player <- foe
-                                        playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then foe else m)
+                                        player <- resetBatonPassOpponentStatus foe
+                                        playerTeam <- playerTeam |> List.mapi (fun i m -> if i = 0 then player else m)
                                         msgs <- msgs @ [ $"{incoming.Species.Name} was sent out!" ]
                                     | None ->
                                         msgs <- msgs @ [ "But it failed!" ]
