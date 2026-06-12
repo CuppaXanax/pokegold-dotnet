@@ -1097,37 +1097,44 @@ module Effects =
             { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
 
         | ReturnDamage ->
-            // engine/battle/move_effects: power = max(1, friendship * 10 / 25).
-            // With friendship=0, power=1 (min 1 to do something).
-            let power = max 1 (ctx.Friendship * 10 / 25)
-            let m = { ctx.Move with Power = power }
-            let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-            let notes =
-                [ if ctx.Crit then "A critical hit!"
-                  if not ctx.IsStruggle then
-                      match Damage.effectivenessTimesTen m foe with
-                      | 0 -> $"It doesn't affect {foe.Species.Name}..."
-                      | e when e > 10 -> "It's super effective!"
-                      | e when e < 10 -> "It's not very effective..."
-                      | _ -> () ]
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+            // BattleCommand_HappinessPower: power = friendship * 10 / 25.
+            // DamageCalc returns no damage when this becomes 0.
+            let power = ctx.Friendship * 10 / 25
+            if power = 0 then
+                { ctx with LastDamage = 0 }
+            else
+                let m = { ctx.Move with Power = power }
+                let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
+                let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+                let notes =
+                    [ if ctx.Crit then "A critical hit!"
+                      if not ctx.IsStruggle then
+                          match Damage.effectivenessTimesTen m foe with
+                          | 0 -> $"It doesn't affect {foe.Species.Name}..."
+                          | e when e > 10 -> "It's super effective!"
+                          | e when e < 10 -> "It's not very effective..."
+                          | _ -> () ]
+                { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
 
         | FrustrationDamage ->
-            // power = max(1, (255 - friendship) * 10 / 25).
-            let power = max 1 ((255 - ctx.Friendship) * 10 / 25)
-            let m = { ctx.Move with Power = power }
-            let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-            let notes =
-                [ if ctx.Crit then "A critical hit!"
-                  if not ctx.IsStruggle then
-                      match Damage.effectivenessTimesTen m foe with
-                      | 0 -> $"It doesn't affect {foe.Species.Name}..."
-                      | e when e > 10 -> "It's super effective!"
-                      | e when e < 10 -> "It's not very effective..."
-                      | _ -> () ]
-            { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
+            // BattleCommand_FrustrationPower: power = (255 - friendship) * 10 / 25.
+            // DamageCalc returns no damage when this becomes 0.
+            let power = (255 - ctx.Friendship) * 10 / 25
+            if power = 0 then
+                { ctx with LastDamage = 0 }
+            else
+                let m = { ctx.Move with Power = power }
+                let dmg = Damage.calc ctx.User ctx.Foe m ctx.Crit ctx.Roll ctx.IsStruggle
+                let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
+                let notes =
+                    [ if ctx.Crit then "A critical hit!"
+                      if not ctx.IsStruggle then
+                          match Damage.effectivenessTimesTen m foe with
+                          | 0 -> $"It doesn't affect {foe.Species.Name}..."
+                          | e when e > 10 -> "It's super effective!"
+                          | e when e < 10 -> "It's not very effective..."
+                          | _ -> () ]
+                { ctx with Foe = foe; Messages = ctx.Messages @ notes; LastDamage = dmg }
 
         | PresentDamage ->
             // BattleCommand_Present (move_effects/present.asm).

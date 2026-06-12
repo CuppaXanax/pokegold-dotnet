@@ -2104,6 +2104,70 @@ let ``C4 non-damaging status healing screen and weather effects apply disassembl
     Assert.Equal(Some "SAND", sand.WeatherType)
     Assert.Equal(Some 5, sand.WeatherTimer)
 
+[<Fact>]
+let ``C5 audited utility and fixed-damage effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_ALWAYS_HIT", [ Damage ]
+          "EFFECT_STATIC_DAMAGE", [ StaticDamage ]
+          "EFFECT_LEVEL_DAMAGE", [ LevelDamage ]
+          "EFFECT_SUPER_FANG", [ SuperFangDamage ]
+          "EFFECT_FALSE_SWIPE", [ FalseSwipeDamage ]
+          "EFFECT_RETURN", [ ReturnDamage ]
+          "EFFECT_FRUSTRATION", [ FrustrationDamage ]
+          "EFFECT_FOCUS_ENERGY", [ SetFocusEnergy ]
+          "EFFECT_SUBSTITUTE", [ CreateSubstitute ]
+          "EFFECT_LEECH_SEED", [ ApplyLeechSeed ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C5 fixed-damage and utility effects apply disassembly state`` () =
+    let ctxFor move userHp foeHp friendship =
+        let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100 with Hp = userHp }
+        let foe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100 with Hp = foeHp }
+        { mkCtx user foe move with Friendship = friendship }
+
+    let swiftUser = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with Moves = [ { Moves.byName "SWIFT" with Accuracy = 0 } ]; Pp = [ 20 ] }
+    let swiftFoe = { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with Moves = [ growl ]; Pp = [ 40 ] }
+    let swifted = Battle.create swiftUser swiftFoe 42u |> Battle.chooseMove 0
+    Assert.True(swifted.Enemy.Hp < swiftFoe.Hp)
+
+    let sonicboom = Effects.applyCtx (ctxFor (Moves.byName "SONICBOOM") 200 200 0) StaticDamage
+    Assert.Equal(20, sonicboom.LastDamage)
+    Assert.Equal(180, sonicboom.Foe.Hp)
+
+    let seismicToss = Effects.applyCtx (ctxFor (Moves.byName "SEISMIC_TOSS") 200 200 0) LevelDamage
+    Assert.Equal(50, seismicToss.LastDamage)
+    Assert.Equal(150, seismicToss.Foe.Hp)
+
+    let superFang = Effects.applyCtx (ctxFor (Moves.byName "SUPER_FANG") 200 101 0) SuperFangDamage
+    Assert.Equal(50, superFang.LastDamage)
+    Assert.Equal(51, superFang.Foe.Hp)
+
+    let falseSwipe = Effects.applyCtx (ctxFor (Moves.byName "FALSE_SWIPE") 200 1 0) FalseSwipeDamage
+    Assert.Equal(1, falseSwipe.Foe.Hp)
+    Assert.Equal(0, falseSwipe.LastDamage)
+
+    let returnZero = Effects.applyCtx (ctxFor (Moves.byName "RETURN") 200 200 0) ReturnDamage
+    Assert.Equal(0, returnZero.LastDamage)
+    Assert.Equal(200, returnZero.Foe.Hp)
+
+    let frustrationZero = Effects.applyCtx (ctxFor (Moves.byName "FRUSTRATION") 200 200 255) FrustrationDamage
+    Assert.Equal(0, frustrationZero.LastDamage)
+    Assert.Equal(200, frustrationZero.Foe.Hp)
+
+    let focused = Effects.applyCtx (ctxFor (Moves.byName "FOCUS_ENERGY") 200 200 0) SetFocusEnergy
+    Assert.True(focused.User.Volatile.FocusEnergy)
+
+    let seeded = Effects.applyCtx (ctxFor (Moves.byName "LEECH_SEED") 200 200 0) ApplyLeechSeed
+    Assert.True(seeded.Foe.Volatile.LeechSeed)
+
+    let substitute = Effects.applyCtx (ctxFor (Moves.byName "SUBSTITUTE") 200 200 0) CreateSubstitute
+    Assert.Equal(150, substitute.User.Hp)
+    Assert.Equal(Some 50, substitute.User.Volatile.Substitute)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
@@ -3050,7 +3114,7 @@ let ``EFFECT_REVERSAL power table thresholds are faithful`` () =
     Assert.Equal(20, calcPower 480)  // ratio=23040/480=48
 
 [<Fact>]
-let ``EFFECT_RETURN with 0 friendship gives power 1`` () =
+let ``EFFECT_RETURN with 0 friendship deals no damage`` () =
     let m = move "RETURN" "EFFECT_RETURN" 1 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
     let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 50
@@ -3063,8 +3127,9 @@ let ``EFFECT_RETURN with 0 friendship gives power 1`` () =
           EnemySide = SideState.Empty
           WeatherTimer = None; WeatherType = None }
     let ctx' = Effects.applyCtx ctx ReturnDamage
-    // power = max(1, 0*10/25) = 1.
-    Assert.True(ctx'.LastDamage > 0)
+    // move_effects/return.asm allows power 0; DamageCalc returns before min damage.
+    Assert.Equal(0, ctx'.LastDamage)
+    Assert.Equal(foe.Hp, ctx'.Foe.Hp)
 
 [<Fact>]
 let ``EFFECT_FRUSTRATION with 0 friendship gives max power`` () =
@@ -3080,16 +3145,16 @@ let ``EFFECT_FRUSTRATION with 0 friendship gives max power`` () =
           EnemySide = SideState.Empty
           WeatherTimer = None; WeatherType = None }
     let ctx' = Effects.applyCtx ctx FrustrationDamage
-    // power = max(1, 255*10/25) = 102. Should deal good damage.
+    // power = 255*10/25 = 102. Should deal good damage.
     Assert.True(ctx'.LastDamage > 0)
 
 [<Fact>]
 let ``EFFECT_FRUSTRATION power scales with friendship`` () =
-    // friendship=255 → power = max(1, 0*10/25) = 1.
-    // friendship=0 → power = max(1, 255*10/25) = 102.
-    Assert.Equal(1, max 1 ((255 - 255) * 10 / 25))
-    Assert.Equal(102, max 1 ((255 - 0) * 10 / 25))
-    Assert.Equal(40, max 1 ((255 - 155) * 10 / 25))
+    // friendship=255 -> power = 0, reproducing the disassembly's zero-damage bug.
+    // friendship=0 -> power = 102.
+    Assert.Equal(0, (255 - 255) * 10 / 25)
+    Assert.Equal(102, (255 - 0) * 10 / 25)
+    Assert.Equal(40, (255 - 155) * 10 / 25)
 
 [<Fact>]
 let ``EFFECT_PRESENT damage tiers match thresholds`` () =
