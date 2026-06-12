@@ -250,6 +250,7 @@ Progress:
 - ✅ C1 batch 9: `EFFECT_BELLY_DRUM`, `EFFECT_PSYCH_UP`,
   `EFFECT_RESET_STATS`, `EFFECT_DREAM_EATER`, `EFFECT_PAIN_SPLIT`,
   `EFFECT_SPLASH`.
+- ✅ C1 batch 10: `EFFECT_SELFDESTRUCT`, `EFFECT_TRI_ATTACK`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

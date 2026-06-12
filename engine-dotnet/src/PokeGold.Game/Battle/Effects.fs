@@ -241,7 +241,7 @@ module Effects =
         | "EFFECT_FORCE_SWITCH" -> [ ForceSwitchTarget ]
         | "EFFECT_BATON_PASS" -> [ BatonPass ]
         | "EFFECT_PURSUIT" -> [ Damage ]
-        | "EFFECT_TRI_ATTACK" -> [ Damage; EffectChance InflictBurn ]
+        | "EFFECT_TRI_ATTACK" -> [ Damage; EffectChance TriStatus ]
         | "EFFECT_FLINCH_HIT" -> [ Damage; EffectChance SetFlinch ]
         | "EFFECT_CONFUSE_HIT" -> [ Damage; EffectChance InflictConfuse ]
         | "EFFECT_POISON_HIT" -> [ Damage; EffectChance InflictPoison ]
@@ -530,6 +530,18 @@ module Effects =
                         { ctx with Foe = foe; Messages = ctx.Messages @ [ $"{foe.Species.Name} was frozen solid!" ] }
                     | _ ->
                         { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
+
+        | TriStatus ->
+            let rec choose rng =
+                let roll, rng' = Rng.next rng
+                match ((roll >>> 4) &&& 0x3) with
+                | 0 -> choose rng'
+                | 1 -> InflictParalyze, rng'
+                | 2 -> InflictFreeze, rng'
+                | _ -> InflictBurn, rng'
+
+            let command, rng' = choose ctx.Rng
+            applyCtx { ctx with Rng = rng' } command
 
         | InflictAttract ->
             if safeguardBlocked ctx then
@@ -1355,8 +1367,15 @@ module Effects =
                 let sd = max 1 (ctx.Foe.SpDefense / 2)
                 { ctx.Foe with Defense = d; SpDefense = sd }
             let dmg = Damage.calc ctx.User halvedDefFoe ctx.Move ctx.Crit ctx.Roll ctx.IsStruggle
-            let foe = { ctx.Foe with Hp = max 0 (ctx.Foe.Hp - dmg) }
-            let user = { ctx.User with Hp = 0 }
+            let foe =
+                { ctx.Foe with
+                    Hp = max 0 (ctx.Foe.Hp - dmg)
+                    Volatile = { ctx.Foe.Volatile with DestinyBond = false } }
+            let user =
+                { ctx.User with
+                    Hp = 0
+                    Status = Healthy
+                    Volatile = { ctx.User.Volatile with LeechSeed = false } }
             let notes =
                 [ if ctx.Crit then "A critical hit!"
                   if not ctx.IsStruggle then

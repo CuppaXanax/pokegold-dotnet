@@ -228,6 +228,9 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C9 BattleTests audit utility effects represented by the current battle state, including Belly Drum's low-HP boost bug, Psych Up failure conditions, Reset Stats preserving volatile flags, Dream Eater, Pain Split, and Splash."
             [ "EFFECT_BELLY_DRUM"; "EFFECT_PSYCH_UP"; "EFFECT_RESET_STATS"; "EFFECT_DREAM_EATER"; "EFFECT_PAIN_SPLIT"; "EFFECT_SPLASH" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C10 BattleTests audit Selfdestruct's defense-halving damage and side-effect cleanup plus Tri Attack's disassembly-order random paralysis/freeze/burn secondary."
+            [ "EFFECT_SELFDESTRUCT"; "EFFECT_TRI_ATTACK" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_ALL_UP_HIT"; "EFFECT_ATTACK_UP_HIT"
               "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
@@ -242,10 +245,10 @@ module ConformanceLedger =
               "EFFECT_PROTECT"
               "EFFECT_RAGE"; "EFFECT_RAMPAGE"; "EFFECT_RAZOR_WIND"
               "EFFECT_ROLLOUT"; "EFFECT_SACRED_FIRE"
-              "EFFECT_SELFDESTRUCT"; "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
+              "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
               "EFFECT_SLEEP_TALK"; "EFFECT_SNORE"; "EFFECT_SOLARBEAM"; "EFFECT_SPITE"
               "EFFECT_STOMP"; "EFFECT_SWAGGER"
-              "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"; "EFFECT_TRI_ATTACK"
+              "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"
               "EFFECT_TWISTER"; "EFFECT_TRANSFORM"
               "EFFECT_BATON_PASS"; "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]

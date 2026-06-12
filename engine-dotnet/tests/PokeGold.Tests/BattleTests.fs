@@ -2278,6 +2278,64 @@ let ``C9 Psych Up fails unless target stat stages changed`` () =
     Assert.Equal(2, copied.User.AtkStage)
     Assert.Equal(-1, copied.User.EvaStage)
 
+[<Fact>]
+let ``C10 audited explosive and tri-status effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_SELFDESTRUCT", [ SelfdestructDamage ]
+          "EFFECT_TRI_ATTACK", [ Damage; EffectChance TriStatus ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 80 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C10 Selfdestruct halves target defense then clears user status side effects`` () =
+    let user =
+        { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 150 100 100 100 with
+            Status = Poison
+            Volatile = { VolatileStatus.empty with LeechSeed = true } }
+    let foe =
+        { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 300 100 100 100 with
+            Volatile = { VolatileStatus.empty with DestinyBond = true } }
+    let selfdestruct = Moves.byName "SELFDESTRUCT"
+
+    let after = Effects.applyCtx (mkCtx user foe selfdestruct) SelfdestructDamage
+
+    Assert.Equal(267, after.LastDamage)
+    Assert.Equal(33, after.Foe.Hp)
+    Assert.Equal(0, after.User.Hp)
+    Assert.Equal(Healthy, after.User.Status)
+    Assert.False(after.User.Volatile.LeechSeed)
+    Assert.False(after.Foe.Volatile.DestinyBond)
+
+[<Fact>]
+let ``C10 Tri Attack chooses paralysis freeze or burn after effect chance succeeds`` () =
+    let triAttack = { Moves.byName "TRI_ATTACK" with EffectChance = 255 }
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let rec chosen rng =
+        let roll, rng' = Rng.next rng
+        match ((roll >>> 4) &&& 0x3) with
+        | 0 -> chosen rng'
+        | 1 -> Paralysis
+        | 2 -> Freeze
+        | _ -> Burn
+
+    let seedForFreeze =
+        let mutable seed = 0u
+        let mutable found = false
+        while seed < 100000u && not found do
+            let gate, rngAfterGate = Rng.next (Rng.create seed)
+            found <- gate < 255 && chosen rngAfterGate = Freeze
+            if not found then seed <- seed + 1u
+        seed
+
+    let after =
+        Effects.applyCtx { mkCtx user foe triAttack with Rng = Rng.create seedForFreeze } (EffectChance TriStatus)
+
+    Assert.Equal(Freeze, after.Foe.Status)
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

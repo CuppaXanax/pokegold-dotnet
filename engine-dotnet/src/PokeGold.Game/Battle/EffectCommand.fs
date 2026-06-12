@@ -93,6 +93,9 @@ type EffectCommand =
     /// Set Flinch on the target (EFFECT_FLINCH_HIT secondary).
     /// Only effective if the user moved first. The pre-move gate checks the flag.
     | SetFlinch
+    /// Tri Attack secondary chooses paralyze/freeze/burn with equal odds after
+    /// the effect-chance gate succeeds.
+    | TriStatus
     /// Execute a secondary effect only when the move's effect-chance roll succeeds.
     | EffectChance of EffectCommand
     /// Seed the target with Leech Seed (EFFECT_LEECH_SEED).
