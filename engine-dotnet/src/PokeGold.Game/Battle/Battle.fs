@@ -1041,10 +1041,13 @@ module Battle =
                                 let vol = { user.Volatile with BideTurns = Some (turns - 1) }
                                 { user with Volatile = vol }, foe, [ $"{user.Species.Name} is storing energy!" ]
                             else
-                                let dmg = user.Volatile.BideDamage * 2
-                                let foe = { foe with Hp = max 0 (foe.Hp - dmg) }
+                                let dmg = min 65535 (user.Volatile.BideDamage * 2)
+                                let foe = if dmg > 0 then { foe with Hp = max 0 (foe.Hp - dmg) } else foe
                                 let vol = { user.Volatile with BideTurns = None; BideDamage = 0 }
-                                { user with Volatile = vol }, foe, [ $"{user.Species.Name} unleashed energy!" ]
+                                let messages =
+                                    if dmg > 0 then [ $"{user.Species.Name} unleashed energy!" ]
+                                    else [ $"{user.Species.Name} unleashed energy!"; "But it failed!" ]
+                                { user with Volatile = vol }, foe, messages
 
                         msgs <- msgs @ bideMsgs
                         if playerIsUser then

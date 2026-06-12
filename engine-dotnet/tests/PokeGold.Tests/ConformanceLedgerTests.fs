@@ -306,8 +306,11 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C35 BattleTests audit Baton Pass's healthy-bench failure gate, stat-stage preservation, passable volatile carryover, and ResetBatonPassStatus cleanup of Nightmare, Disable, Attract, Transform, Encore, last-move, and wrap state."
             [ "EFFECT_BATON_PASS" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C36 BattleTests audit Bide's 2-3 turn storage, damage accumulation, zero-damage failure text, doubled release damage, and 65535 clamp against BattleCommand_StoreEnergy and BattleCommand_UnleashEnergy."
+            [ "EFFECT_BIDE" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
-            [ "EFFECT_BIDE"; "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
+            [ "EFFECT_CONVERSION"; "EFFECT_CONVERSION2"; "EFFECT_FORCE_SWITCH"; "EFFECT_METRONOME"
               "EFFECT_MIMIC"; "EFFECT_MIRROR_MOVE"; "EFFECT_PURSUIT" ]
 
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."

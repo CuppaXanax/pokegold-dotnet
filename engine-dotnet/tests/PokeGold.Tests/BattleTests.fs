@@ -4486,6 +4486,45 @@ let ``C35 Baton Pass fails when there is no healthy bench target`` () =
     Assert.Contains(after.Messages, fun msg -> msg.Contains("But it failed"))
 
 [<Fact>]
+let ``C36 Bide release fails when no damage was stored`` () =
+    let bide = Moves.byName "BIDE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ bide ]
+            Pp = [ bide.Pp ]
+            Volatile = { VolatileStatus.empty with BideTurns = Some 1; BideDamage = 0 } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 167u)
+
+    Assert.Equal(enemy.Hp, after.Enemy.Hp)
+    Assert.True(after.Player.Volatile.BideTurns.IsNone)
+    Assert.Equal(0, after.Player.Volatile.BideDamage)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("unleashed energy"))
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("But it failed"))
+
+[<Fact>]
+let ``C36 Bide release doubles stored damage and clamps at 65535`` () =
+    let bide = Moves.byName "BIDE"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ bide ]
+            Pp = [ bide.Pp ]
+            Volatile = { VolatileStatus.empty with BideTurns = Some 1; BideDamage = 40000 } }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 70000 100 100 1 with
+            Moves = [ Moves.byName "SPLASH" ] }
+
+    let after = Battle.chooseMove 0 (Battle.create player enemy 173u)
+
+    Assert.Equal(enemy.Hp - 65535, after.Enemy.Hp)
+    Assert.True(after.Player.Volatile.BideTurns.IsNone)
+    Assert.Equal(0, after.Player.Volatile.BideDamage)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("unleashed energy"))
+
+[<Fact>]
 let ``EFFECT_FALSE_SWIPE leaves target at 1 HP`` () =
     let m = move "FALSE_SWIPE" "EFFECT_FALSE_SWIPE" 40 (ty "NORMAL")
     let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 50
