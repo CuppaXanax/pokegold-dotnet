@@ -261,6 +261,8 @@ Progress:
   `EFFECT_FORESIGHT`, `EFFECT_NIGHTMARE`, `EFFECT_PERISH_SONG`.
 - ✅ C1 batch 16: `EFFECT_FLAME_WHEEL`, `EFFECT_SACRED_FIRE`,
   `EFFECT_HEAL_BELL`.
+- ✅ C1 batch 17: `EFFECT_FLY`, `EFFECT_SOLARBEAM`,
+  `EFFECT_RAZOR_WIND`, `EFFECT_SKULL_BASH`, `EFFECT_SKY_ATTACK`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

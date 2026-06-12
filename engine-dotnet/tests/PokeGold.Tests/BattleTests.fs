@@ -821,7 +821,7 @@ let ``secondary poison-on-hit does not apply when the effect chance fails`` () =
 [<Fact>]
 let ``charging and recharge family maps to explicit effect commands`` () =
     Assert.Contains(Damage, Effects.forMove (Moves.byName "FLY"))
-    Assert.Contains(BeginCharging, Effects.forMove (Moves.byName "FLY"))
+    Assert.DoesNotContain(BeginCharging, Effects.forMove (Moves.byName "FLY"))
     Assert.Contains(BeginRecharge, Effects.forMove (Moves.byName "HYPER_BEAM"))
     Assert.Contains(BeginRampage, Effects.forMove (Moves.byName "THRASH"))
     Assert.Contains(BeginFutureSight, Effects.forMove (Moves.byName "FUTURE_SIGHT"))
@@ -2626,6 +2626,58 @@ let ``C16 Heal Bell clears the active user's status and nightmare`` () =
     Assert.Equal(Healthy, after.User.Status)
     Assert.False(after.User.Volatile.Nightmare)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("bell"))
+
+[<Fact>]
+let ``C17 audited two-turn moves map to second-turn command families`` () =
+    let cases =
+        [ "EFFECT_FLY", [ Damage ]
+          "EFFECT_SOLARBEAM", [ Damage ]
+          "EFFECT_RAZOR_WIND", [ Damage ]
+          "EFFECT_SKULL_BASH", [ Damage; RaiseUserStat Defense ]
+          "EFFECT_SKY_ATTACK", [ Damage; EffectChance SetFlinch ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 80 (ty "NORMAL") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C17 Fly charges on the first turn and damages on the second turn`` () =
+    let fly = { Moves.byName "FLY" with Accuracy = 100 }
+    let user =
+        { mon "USER" (ty "FLYING") (ty "FLYING") 50 100 100 100 200 with
+            Moves = [ fly ]
+            Pp = [ 15 ] }
+    let foe =
+        { mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1 with
+            Moves = [ growl ]
+            Pp = [ 40 ] }
+
+    let afterCharge = Battle.create user foe 42u |> Battle.chooseMove 0
+    let afterHit = Battle.chooseMove 0 afterCharge
+
+    Assert.Equal(foe.Hp, afterCharge.Enemy.Hp)
+    Assert.True(afterCharge.Player.Volatile.Charging.IsSome)
+    Assert.True(afterHit.Enemy.Hp < foe.Hp)
+    Assert.True(afterHit.Player.Volatile.Charging.IsNone)
+
+[<Fact>]
+let ``C17 Skull Bash raises Defense after damage and Sky Attack can flinch`` () =
+    let skullBash = Moves.byName "SKULL_BASH"
+    let skyAttack = { Moves.byName "SKY_ATTACK" with EffectChance = 255 }
+    let user = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+
+    let skullBashAfter =
+        Effects.forMove skullBash
+        |> List.fold (fun ctx cmd -> Effects.applyCtx ctx cmd) (mkCtx user foe skullBash)
+    let skyAttackAfter =
+        Effects.forMove skyAttack
+        |> List.fold (fun ctx cmd -> Effects.applyCtx ctx cmd) (mkCtx user foe skyAttack)
+
+    Assert.True(skullBashAfter.Foe.Hp < foe.Hp)
+    Assert.Equal(1, skullBashAfter.User.DefStage)
+    Assert.True(skyAttackAfter.Foe.Hp < foe.Hp)
+    Assert.True(skyAttackAfter.Foe.Volatile.Flinch)
 
 // -- Pre-move gates ----------------------------------------------------------
 
