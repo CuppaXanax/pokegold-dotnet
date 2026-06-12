@@ -681,9 +681,16 @@ module Effects =
             { ctx with WeatherTimer = Some 5; WeatherType = Some "SUN"; Messages = ctx.Messages @ [ "The sun is shining!" ] }
 
         | HealUser ->
-            let heal = ctx.User.MaxHp / 2
-            let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
-            { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
+            // BattleCommand_Heal branches REST before the generic half-HP heal.
+            if ctx.User.Hp >= ctx.User.MaxHp then
+                { ctx with Messages = ctx.Messages @ [ "HP is full!" ] }
+            elif ctx.Move.Name = "REST" then
+                let user = { ctx.User with Hp = ctx.User.MaxHp; Status = Sleep 3 }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{user.Species.Name} went to sleep!"; "regained health!" ] }
+            else
+                let heal = ctx.User.MaxHp / 2
+                let user = { ctx.User with Hp = min ctx.User.MaxHp (ctx.User.Hp + heal) }
+                { ctx with User = user; Messages = ctx.Messages @ [ "regained health!" ] }
 
         | WeatherHeal ->
             let heal =

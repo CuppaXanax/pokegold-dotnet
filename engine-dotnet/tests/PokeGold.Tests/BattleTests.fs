@@ -1081,9 +1081,18 @@ let ``EFFECT_SPEED_UP maps correctly`` () =
 let ``EFFECT_HEAL recovers half max HP`` () =
     let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with Hp = 10 }
     let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1
-    let ctx = mkCtx user foe (Moves.byName "REST")
-    let applied = Effects.forMove (Moves.byName "REST") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+    let ctx = mkCtx user foe (Moves.byName "RECOVER")
+    let applied = Effects.forMove (Moves.byName "RECOVER") |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
     Assert.Equal(60, applied.User.Hp)
+
+[<Fact>]
+let ``EFFECT_HEAL Rest restores full HP and applies fixed sleep counter`` () =
+    let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 200 with Hp = 10; Status = Poison }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 1
+    let rest = Moves.byName "REST"
+    let applied = Effects.forMove rest |> List.fold (fun c cmd -> Effects.applyCtx c cmd) (mkCtx user foe rest)
+    Assert.Equal(100, applied.User.Hp)
+    Assert.Equal(Sleep 3, applied.User.Status)
 
 [<Fact>]
 let ``EFFECT_SWAGGER confuses and raises target attack`` () =
@@ -2025,6 +2034,75 @@ let ``C3 stat-stage commands raise the user and lower the target by exact stages
 
     let evasionDown = apply "EFFECT_EVASION_DOWN"
     Assert.Equal(-1, evasionDown.Foe.EvaStage)
+
+[<Fact>]
+let ``C4 audited status field healing screen and weather effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_POISON", [ InflictPoison ]
+          "EFFECT_CONFUSE", [ InflictConfuse ]
+          "EFFECT_TOXIC", [ InflictToxic ]
+          "EFFECT_HEAL", [ HealUser ]
+          "EFFECT_REFLECT", [ SetReflect ]
+          "EFFECT_LIGHT_SCREEN", [ SetLightScreen ]
+          "EFFECT_MIST", [ SetMist ]
+          "EFFECT_SAFEGUARD", [ SetSafeguard ]
+          "EFFECT_RAIN_DANCE", [ SetRainDance ]
+          "EFFECT_SUNNY_DAY", [ SetSunnyDay ]
+          "EFFECT_SANDSTORM", [ SetSandstorm ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C4 non-damaging status healing screen and weather effects apply disassembly state`` () =
+    let apply move userHp =
+        let user = { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100 with Hp = userHp }
+        let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+        let ctx = mkCtx user foe move
+        Effects.forMove move |> List.fold (fun c cmd -> Effects.applyCtx c cmd) ctx
+
+    let poisoned = apply (Moves.byName "POISONPOWDER") 100
+    Assert.Equal(Poison, poisoned.Foe.Status)
+
+    let toxic = apply (Moves.byName "TOXIC") 100
+    Assert.Equal(BadPoison 0, toxic.Foe.Status)
+
+    let confused = apply (Moves.byName "CONFUSE_RAY") 100
+    match confused.Foe.Volatile.Confusion with
+    | Some turns -> Assert.InRange(turns, 2, 5)
+    | None -> Assert.Fail("Confuse Ray should set a 2-5 turn confusion counter.")
+
+    let recovered = apply (Moves.byName "RECOVER") 10
+    Assert.Equal(60, recovered.User.Hp)
+
+    let rested = apply (Moves.byName "REST") 10
+    Assert.Equal(100, rested.User.Hp)
+    Assert.Equal(Sleep 3, rested.User.Status)
+
+    let mist = apply (Moves.byName "MIST") 100
+    Assert.True(mist.User.Volatile.Mist)
+
+    let safeguard = apply (Moves.byName "SAFEGUARD") 100
+    Assert.Equal(Some 5, safeguard.PlayerSide.SafeguardTimer)
+
+    let reflect = apply (Moves.byName "REFLECT") 100
+    Assert.Equal(Some 5, reflect.PlayerSide.ReflectTimer)
+
+    let lightScreen = apply (Moves.byName "LIGHT_SCREEN") 100
+    Assert.Equal(Some 5, lightScreen.PlayerSide.LightScreenTimer)
+
+    let rain = apply (Moves.byName "RAIN_DANCE") 100
+    Assert.Equal(Some "RAIN", rain.WeatherType)
+    Assert.Equal(Some 5, rain.WeatherTimer)
+
+    let sun = apply (Moves.byName "SUNNY_DAY") 100
+    Assert.Equal(Some "SUN", sun.WeatherType)
+    Assert.Equal(Some 5, sun.WeatherTimer)
+
+    let sand = apply (Moves.byName "SANDSTORM") 100
+    Assert.Equal(Some "SAND", sand.WeatherType)
+    Assert.Equal(Some 5, sand.WeatherTimer)
 
 // -- Pre-move gates ----------------------------------------------------------
 
