@@ -5289,6 +5289,16 @@ let ``battle anim maps fire move to FireBurst`` () =
     Assert.Equal(FireBurst, BattleAnim.effectForMove move)
 
 [<Fact>]
+let ``battle anim parses Ember script from disassembly`` () =
+    let move = Moves.byName "EMBER"
+    let script = BattleAnim.scriptForMove move |> Option.defaultWith (fun () -> failwith "missing Ember animation")
+
+    Assert.Equal("BattleAnim_Ember", script.Label)
+    Assert.Contains(script.Commands, function AnimGfx gfx -> gfx |> List.contains "BATTLE_ANIM_GFX_FIRE" | _ -> false)
+    Assert.Contains(script.Commands, function AnimObj(objectId, _, _, _) -> objectId = "BATTLE_ANIM_OBJ_EMBER" | _ -> false)
+    Assert.Equal(56, BattleAnim.durationForMove move)
+
+[<Fact>]
 let ``battle anim maps status move to StatusEffect`` () =
     let move = Moves.byName "GROWL"
     Assert.Equal(StatusEffect, BattleAnim.effectForMove move)

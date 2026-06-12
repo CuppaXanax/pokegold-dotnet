@@ -183,7 +183,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                                         state <- Battle.chooseMove 0 state
                                         queue <- state.Messages
                                         currentAnim <- BattleAnim.effectForMove move
-                                        animFrames <- BattleAnim.duration currentAnim
+                                        animFrames <- BattleAnim.durationForMove move
                                     elif edge buttons.Down prev.Down then
                                         cursor <- min (moves.Length - 1) (cursor + 1)
                                     elif edge buttons.Up prev.Up then
@@ -197,7 +197,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                                             state <- Battle.chooseMove cursor state
                                             queue <- state.Messages
                                             currentAnim <- BattleAnim.effectForMove move
-                                            animFrames <- BattleAnim.duration currentAnim
+                                            animFrames <- BattleAnim.durationForMove move
                                         // else: 0 PP — do nothing (move blocked)
                                     elif edge buttons.B prev.B then
                                         state <- Battle.run state

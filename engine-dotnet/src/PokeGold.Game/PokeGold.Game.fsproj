@@ -20,6 +20,7 @@
     <EmbeddedResource Include="..\..\..\data\credits_script.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\credits_strings.asm" LinkBase="assets\data" />
     <EmbeddedResource Include="..\..\..\data\credits_strings_pointers.asm" LinkBase="assets\data" />
+    <EmbeddedResource Include="..\..\..\data\moves\animations.asm" LinkBase="assets\data\moves" />
     <EmbeddedResource Include="..\..\..\data\tilesets\*_metatiles.bin" LinkBase="assets\data\tilesets" />
     <EmbeddedResource Include="..\..\..\maps\**\*.blk" LinkBase="assets\maps" />
   </ItemGroup>
