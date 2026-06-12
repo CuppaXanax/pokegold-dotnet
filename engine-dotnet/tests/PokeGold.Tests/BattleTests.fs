@@ -2583,6 +2583,50 @@ let ``C15 Perish Song sets missing counters to four and fails when both are acti
     Assert.Equal(Some 4, failedRepeat.EnemySide.PerishCounter)
     Assert.Contains(failedRepeat.Messages, fun msg -> msg.Contains("failed"))
 
+[<Fact>]
+let ``C16 audited thawing fire moves and Heal Bell map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_FLAME_WHEEL", [ Damage; DefrostUser; EffectChance InflictBurn ]
+          "EFFECT_SACRED_FIRE", [ Damage; DefrostUser; EffectChance InflictBurn ]
+          "EFFECT_HEAL_BELL", [ HealBellEffect ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 60 (ty "FIRE") with Accuracy = 100; EffectChance = 255 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C16 Flame Wheel can be used while frozen and thaws after damage`` () =
+    let flameWheel = { Moves.byName "FLAME_WHEEL" with Accuracy = 100; EffectChance = 0 }
+    let user =
+        { mon "USER" (ty "FIRE") (ty "FIRE") 50 100 100 100 200 with
+            Status = Freeze
+            Moves = [ flameWheel ]
+            Pp = [ 25 ] }
+    let foe =
+        { mon "FOE" (ty "GRASS") (ty "GRASS") 50 100 100 100 1 with
+            Moves = [ growl ]
+            Pp = [ 40 ] }
+
+    let after = Battle.create user foe 42u |> Battle.chooseMove 0
+
+    Assert.Equal(Healthy, after.Player.Status)
+    Assert.True(after.Enemy.Hp < foe.Hp)
+
+[<Fact>]
+let ``C16 Heal Bell clears the active user's status and nightmare`` () =
+    let healBell = Moves.byName "HEAL_BELL"
+    let user =
+        { mon "USER" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100 with
+            Status = Poison
+            Volatile = { VolatileStatus.empty with Nightmare = true } }
+    let foe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 100 100 100 100
+
+    let after = Effects.applyCtx (mkCtx user foe healBell) HealBellEffect
+
+    Assert.Equal(Healthy, after.User.Status)
+    Assert.False(after.User.Volatile.Nightmare)
+    Assert.Contains(after.Messages, fun msg -> msg.Contains("bell"))
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]

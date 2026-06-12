@@ -246,17 +246,19 @@ module ConformanceLedger =
           yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C15 BattleTests audit Hidden Power's modeled DV-zero damage, Lock-On, Foresight, Nightmare, and Perish Song against their helper scripts."
             [ "EFFECT_HIDDEN_POWER"; "EFFECT_LOCK_ON"; "EFFECT_FORESIGHT"; "EFFECT_NIGHTMARE"; "EFFECT_PERISH_SONG" ]
 
+          yield! many MoveEffect FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "C16 BattleTests audit Flame Wheel/Sacred Fire self-thaw command order and Heal Bell's active status/Nightmare cleanup."
+            [ "EFFECT_FLAME_WHEEL"; "EFFECT_SACRED_FIRE"; "EFFECT_HEAL_BELL" ]
+
           yield! many MoveEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Move effect is routed through explicit battle effect commands or an intentional no-op/fallback path with unit coverage for the effect family."
             [ "EFFECT_BEAT_UP"; "EFFECT_COUNTER"
               "EFFECT_DISABLE"
-              "EFFECT_ENCORE"; "EFFECT_ENDURE"; "EFFECT_FLAME_WHEEL"
+              "EFFECT_ENCORE"; "EFFECT_ENDURE"
               "EFFECT_FLY"
-              "EFFECT_FUTURE_SIGHT"; "EFFECT_HEAL_BELL"
+              "EFFECT_FUTURE_SIGHT"
               "EFFECT_MIRROR_COAT"; "EFFECT_MOONLIGHT"
               "EFFECT_MORNING_SUN"; "EFFECT_OHKO"
               "EFFECT_PROTECT"
               "EFFECT_RAGE"; "EFFECT_RAMPAGE"; "EFFECT_RAZOR_WIND"
-              "EFFECT_SACRED_FIRE"
               "EFFECT_SKETCH"; "EFFECT_SKULL_BASH"; "EFFECT_SKY_ATTACK"
               "EFFECT_SLEEP_TALK"; "EFFECT_SOLARBEAM"; "EFFECT_SPITE"
               "EFFECT_SYNTHESIS"; "EFFECT_TELEPORT"; "EFFECT_THIEF"

@@ -259,6 +259,8 @@ Progress:
 - ✅ C1 batch 14: `EFFECT_FURY_CUTTER`, `EFFECT_SNORE`.
 - ✅ C1 batch 15: `EFFECT_HIDDEN_POWER`, `EFFECT_LOCK_ON`,
   `EFFECT_FORESIGHT`, `EFFECT_NIGHTMARE`, `EFFECT_PERISH_SONG`.
+- ✅ C1 batch 16: `EFFECT_FLAME_WHEEL`, `EFFECT_SACRED_FIRE`,
+  `EFFECT_HEAL_BELL`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

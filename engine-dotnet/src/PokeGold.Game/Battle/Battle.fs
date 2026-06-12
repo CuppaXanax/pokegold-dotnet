@@ -115,6 +115,8 @@ module Battle =
 
         // 2. Freeze gate
         match user.Status with
+        | Freeze when selectedMove.Name = "FLAME_WHEEL" || selectedMove.Name = "SACRED_FIRE" ->
+            (true, false, user, [], rng)
         | Freeze ->
             (false, false, user, [ $"{user.Species.Name} is frozen solid!" ], rng)
         | _ ->

@@ -201,8 +201,8 @@ module Effects =
         | "EFFECT_SOLARBEAM" -> [ Damage; BeginCharging ]
         | "EFFECT_THUNDER" -> [ Damage; EffectChance InflictParalyze ]
         | "EFFECT_DEFENSE_CURL" -> [ RaiseUserStat Defense; SetDefenseCurl ]
-        | "EFFECT_FLAME_WHEEL" -> [ Damage; EffectChance InflictBurn ]
-        | "EFFECT_SACRED_FIRE" -> [ Damage; EffectChance InflictBurn ]
+        | "EFFECT_FLAME_WHEEL" -> [ Damage; DefrostUser; EffectChance InflictBurn ]
+        | "EFFECT_SACRED_FIRE" -> [ Damage; DefrostUser; EffectChance InflictBurn ]
         | "EFFECT_HEAL" -> [ HealUser ]
         | "EFFECT_MORNING_SUN" -> [ WeatherHeal ]
         | "EFFECT_SYNTHESIS" -> [ WeatherHeal ]
@@ -544,6 +544,13 @@ module Effects =
                     | _ ->
                         { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
 
+        | DefrostUser ->
+            match ctx.User.Status with
+            | Freeze ->
+                let user = { ctx.User with Status = Healthy }
+                { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} was defrosted!" ] }
+            | _ -> ctx
+
         | TriStatus ->
             let rec choose rng =
                 let roll, rng' = Rng.next rng
@@ -825,7 +832,11 @@ module Effects =
             { ctx with Foe = foe; Messages = ctx.Messages @ [ "Mirror Coated the attack!" ]; LastDamage = dmg }
 
         | HealBellEffect ->
-            { ctx with User = { ctx.User with Status = Healthy }; Messages = ctx.Messages @ [ "A bell chimed!" ] }
+            let user =
+                { ctx.User with
+                    Status = Healthy
+                    Volatile = { ctx.User.Volatile with Nightmare = false } }
+            { ctx with User = user; Messages = ctx.Messages @ [ "A bell chimed!" ] }
 
         | AllUpHit ->
             ctx

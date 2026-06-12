@@ -86,6 +86,8 @@ type EffectCommand =
     | InflictBurn
     /// Freeze the target (EFFECT_FREEZE / EFFECT_FREEZE_HIT). Blocked if already statused.
     | InflictFreeze
+    /// Thaw the user after Flame Wheel / Sacred Fire damage.
+    | DefrostUser
     /// Infatuate the target when explicit battle genders are opposite.
     | InflictAttract
     // --- M13.4: volatile status commands ---
