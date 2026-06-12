@@ -463,7 +463,7 @@ module Script =
             | Halloffame ->
                 let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                 suspend (endLike vm) w HallOfFame
-            | Credits -> run world (endLike vm)
+            | Credits -> run (World.setVar "__credits_rolled" 1 world) (endLike vm)
             | Givemoney args -> suspend next world (GiveMoney(intArg args))
             | Takemoney args -> suspend next world (TakeMoney(intArg args))
             | Blackoutmod map ->

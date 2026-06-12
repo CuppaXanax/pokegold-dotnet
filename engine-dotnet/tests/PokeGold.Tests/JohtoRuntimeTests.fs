@@ -2889,3 +2889,137 @@ let ``A20 Viridian Gym door loads gym and Blue awards EarthBadge`` () =
     Assert.True(ow.Events |> List.contains "EVENT_BEAT_BLUE", "Blue battle should set EVENT_BEAT_BLUE")
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_EARTHBADGE", "Blue battle should set EARTHBADGE")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A21 — Pallet → Oak (16 badges) → Route 28/Silver Cave gate → Red → credits
+// ---------------------------------------------------------------------------
+
+let private kantoBadgeFlags =
+    [ "ENGINE_THUNDERBADGE"
+      "ENGINE_MARSHBADGE"
+      "ENGINE_CASCADEBADGE"
+      "ENGINE_BOULDERBADGE"
+      "ENGINE_RAINBOWBADGE"
+      "ENGINE_SOULBADGE"
+      "ENGINE_VOLCANOBADGE"
+      "ENGINE_EARTHBADGE" ]
+
+let private setKantoBadges (driver: GameDriver) =
+    kantoBadgeFlags
+    |> List.iter (fun flag -> driver.Apply(SetFlag(flag, true)))
+
+let private setAllBadges (driver: GameDriver) =
+    setJohtoBadges driver
+    setKantoBadges driver
+
+[<Fact>]
+let ``A21 Oak opens Mt Silver after all sixteen badges`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    setAllBadges driver
+    driver.Apply(SetEvent("EVENT_OPENED_MT_SILVER", false))
+
+    // PalletTown.asm: warp_event 12,11, OAKS_LAB, 1.
+    driver.Apply(Warp("PalletTown", 12, 12, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("OaksLab", owMap driver.Snapshot)
+
+    // OaksLab.asm: Oak stands at 4,2 and opens Mt. Silver at NUM_BADGES.
+    driver.Apply(Warp("OaksLab", 4, 3, Some Up))
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_TALKED_TO_OAK_IN_KANTO"
+                && ow.Events |> List.contains "EVENT_OPENED_MT_SILVER"
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_TALKED_TO_OAK_IN_KANTO", "Oak should remember the Kanto greeting")
+    Assert.True(ow.Events |> List.contains "EVENT_OPENED_MT_SILVER", "Oak should open Mt. Silver after all sixteen badges")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A21 VictoryRoadGate Mt Silver guard blocks until Oak opens route`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_OPENED_MT_SILVER", false))
+
+    // VictoryRoadGate.asm: left Black Belt at 7,5 uses EVENT_OPENED_MT_SILVER.
+    driver.Apply(Warp("VictoryRoadGate", 8, 5, Some Left))
+    let blockedGate = owOf driver.Snapshot
+    Assert.True(hasActor "VictoryRoadGateLeftBlackBeltScript" true blockedGate)
+
+    stepAndSettle driver Left
+    let stillBlocked = owOf driver.Snapshot
+    Assert.Equal((8, 5), (stillBlocked.Player.CellX, stillBlocked.Player.CellY))
+
+    driver.Apply(SetEvent("EVENT_OPENED_MT_SILVER", true))
+    driver.Apply(Warp("VictoryRoadGate", 8, 5, Some Left))
+    let openedGate = owOf driver.Snapshot
+    Assert.True(hasActor "VictoryRoadGateLeftBlackBeltScript" false openedGate)
+
+    stepAndSettle driver Left
+    let movedThrough = owOf driver.Snapshot
+    Assert.Equal((7, 5), (movedThrough.Player.CellX, movedThrough.Player.CellY))
+
+    // VictoryRoadGate.asm: warp_event 2,7, ROUTE_28, 2.
+    driver.Apply(Warp("VictoryRoadGate", 3, 7, Some Left))
+    stepAndSettle driver Left
+    Assert.Equal("Route28", owMap driver.Snapshot)
+
+    // Route28 metadata connects west into SilverCaveOutside.
+    driver.Apply(Warp("Route28", 0, 15, Some Left))
+    stepAndSettle driver Left
+    Assert.Equal("SilverCaveOutside", owMap driver.Snapshot)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A21 Silver Cave warps reach Red and credits roll after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_RED_IN_MT_SILVER", false))
+
+    // SilverCaveOutside.asm: warp_event 18,11, SILVER_CAVE_ROOM_1, 1.
+    driver.Apply(Warp("SilverCaveOutside", 18, 12, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("SilverCaveRoom1", owMap driver.Snapshot)
+
+    // SilverCaveRoom1.asm: warp_event 15,1, SILVER_CAVE_ROOM_2, 1.
+    driver.Apply(Warp("SilverCaveRoom1", 15, 2, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("SilverCaveRoom2", owMap driver.Snapshot)
+
+    // SilverCaveRoom2.asm: warp_event 11,5, SILVER_CAVE_ROOM_3, 1.
+    driver.Apply(Warp("SilverCaveRoom2", 11, 6, Some Up))
+    stepAndSettle driver Up
+    Assert.Equal("SilverCaveRoom3", owMap driver.Snapshot)
+
+    // SilverCaveRoom3.asm: Red stands at 9,10, disappears, heals, reanchors, and rolls credits.
+    driver.Apply(Warp("SilverCaveRoom3", 9, 11, Some Up))
+    let beforeRed = owOf driver.Snapshot
+    Assert.True(hasActor "Red" true beforeRed, "Red should be visible before the final battle")
+
+    driver.Talk()
+
+    advanceRuntimeUntil
+        driver
+        15000
+        (fun s ->
+            match s.Overworld with
+            | Some ow ->
+                ow.CanCapture
+                && ow.Events |> List.contains "EVENT_RED_IN_MT_SILVER"
+                && Map.tryFind "__credits_rolled" ow.Vars = Some 1
+            | None -> false)
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_RED_IN_MT_SILVER", "Red should disappear after the battle")
+    Assert.True(hasActor "Red" false ow, "Red's object should be hidden after disappear")
+    Assert.Equal(Some 1, Map.tryFind "__credits_rolled" ow.Vars)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)

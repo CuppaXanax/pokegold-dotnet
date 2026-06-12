@@ -118,6 +118,11 @@ module OverworldState =
         let t = if t.StartsWith "TILESET_" then t.Substring "TILESET_".Length else t
         t.ToLowerInvariant()
 
+    let private collisionStem stem =
+        match stem with
+        | "dark_cave" -> "cave"
+        | _ -> stem
+
     /// Whether a map's binary/asset files are all present, so it can be loaded.
     /// Map geometry/events/text are baked, but the `.blk` block layout, tileset
     /// gfx and collision are still on-disk assets; an interior whose assets aren't
@@ -126,7 +131,7 @@ module OverworldState =
         let stem = tilesetStem meta
         Assets.exists $"maps/{meta.Blocks}.blk"
         && Assets.exists $"gfx/tilesets/{stem}.png"
-        && CollisionData.tilesets.ContainsKey stem
+        && CollisionData.tilesets.ContainsKey(collisionStem stem)
 
     /// Asset spec for a map id: the loaders needed to (re)build it, derived from the
     /// baked metadata (dimensions, tileset). The player overworld sprite is fixed.

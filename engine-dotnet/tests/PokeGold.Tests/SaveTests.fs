@@ -128,12 +128,15 @@ let ``tryWarp loads the destination map and lands on the paired warp`` () =
     | None -> Assert.Fail("AZALEA_TOWN should resolve to a loadable map")
 
 [<Fact>]
-let ``tryWarp is a no-op for a destination map whose assets are not in the tree`` () =
+let ``tryWarp loads dark cave maps using cave metatile and collision aliases`` () =
     let content = Content()
-    // DARK_CAVE_VIOLET_ENTRANCE is a real map (baked metadata/events) but its
-    // `dark_cave` tileset gfx/collision aren't in the tree yet, so it isn't
-    // loadable — the warp no-ops.
-    Assert.Equal(None, OverworldState.tryWarp content "DARK_CAVE_VIOLET_ENTRANCE" 1)
+    // gfx/tilesets.asm gives Dark Cave its own GFX but aliases its metatiles and
+    // collision to Cave, so DARK_CAVE_VIOLET_ENTRANCE is loadable.
+    match OverworldState.tryWarp content "DARK_CAVE_VIOLET_ENTRANCE" 1 with
+    | Some s ->
+        Assert.Equal("DarkCaveVioletEntrance", s.MapId)
+        Assert.Equal((3, 15), (s.Player.CellX, s.Player.CellY))
+    | None -> Assert.Fail("DARK_CAVE_VIOLET_ENTRANCE should resolve to a loadable map")
 
 // ---- M10.4 — explicit script warps (warp / warpfacing) ---------------------
 
@@ -157,7 +160,13 @@ let ``tryWarpExplicit keeps the fallback facing when the command gives none`` ()
     | None -> Assert.Fail("AZALEA_TOWN should resolve to a loadable map")
 
 [<Fact>]
-let ``tryWarpExplicit is a no-op for an unknown or unloadable destination`` () =
+let ``tryWarpExplicit is a no-op for unknown maps and loads dark cave aliases`` () =
     let content = Content()
     Assert.Equal(None, OverworldState.tryWarpExplicit content "MAP_THAT_DOES_NOT_EXIST" 1 1 None Down)
-    Assert.Equal(None, OverworldState.tryWarpExplicit content "DARK_CAVE_VIOLET_ENTRANCE" 1 1 None Down)
+
+    match OverworldState.tryWarpExplicit content "DARK_CAVE_VIOLET_ENTRANCE" 1 1 None Down with
+    | Some s ->
+        Assert.Equal("DarkCaveVioletEntrance", s.MapId)
+        Assert.Equal((1, 1), (s.Player.CellX, s.Player.CellY))
+        Assert.Equal(Down, s.Player.Facing)
+    | None -> Assert.Fail("DARK_CAVE_VIOLET_ENTRANCE should resolve to a loadable map")

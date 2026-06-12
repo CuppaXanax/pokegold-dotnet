@@ -42,9 +42,15 @@ module Collision =
 
     /// Load the collision model for a named tileset (e.g. "johto_modern").
     let loadNamed (name: string) : Collision =
+        // gfx/tilesets.asm aliases Dark Cave collision to Cave collision.
+        let collisionName =
+            match name with
+            | "dark_cave" -> "cave"
+            | _ -> name
+
         let collisionBytes =
             CollisionData.tilesets
-            |> Map.tryFind name
+            |> Map.tryFind collisionName
             |> Option.defaultValue [||]
 
         { BlockColl =

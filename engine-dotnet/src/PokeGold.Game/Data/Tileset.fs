@@ -39,4 +39,10 @@ module Tileset =
     /// Load a named pret tileset by convention:
     ///   gfx/tilesets/<name>.png  +  data/tilesets/<name>_metatiles.bin
     let loadNamed (name: string) : Tileset =
-        load $"gfx/tilesets/{name}.png" $"data/tilesets/{name}_metatiles.bin"
+        // gfx/tilesets.asm gives Dark Cave its own GFX but reuses Cave metatiles.
+        let metatilesName =
+            match name with
+            | "dark_cave" -> "cave"
+            | _ -> name
+
+        load $"gfx/tilesets/{name}.png" $"data/tilesets/{metatilesName}_metatiles.bin"
