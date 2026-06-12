@@ -649,3 +649,71 @@ let ``A7 Whitney gives PlainBadge and TM45 after battle`` () =
     Assert.True(ow.EngineFlags |> List.contains "ENGINE_PLAINBADGE",
                 "PLAINBADGE should be set")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A8 — Route 36 Sudowoodo; Ecruteak; Burned Tower rival + beasts release
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A8 EcruteakCity gym warp loads EcruteakGym`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // EcruteakCity warp at (6,27) → EcruteakGym.
+    driver.Apply(Warp("EcruteakCity", 6, 26, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "EcruteakGym"), 100)
+
+    Assert.Equal("EcruteakGym", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A8 Morty gives FogBadge and TM30 after battle`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetEvent("EVENT_BEAT_MORTY", true))
+    driver.Apply(SetFlag("ENGINE_FOGBADGE", true))
+    // Morty at (5,1); stand one cell south.
+    driver.Apply(Warp("EcruteakGym", 5, 2, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.Events |> List.contains "EVENT_GOT_TM30_SHADOW_BALL"
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    let ow = owOf driver.Snapshot
+    Assert.True(ow.Events |> List.contains "EVENT_GOT_TM30_SHADOW_BALL",
+                "Morty should give TM30 SHADOW BALL after FogBadge")
+    Assert.True(ow.EngineFlags |> List.contains "ENGINE_FOGBADGE",
+                "FOGBADGE should be set")
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``A8 EcruteakCity Burned Tower warp loads BurnedTower1F`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // EcruteakCity warp at (5,5) → BurnedTower1F.
+    driver.Apply(Warp("EcruteakCity", 5, 6, Some Up))
+
+    driver.Step Up
+
+    let snap =
+        driver.RunUntil((fun s -> owMap s = "BurnedTower1F"), 100)
+
+    Assert.Equal("BurnedTower1F", owMap snap)
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)

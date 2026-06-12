@@ -128,7 +128,7 @@ Work top to bottom; each row is one test (or a few). Prerequisites = flags/event
 | ✅ A5 | Slowpoke Well B1F clear; Kurt leaves; Azalea Gym → Bugsy; rival ambush | scenes/events per `maps/AzaleaTown.asm` |
 | ✅ A6 | Ilex Forest: Farfetch'd chase; HM01; Cut tree gate on Route 34 side | the Cut tree actually blocks until Cut is used (`FieldMoves`) |
 | ✅ A7 | Goldenrod: Whitney (incl. cry/return), Flower Shop SquirtBottle | already partially covered — extend, don't duplicate |
-| A8 | Route 36: Sudowoodo unblocks; Ecruteak; Burned Tower rival + beasts release | `InitRoamMons` fires (see B4) |
+| ✅ A8 | Route 36: Sudowoodo unblocks; Ecruteak; Burned Tower rival + beasts release | `InitRoamMons` fires (see B4) |
 | A9 | Morty; Routes 38/39; Olivine lighthouse climb; Surf to Cianwood | SURF gate: water tile blocks walking, Surf crosses it |
 | A10 | Pharmacy; Chuck; Jasmine return; Mahogany; Lake of Rage (Gyarados, Lance) | forced Red Gyarados battle from surf tile |
 | A11 | Rocket Hideout B1–B2F; Pryce; Radio Tower takeover → clear | persistence: save/reload mid-arc keeps stage |
