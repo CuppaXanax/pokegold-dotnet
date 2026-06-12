@@ -124,6 +124,12 @@ type ScriptEffect =
     /// `special SelectApricornForKurt` — pick an apricorn from the bag.
     /// Resume with its numeric item id, or 0 for cancel/no apricorn.
     | SelectApricornForKurt
+    /// Day-Care residents and Route 34 egg pickup specials.
+    | DayCareResident of resident: string
+    | DayCareManOutside
+    | DayCareMon of slot: int
+    /// `special CheckFirstMonIsEgg` — true when the lead party member is an egg.
+    | CheckFirstMonIsEgg
     /// `special NameRival` — open the rival naming scene and persist the result.
     | NameRival
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
@@ -371,6 +377,12 @@ module Script =
             | Special "BankOfMom" -> suspend next world OpenMomBank
             | Special "PlayersHousePC" -> suspend { next with ScriptVar = 0 } world OpenPc
             | Special "SelectApricornForKurt" -> suspend next world SelectApricornForKurt
+            | Special "DayCareMan" -> suspend next world (DayCareResident "MAN")
+            | Special "DayCareLady" -> suspend next world (DayCareResident "LADY")
+            | Special "DayCareManOutside" -> suspend next world DayCareManOutside
+            | Special "DayCareMon1" -> suspend next world (DayCareMon 1)
+            | Special "DayCareMon2" -> suspend next world (DayCareMon 2)
+            | Special "CheckFirstMonIsEgg" -> suspend next world CheckFirstMonIsEgg
             | Special "OverworldTownMap" -> suspend next world (OpenPokegear(MapTab, vm.MapId, None))
             | Special "MapRadio" -> suspend next world (OpenPokegear(RadioTab, vm.MapId, Some vm.ScriptVar))
             | Special "DisplayMoneyAndCoinBalance" -> suspend next world (DisplayBalance MoneyAndCoins)

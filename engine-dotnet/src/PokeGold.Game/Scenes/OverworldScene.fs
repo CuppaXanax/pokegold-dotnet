@@ -89,6 +89,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable askPhoneResult = 1
     let mutable menuResult = 0
     let mutable apricornResult: string option = None
+    let mutable dayCareResult: int option = None
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
@@ -604,6 +605,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private _.RemoveItem (item: string) (qty: int) =
         player <- { player with Bag = Bag.remove item qty player.Bag }
 
+    member private _.SyncDayCareFlags() =
+        let setIf flag enabled world =
+            if enabled then World.setFlag flag world else World.clearFlag flag world
+
+        world <-
+            world
+            |> setIf "ENGINE_DAY_CARE_MAN_HAS_EGG" player.DayCare.HasEgg
+            |> setIf "ENGINE_DAY_CARE_MAN_HAS_MON" player.DayCare.Mon1.IsSome
+            |> setIf "ENGINE_DAY_CARE_LADY_HAS_MON" player.DayCare.Mon2.IsSome
+
     member private _.SyncBattleParty (battle: BattleState) =
         lastBattleOutcome <- battle.Outcome
         let statusCode (status: StatusCondition) : string =
@@ -825,6 +836,51 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             pending <- Some(vm, effect)
                             apricornResult <- None
                             stop (Push(ApricornSelectionScene(content, apricorns, fun result -> apricornResult <- result) :> Scene))
+                    | DayCareResident resident ->
+                        pending <- Some(vm, effect)
+                        dayCareResult <- None
+                        stop (
+                            Push(
+                                DayCareScene(
+                                    content,
+                                    player,
+                                    resident,
+                                    (fun p ->
+                                        player <- p
+                                        this.SyncDayCareFlags()),
+                                    (fun result -> dayCareResult <- result)) :> Scene))
+                    | DayCareManOutside ->
+                        pending <- Some(vm, effect)
+                        dayCareResult <- None
+                        stop (
+                            Push(
+                                DayCareScene(
+                                    content,
+                                    player,
+                                    "OUTSIDE",
+                                    (fun p ->
+                                        player <- p
+                                        this.SyncDayCareFlags()),
+                                    (fun result -> dayCareResult <- result)) :> Scene))
+                    | DayCareMon slot ->
+                        let mon =
+                            if slot = 1 then player.DayCare.Mon1 else player.DayCare.Mon2
+
+                        let other =
+                            if slot = 1 then player.DayCare.Mon2 else player.DayCare.Mon1
+
+                        let rendered =
+                            match mon, other with
+                            | Some mine, Some theirs ->
+                                sprintf "%s is doing fine.\n%s and %s appear to care for each other." mine.Nickname mine.Nickname theirs.Nickname
+                            | Some mine, None ->
+                                sprintf "%s is doing fine." mine.Nickname
+                            | None, _ ->
+                                "No #MON is staying here."
+
+                        pending <- Some(vm, effect)
+                        lastText <- Some(sprintf "DayCareMon%d" slot, rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered + "<DONE>") :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -835,6 +891,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         resume (Some 1) vm
                     | CheckItem item ->
                         resume (Some(if Bag.count item player.Bag > 0 then 1 else 0)) vm
+                    | CheckFirstMonIsEgg ->
+                        let isEgg =
+                            player.Party
+                            |> List.tryHead
+                            |> Option.exists Breeding.isEgg
+                        resume (Some(if isEgg then 1 else 0)) vm
                     | CheckMoney amount ->
                         resume (Some(if Money.canAfford player.Money amount then 1 else 0)) vm
                     | GiveMoney amount ->
@@ -1340,6 +1402,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             this.RemoveItem apricorn 1
                             Some(Apricorns.itemId apricorn)
                         | None -> Some 0
+                    | DayCareResident _ -> dayCareResult
+                    | DayCareManOutside -> dayCareResult
+                    | DayCareMon _ -> None
                     | AskPhoneNumber phone ->
                         if askPhoneResult = 0 then
                             Some 2

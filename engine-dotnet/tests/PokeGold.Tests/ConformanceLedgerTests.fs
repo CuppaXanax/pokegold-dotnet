@@ -111,6 +111,11 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "SelectApricornForKurt" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 tests cover wScriptVar item-id resume, disassembly-order bag filtering/cancel, and KurtsHouse consuming the selected apricorn."
 
+          yield entry ScriptSpecial "CheckFirstMonIsEgg" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B2 VM tests cover true/false script-var branching; runtime handler reads the generated-egg marker used by BreedingTests."
+
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B2 DayCareScene tests cover resident deposit/withdraw, Route 34 egg pickup, and script effect routing; exact text/level-growth fidelity remains future daycare polish."
+            [ "DayCareLady"; "DayCareMan"; "DayCareManOutside"; "DayCareMon1"; "DayCareMon2" ]
+
           yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
             [ "HealMachineAnim"; "TryQuickSave" ]
 
@@ -118,9 +123,9 @@ module ConformanceLedger =
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
 
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
-            [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckFirstMonIsEgg"; "CheckForLuckyNumberWinners"
+            [ "BillsGrandfather"; "BugContestJudging"; "CardFlip"; "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMagikarpLength"; "CheckMysteryGift"; "CheckPartyFullAfterContest"; "CheckPokerus"
-              "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"; "DayCareLady"; "DayCareMan"; "DayCareManOutside"; "DayCareMon1"; "DayCareMon2"
+              "ContestDropOffMons"; "ContestReturnMons"; "DaisysGrooming"
               "GameCornerPrizeMonCheckDex"; "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveParkBalls"; "GiveShuckle"
               "InitRoamMons"; "MagikarpHouseSign"; "MagnetTrain"; "MoveDeletion"; "MrChrono"; "NameRater"; "OlderHaircutBrother"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"; "SelectRandomBugContestContestants"
@@ -156,6 +161,7 @@ module ConformanceLedger =
           yield entry SceneSurface "MomBankScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "CriticalSpecialSceneTests and OverworldSchedulerTests cover core Mom savings flows; exact digit/menu fidelity remains future UI work."
           yield entry SceneSurface "ScriptMenuScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Generic ROM script-menu UI is covered by CriticalSpecialSceneTests and ScriptTests; exact per-menu labels remain future menu-header decoding work."
           yield entry SceneSurface "ApricornSelectionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 scene test covers disassembly-order picker entries, selection, and cancel."
+          yield entry SceneSurface "DayCareScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B2 scene tests cover deposit, withdraw, and egg pickup flows; exact text/level-growth fidelity remains future daycare polish."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "PokedexScene"; "SummaryScene" ]

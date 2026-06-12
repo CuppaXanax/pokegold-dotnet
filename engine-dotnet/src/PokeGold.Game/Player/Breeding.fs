@@ -13,5 +13,8 @@ module Breeding =
         let egg = PartyMon.create mon1.SpeciesId 5
         { egg with Nickname = "EGG"; Friendship = 0 }
 
+    let isEgg (mon: PartyMon) : bool =
+        mon.Nickname = "EGG"
+
     /// Egg hatch step threshold (simplified from species-based hatch cycles).
     let hatchSteps = 2560

@@ -665,6 +665,67 @@ let ``SelectApricornForKurt resumes with the selected apricorn item id`` () =
         cancelled)
 
 [<Fact>]
+let ``daycare specials emit runtime effects`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial DayCareMan\n\
+             \tspecial DayCareLady\n\
+             \tspecial DayCareManOutside\n\
+             \tspecial DayCareMon1\n\
+             \tspecial DayCareMon2\n\
+             \tend\n"
+
+    let _, effects = driveSilent World.empty "S" prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ DayCareResident "MAN"
+          DayCareResident "LADY"
+          DayCareManOutside
+          DayCareMon 1
+          DayCareMon 2 ],
+        effects)
+
+[<Fact>]
+let ``CheckFirstMonIsEgg resumes with script var truth`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tspecial CheckFirstMonIsEgg\n\
+             \tiftrue .Egg\n\
+             \twritetext NotEgg\n\
+             \tend\n\
+             .Egg:\n\
+             \twritetext Egg\n\
+             \tend\n"
+
+    let _, egg =
+        drive
+            (function
+             | CheckFirstMonIsEgg -> Some 1
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ CheckFirstMonIsEgg; ShowText("Egg", false) ],
+        egg)
+
+    let _, notEgg =
+        drive
+            (function
+             | CheckFirstMonIsEgg -> Some 0
+             | _ -> None)
+            World.empty
+            "S"
+            prog
+
+    Assert.Equal<ScriptEffect list>(
+        [ CheckFirstMonIsEgg; ShowText("NotEgg", false) ],
+        notEgg)
+
+[<Fact>]
 let ``special phone call state is stored in script world`` () =
     let prog =
         parse

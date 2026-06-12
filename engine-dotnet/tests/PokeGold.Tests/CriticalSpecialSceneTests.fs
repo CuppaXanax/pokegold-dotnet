@@ -16,6 +16,11 @@ type private SilentSound() =
         member _.PlayJingle _ = ()
         member _.StopMusic() = ()
 
+type private IdleScene() =
+    interface Scene with
+        member _.Update _ = Stay
+        member _.Render _ = ()
+
 let private press buttons (scene: Scene) =
     let transition = scene.Update buttons
     scene.Update Buttons.none |> ignore
@@ -33,6 +38,27 @@ let private applyTransition (stack: ResizeArray<Scene>) transition =
 let private tickStack (stack: ResizeArray<Scene>) buttons =
     let top = stack.[stack.Count - 1]
     top.Update buttons |> applyTransition stack
+
+let private runModalScene (scene: Scene) maxFrames =
+    let stack = ResizeArray<Scene>()
+    stack.Add(IdleScene() :> Scene)
+    stack.Add(scene)
+
+    let mutable frame = 0
+    while frame < maxFrames && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene"
+            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    Assert.Equal(1, stack.Count)
 
 [<Fact>]
 let ``Mom bank scene deposits and withdraws money`` () =
@@ -179,3 +205,71 @@ let ``Kurt apricorn picker consumes selected apricorn and starts ball making`` (
         tickStack stack buttons
 
     Assert.True(completed (), "Kurt should consume the chosen apricorn and start making the matching ball.")
+
+[<Fact>]
+let ``daycare man deposits selected party mon`` () =
+    let content = Content()
+    let cyndaquil = PartyMon.create 155 10
+    let pidgey = PartyMon.create 16 8
+    let initial = { PlayerStateOps.initial with Party = [ cyndaquil; pidgey ] }
+    let mutable changed = initial
+    let mutable result = Some -1
+
+    let scene =
+        DayCareScene(content, initial, "MAN", (fun p -> changed <- p), (fun r -> result <- r)) :> Scene
+
+    runModalScene scene 2000
+
+    Assert.Equal(None, result)
+    Assert.Equal<PartyMon list>([ pidgey ], changed.Party)
+    Assert.Equal(Some cyndaquil, changed.DayCare.Mon1)
+    Assert.True(changed.DayCare.EggSteps = 0)
+
+[<Fact>]
+let ``daycare man withdraws mon for base fee`` () =
+    let content = Content()
+    let cyndaquil = PartyMon.create 155 10
+    let pidgey = PartyMon.create 16 8
+    let initial =
+        { PlayerStateOps.initial with
+            Money = 300
+            Party = [ pidgey ]
+            DayCare = { PlayerStateOps.initial.DayCare with Mon1 = Some cyndaquil } }
+
+    let mutable changed = initial
+    let mutable result = Some -1
+    let scene =
+        DayCareScene(content, initial, "MAN", (fun p -> changed <- p), (fun r -> result <- r)) :> Scene
+
+    runModalScene scene 2000
+
+    Assert.Equal(None, result)
+    Assert.Equal(200, changed.Money)
+    Assert.Equal<PartyMon list>([ pidgey; cyndaquil ], changed.Party)
+    Assert.Equal(None, changed.DayCare.Mon1)
+
+[<Fact>]
+let ``daycare outside egg pickup adds generated egg and clears egg state`` () =
+    let content = Content()
+    let cyndaquil = PartyMon.create 155 10
+    let pidgey = PartyMon.create 16 8
+    let initial =
+        { PlayerStateOps.initial with
+            Party = [ pidgey ]
+            DayCare =
+                { Mon1 = Some cyndaquil
+                  Mon2 = Some pidgey
+                  EggSteps = 0
+                  HasEgg = true } }
+
+    let mutable changed = initial
+    let mutable result = Some -1
+    let scene =
+        DayCareScene(content, initial, "OUTSIDE", (fun p -> changed <- p), (fun r -> result <- r)) :> Scene
+
+    runModalScene scene 2000
+
+    Assert.Equal(Some 0, result)
+    Assert.False(changed.DayCare.HasEgg)
+    Assert.Equal(2, changed.Party.Length)
+    Assert.Equal("EGG", (List.last changed.Party).Nickname)
