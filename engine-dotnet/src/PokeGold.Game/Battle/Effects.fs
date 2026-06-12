@@ -941,11 +941,14 @@ module Effects =
 
         | SetSpikes ->
             let side = if ctx.UserIsPlayer then ctx.EnemySide else ctx.PlayerSide
-            let side' = { side with Spikes = min 3 (side.Spikes + 1) }
-            if ctx.UserIsPlayer then
-                { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
+            if side.Spikes > 0 then
+                { ctx with Messages = ctx.Messages @ [ "But it failed!" ] }
             else
-                { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
+                let side' = { side with Spikes = 1 }
+                if ctx.UserIsPlayer then
+                    { ctx with EnemySide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
+                else
+                    { ctx with PlayerSide = side'; Messages = ctx.Messages @ [ "Spikes were scattered on the foe's side!" ] }
 
         | SetNightmare ->
             let vol = { ctx.Foe.Volatile with Nightmare = true }
@@ -954,7 +957,7 @@ module Effects =
 
         | SetCurse ->
             let ghostType = TypeChart.value "GHOST"
-            if ctx.Foe.Species.Type1 = ghostType || ctx.Foe.Species.Type2 = ghostType then
+            if ctx.User.Species.Type1 = ghostType || ctx.User.Species.Type2 = ghostType then
                 let user = { ctx.User with Hp = max 0 (ctx.User.Hp - (ctx.User.MaxHp / 2)) }
                 let vol = { ctx.Foe.Volatile with Curse = true }
                 let foe = { ctx.Foe with Volatile = vol }

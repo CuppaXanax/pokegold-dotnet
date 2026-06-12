@@ -245,6 +245,8 @@ Progress:
   `EFFECT_MAGNITUDE`, `EFFECT_TRIPLE_KICK`, `EFFECT_MULTI_HIT`,
   `EFFECT_DOUBLE_HIT`, `EFFECT_POISON_MULTI_HIT`.
 - ✅ C1 batch 7: `EFFECT_JUMP_KICK`, `EFFECT_PAY_DAY`, `EFFECT_RAPID_SPIN`.
+- ✅ C1 batch 8: `EFFECT_ATTRACT`, `EFFECT_MEAN_LOOK`, `EFFECT_CURSE`,
+  `EFFECT_SPIKES`.
 
 ### C′ (optional) — generate the worked examples from the real ROM as oracle
 

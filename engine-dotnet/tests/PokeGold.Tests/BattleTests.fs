@@ -2195,6 +2195,41 @@ let ``C7 audited crash coin and hazard-clearing damage effects map to disassembl
         let audited = { move effect effect 40 (ty "NORMAL") with Accuracy = 100 }
         Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
 
+[<Fact>]
+let ``C8 audited volatile control effects map to disassembly command families`` () =
+    let cases =
+        [ "EFFECT_ATTRACT", [ InflictAttract ]
+          "EFFECT_MEAN_LOOK", [ SetMeanLook ]
+          "EFFECT_CURSE", [ SetCurse ]
+          "EFFECT_SPIKES", [ SetSpikes ] ]
+
+    for effect, expected in cases do
+        let audited = { move effect effect 0 (ty "NORMAL") with Accuracy = 100 }
+        Assert.Equal<EffectCommand list>(expected, Effects.forMove audited)
+
+[<Fact>]
+let ``C8 Curse and Spikes follow disassembly target-side behavior`` () =
+    let baseFoe = mon "FOE" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+    let ghostUser = { mon "USER" (ty "GHOST") (ty "GHOST") 50 200 100 100 100 with Hp = 200 }
+    let curse = Moves.byName "CURSE"
+    let cursed = Effects.applyCtx (mkCtx ghostUser baseFoe curse) SetCurse
+    Assert.Equal(100, cursed.User.Hp)
+    Assert.True(cursed.Foe.Volatile.Curse)
+
+    let normalUser = mon "USER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100
+    let statCurse = Effects.applyCtx (mkCtx normalUser baseFoe curse) SetCurse
+    Assert.Equal(1, statCurse.User.AtkStage)
+    Assert.Equal(1, statCurse.User.DefStage)
+    Assert.Equal(-1, statCurse.User.SpdStage)
+    Assert.False(statCurse.Foe.Volatile.Curse)
+
+    let spikes = Moves.byName "SPIKES"
+    let scattered = Effects.applyCtx (mkCtx normalUser baseFoe spikes) SetSpikes
+    Assert.Equal(1, scattered.EnemySide.Spikes)
+    let failedSecondLayer = Effects.applyCtx { mkCtx normalUser baseFoe spikes with EnemySide = scattered.EnemySide } SetSpikes
+    Assert.Equal(1, failedSecondLayer.EnemySide.Spikes)
+    Assert.Contains(failedSecondLayer.Messages, fun msg -> msg.Contains("failed"))
+
 // -- Pre-move gates ----------------------------------------------------------
 
 [<Fact>]
