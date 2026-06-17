@@ -53,6 +53,22 @@ let private applyTransition (stack: ResizeArray<Scene>) (transition: Transition)
     | Replace scene ->
         stack.[stack.Count - 1] <- scene
 
+let private driveBattlePackFirstItem frame (top: Scene) =
+    match top with
+    | :? BattleScene as battle ->
+        let snap = battle.RuntimeSnapshot
+        if frame % 2 <> 0 then
+            Buttons.none
+        elif snap.MessageActive || not (List.isEmpty snap.PendingMessages) then
+            { Buttons.none with A = true }
+        elif snap.Mode = "CommandMenu" && battle.CommandCursor <> 2 then
+            { Buttons.none with Down = true }
+        elif snap.Mode = "CommandMenu" || snap.Mode = "PackMenu" then
+            { Buttons.none with A = true }
+        else
+            Buttons.none
+    | _ -> Buttons.none
+
 let private tickStack (stack: ResizeArray<Scene>) (frame: int) =
     let top = stack.[stack.Count - 1]
     let buttons =
@@ -404,12 +420,7 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let mutable frame = 0
     while frame < 1000 && stack.Count > 1 do
         frame <- frame + 1
-        let buttons =
-            match frame % 6 with
-            | 0 -> { Buttons.none with Right = true }
-            | 2 -> { Buttons.none with A = true }
-            | 4 -> { Buttons.none with A = true }
-            | _ -> Buttons.none
+        let buttons = driveBattlePackFirstItem frame stack.[stack.Count - 1]
 
         applyTransition stack (stack.[stack.Count - 1].Update buttons)
 
@@ -455,12 +466,7 @@ let ``caught Pokemon goes to PC when party is full`` () =
     let mutable frame = 0
     while frame < 1000 && stack.Count > 1 do
         frame <- frame + 1
-        let buttons =
-            match frame % 6 with
-            | 0 -> { Buttons.none with Right = true }
-            | 2 -> { Buttons.none with A = true }
-            | 4 -> { Buttons.none with A = true }
-            | _ -> Buttons.none
+        let buttons = driveBattlePackFirstItem frame stack.[stack.Count - 1]
 
         applyTransition stack (stack.[stack.Count - 1].Update buttons)
 

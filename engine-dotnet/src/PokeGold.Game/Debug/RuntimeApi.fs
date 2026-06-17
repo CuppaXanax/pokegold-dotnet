@@ -47,12 +47,22 @@ type RuntimeOverworldSnapshot =
       SceneId: int
       CanCapture: bool }
 
+type RuntimeBattleSnapshot =
+    { Kind: string
+      Mode: string
+      PlayerSpecies: string
+      EnemySpecies: string
+      MessageActive: bool
+      PendingMessages: string list
+      Outcome: string option }
+
 type RuntimeSnapshot =
     { Frame: uint64
       /// Scene names ordered bottom-to-top, matching render order.
       SceneStack: string list
       TopScene: string
-      Overworld: RuntimeOverworldSnapshot option }
+      Overworld: RuntimeOverworldSnapshot option
+      Battle: RuntimeBattleSnapshot option }
 
 type RuntimeControl =
     | Press of Buttons

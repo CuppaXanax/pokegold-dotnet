@@ -188,9 +188,10 @@ module ConformanceLedger =
             [ "MAPCALLBACK_NEWMAP"; "MAPCALLBACK_TILES"; "MAPCALLBACK_OBJECTS"; "MAPCALLBACK_CMDQUEUE" ]
 
           yield! many SceneSurface ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work."
-            [ "BattleScene"; "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
+            [ "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
               "PokegearScene"; "SaveMenuScene"; "StartMenuScene"; "TextBoxScene"; "YesNoScene" ]
 
+          yield entry SceneSurface "BattleScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BUX tests cover trainer/wild battle context, FIGHT/PKMN/PACK/RUN command menu, submenu back-out, party switching, party-targeted items, trainer ball/RUN rejection, and Cherrygrove rival entry through the real runtime script path; forced-switch prompt timing and full trainer battle fidelity remain future battle-shell work."
           yield entry SceneSurface "TitleScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test drives Start through the real title/menu input path; exact title animation timing remains future UI polish."
           yield entry SceneSurface "MainMenuScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test covers save-present CONTINUE ordering from engine/menus/main_menu.asm and verifies Continue then Save preserves the exact persistent JSON state."
           yield entry SceneSurface "WeekdayScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "WeekdaySceneTests cover selection, confirmation, cancellation, and wrapping."
@@ -350,7 +351,7 @@ module ConformanceLedger =
           yield! many ItemFieldMenu Unknown [ CriticalPathJohto; RequiredFor100Percent ] "Item field-menu behavior exists in data; conformance status has not been audited in the ledger yet."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_CURRENT"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
 
-          yield entry ItemBattleMenu "ITEMMENU_PARTY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene item menu supports active-mon HP/status item use and runtime tests cover battle item use."
+          yield entry ItemBattleMenu "ITEMMENU_PARTY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene PACK command supports party-targeted HP/status item use; BattleTests cover using Potion on a benched party mon."
 
           yield! many ItemBattleMenu ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene ball/item filtering covers close-after-use balls and excludes unusable battle items from the selectable battle item menu."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_NOUSE" ]

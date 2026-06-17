@@ -135,10 +135,16 @@ type Game(?saveDirectory: string) =
             |> Array.map (fun scene -> scene.GetType().Name)
             |> Array.toList
 
+        let battle =
+            match scenes.Peek() with
+            | :? BattleScene as battleScene -> Some battleScene.RuntimeSnapshot
+            | _ -> None
+
         { Frame = frame
           SceneStack = stack
           TopScene = scenes.Peek().GetType().Name
-          Overworld = overworld |> Option.map (fun ow -> ow.RuntimeSnapshot) }
+          Overworld = overworld |> Option.map (fun ow -> ow.RuntimeSnapshot)
+          Battle = battle }
 
     /// Apply a typed runtime control operation. String debug commands and tests
     /// should route through this seam instead of mutating private queues/state.

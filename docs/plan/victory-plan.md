@@ -44,6 +44,12 @@ gates **G1–G14**). The remaining risk is concentrated in Workstream A below.
    text boxes, battles-from-overworld. **Only spot-covered. This is the gap.**
 3. **Eyeball layer** — `dotnet run --project src/PokeGold.Host`. F5 save / F9 load.
 
+### Battle UX / trainer battle shell
+
+| Item | Current | Target |
+|---|---|---|
+| Battle command/trainer UX | trainer/wild context, trainer-shaped opening text, FIGHT/PKMN/PACK/RUN menu, party switching, party-targeted basic items, and trainer RUN/ball rejection are covered by `BattleTests` plus the Cherrygrove rival runtime script path | full trainer/wild battle context, faithful forced-switch timing, item targeting, multi-mon trainer flow, rewards/EXP audit, and runtime boss-battle proofs |
+
 ### The debt ledger is the to-do list
 
 `tests/PokeGold.Tests/ConformanceLedgerTests.fs` enumerates **every** script command,

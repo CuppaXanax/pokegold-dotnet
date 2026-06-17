@@ -1037,10 +1037,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | [] -> [ BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ] ]
                 | t -> t
 
+        let trainerData =
+            stagedTrainer
+            |> Option.bind (fun (group, id) -> Trainers.lookupByName group id)
+
         let enemyTeam =
             match stagedTrainer with
-            | Some(group, id) ->
-                match Trainers.lookupByName group id with
+            | Some _ ->
+                match trainerData with
                 | Some trainer ->
                     trainer.Party
                     |> List.map (fun tm ->
@@ -1057,9 +1061,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | None ->
                     [ BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ] ]
 
+        let battleState =
+            match stagedTrainer with
+            | Some(group, id) ->
+                let className =
+                    Regex.Replace(group.ToUpperInvariant(), @"\d+$", "").Replace("_", " ")
+
+                let context =
+                    { Group = group
+                      Id = id
+                      Name = trainerData |> Option.map (fun trainer -> trainer.Name) |> Option.defaultValue "???"
+                      ClassName = className
+                      WinText = if stagedWinText = "" then None else Some stagedWinText
+                      LossText = if stagedLossText = "" then None else Some stagedLossText
+                      BaseReward = trainerData |> Option.map (fun trainer -> trainer.BaseReward) }
+
+                Battle.createTrainer context playerTeam enemyTeam 0x1234u
+            | None ->
+                Battle.createTeam playerTeam enemyTeam 0x1234u
+
         BattleScene(
             content.Font,
-            Battle.createTeam playerTeam enemyTeam 0x1234u,
+            battleState,
             onBattleEnd = (fun state -> this.SyncBattleParty state),
             bag = player.Bag,
             onBagChange = (fun bag -> player <- { player with Bag = bag }),

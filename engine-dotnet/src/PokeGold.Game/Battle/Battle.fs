@@ -8,6 +8,19 @@ type Outcome =
     | Lose
     | Ran
 
+type TrainerBattleContext =
+    { Group: string
+      Id: string
+      Name: string
+      ClassName: string
+      WinText: string option
+      LossText: string option
+      BaseReward: int option }
+
+type BattleKind =
+    | WildBattle
+    | TrainerBattle of TrainerBattleContext
+
 /// The full state of a wild battle. Immutable: each turn produces a new state.
 /// `Messages` is the queue of lines the battle scene reveals one at a time;
 /// `Outcome` is set once the battle resolves.
@@ -16,6 +29,7 @@ type BattleState =
       Enemy: BattleMon
       PlayerTeam: BattleMon list
       EnemyTeam: BattleMon list
+      Kind: BattleKind
       Messages: string list
       Outcome: Outcome option
       Rng: Rng
@@ -26,13 +40,36 @@ type BattleState =
 
 module Battle =
 
+    let private trainerLabel (ctx: TrainerBattleContext) =
+        let name = if System.String.IsNullOrWhiteSpace ctx.Name || ctx.Name = "?" then "???" else ctx.Name
+        if ctx.ClassName = "" then name else $"{ctx.ClassName} {name}"
+
+    let private trainerClassLabel (ctx: TrainerBattleContext) =
+        if System.String.IsNullOrWhiteSpace ctx.ClassName then "TRAINER" else ctx.ClassName
+
+    let private openingMessages kind (enemy: BattleMon) =
+        match kind with
+        | WildBattle -> [ $"Wild {enemy.Species.Name} appeared!" ]
+        | TrainerBattle ctx -> [ $"{trainerLabel ctx} wants to battle!"; $"{trainerClassLabel ctx} sent out {enemy.Species.Name}!" ]
+
+    let private faintedEnemyText kind (enemy: BattleMon) =
+        match kind with
+        | WildBattle -> $"Wild {enemy.Species.Name} fainted!"
+        | TrainerBattle _ -> $"{enemy.Species.Name} fainted!"
+
+    let private sentOutEnemyText kind (enemy: BattleMon) =
+        match kind with
+        | WildBattle -> $"{enemy.Species.Name} appeared!"
+        | TrainerBattle ctx -> $"{trainerClassLabel ctx} sent out {enemy.Species.Name}!"
+
     /// Start a wild battle between the player's mon and a wild one.
-    let create (player: BattleMon) (enemy: BattleMon) (seed: uint32) : BattleState =
+    let createWild (player: BattleMon) (enemy: BattleMon) (seed: uint32) : BattleState =
         { Player = player
           Enemy = enemy
           PlayerTeam = [ player ]
           EnemyTeam = [ enemy ]
-          Messages = [ $"Wild {enemy.Species.Name} appeared!" ]
+          Kind = WildBattle
+          Messages = openingMessages WildBattle enemy
           Outcome = None
           Rng = Rng.create seed
           WeatherTimer = None
@@ -40,15 +77,15 @@ module Battle =
           PlayerSide = SideState.Empty
           EnemySide = SideState.Empty }
 
-    /// Start a team battle using the player and enemy teams in their current order.
-    let createTeam (playerTeam: BattleMon list) (enemyTeam: BattleMon list) (seed: uint32) : BattleState =
+    let private createTeamWith kind (playerTeam: BattleMon list) (enemyTeam: BattleMon list) (seed: uint32) : BattleState =
         let player = List.head playerTeam
         let enemy = List.head enemyTeam
         { Player = player
           Enemy = enemy
           PlayerTeam = playerTeam
           EnemyTeam = enemyTeam
-          Messages = [ $"Wild {enemy.Species.Name} appeared!" ]
+          Kind = kind
+          Messages = openingMessages kind enemy
           Outcome = None
           Rng = Rng.create seed
           WeatherTimer = None
@@ -56,7 +93,23 @@ module Battle =
           PlayerSide = SideState.Empty
           EnemySide = SideState.Empty }
 
+    /// Start a wild team battle using the player and enemy teams in their current order.
+    let createTeam (playerTeam: BattleMon list) (enemyTeam: BattleMon list) (seed: uint32) : BattleState =
+        createTeamWith WildBattle playerTeam enemyTeam seed
+
+    let createTrainer (context: TrainerBattleContext) (playerTeam: BattleMon list) (enemyTeam: BattleMon list) (seed: uint32) : BattleState =
+        createTeamWith (TrainerBattle context) playerTeam enemyTeam seed
+
+    /// Back-compatible wrapper for older tests and demo callers.
+    let create (player: BattleMon) (enemy: BattleMon) (seed: uint32) : BattleState =
+        createWild player enemy seed
+
     let isOver (s: BattleState) : bool = s.Outcome.IsSome
+
+    let isTrainerBattle (s: BattleState) =
+        match s.Kind with
+        | TrainerBattle _ -> true
+        | WildBattle -> false
 
     let private heldItemData (m: BattleMon) =
         m.HeldItem |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId)
@@ -756,9 +809,9 @@ module Battle =
         if enemyFainted then
             let survivingEnemy = state.EnemyTeam |> List.filter (fun m -> not (BattleMon.isFainted m))
             if survivingEnemy.IsEmpty then
-                (Some Win, [ $"Wild {state.Enemy.Species.Name} fainted!"; "You won!" ], true, false)
+                (Some Win, [ faintedEnemyText state.Kind state.Enemy; "You won!" ], true, false)
             else
-                (None, [ $"Wild {state.Enemy.Species.Name} fainted!" ], true, false)
+                (None, [ faintedEnemyText state.Kind state.Enemy ], true, false)
         elif playerFainted then
             let survivingPlayer = state.PlayerTeam |> List.filter (fun m -> not (BattleMon.isFainted m))
             if survivingPlayer.IsEmpty then
@@ -785,7 +838,7 @@ module Battle =
             match next with
             | Some mon ->
                 let team = mon :: (state.EnemyTeam |> List.filter (fun m -> m <> mon))
-                ({ state with Enemy = mon; EnemyTeam = team }, [ $"{mon.Species.Name} was sent out!" ])
+                ({ state with Enemy = mon; EnemyTeam = team }, [ sentOutEnemyText state.Kind mon ])
             | None -> (state, [])
         elif BattleMon.isFainted state.Player then
             let next = state.PlayerTeam |> List.filter (fun m -> not (BattleMon.isFainted m)) |> List.tryHead
@@ -1051,12 +1104,12 @@ module Battle =
                         enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
                     // Check if self-hit caused a faint.
                     let faintOutcome, faintMsgs, enemyFainted, playerFainted =
-                        faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                        faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                     msgs <- msgs @ faintMsgs
                     match faintOutcome with
                     | Some o -> outcome <- Some o; false
                     | None when enemyFainted || playerFainted ->
-                        let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                        let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                         player <- switched.Player
                         enemy <- switched.Enemy
                         playerTeam <- switched.PlayerTeam
@@ -1096,12 +1149,12 @@ module Battle =
                             enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
 
                         let faintOutcome, faintMsgs, enemyFainted, playerFainted =
-                            faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                            faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                         msgs <- msgs @ faintMsgs
                         match faintOutcome with
                         | Some o -> outcome <- Some o; false
                         | None when enemyFainted || playerFainted ->
-                            let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                            let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                             player <- switched.Player
                             enemy <- switched.Enemy
                             playerTeam <- switched.PlayerTeam
@@ -1463,14 +1516,14 @@ module Battle =
 
                             // Phase: mid-turn faint check
                             let faintOutcome, faintMsgs, enemyFainted, playerFainted =
-                                faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                                faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                             msgs <- msgs @ faintMsgs
                             match faintOutcome with
                             | Some o ->
                                 outcome <- Some o
                                 false
                             | None when enemyFainted || playerFainted ->
-                                let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                                let switched, switchMsgs = nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                                 player <- switched.Player
                                 enemy <- switched.Enemy
                                 playerTeam <- switched.PlayerTeam
@@ -1501,13 +1554,13 @@ module Battle =
 
             // Phase: end-of-turn faint check
             let faintOutcome, faintMsgs, _, _ =
-                faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                faintCheck { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
             msgs <- msgs @ faintMsgs
             match faintOutcome with
             | Some o -> outcome <- Some o
             | None ->
                 let switched, switchMsgs =
-                    nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
+                    nextMon { Player = player; Enemy = enemy; PlayerTeam = playerTeam; EnemyTeam = enemyTeam; Kind = s.Kind; Messages = s.Messages; Outcome = s.Outcome; Rng = rng; WeatherTimer = weatherTimer; WeatherType = weatherType; PlayerSide = playerSide; EnemySide = enemySide }
                 player <- switched.Player
                 enemy <- switched.Enemy
                 playerTeam <- switched.PlayerTeam
@@ -1532,6 +1585,8 @@ module Battle =
     let run (s: BattleState) : BattleState =
         if isOver s then
             s
+        elif isTrainerBattle s then
+            { s with Messages = [ "No! There's no running from a trainer battle!" ] }
         elif heldEffect "HELD_ESCAPE" s.Player then
             { s with
                 Messages = [ "Got away safely!" ]
@@ -1564,4 +1619,4 @@ module Battle =
                 { s with
                     Player = target
                     PlayerTeam = team
-                    Messages = s.Messages @ [ $"Come back, {s.Player.Species.Name}!"; $"Go, {target.Species.Name}!" ] }
+                    Messages = [ $"Come back, {s.Player.Species.Name}!"; $"Go, {target.Species.Name}!" ] }

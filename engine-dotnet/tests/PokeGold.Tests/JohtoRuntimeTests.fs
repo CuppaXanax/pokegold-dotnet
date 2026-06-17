@@ -306,6 +306,7 @@ let ``A2 Cherrygrove rival coord event fires on return from MrPokemon`` () =
     // Tick frames, pressing A through text boxes until the battle starts.
     let mutable sawBattle = false
     let mutable sawRivalText = false
+    let mutable battleAtStart = None
     let mutable frame = 0
     while frame < 2000 && not sawBattle do
         frame <- frame + 1
@@ -315,6 +316,7 @@ let ``A2 Cherrygrove rival coord event fires on return from MrPokemon`` () =
                 sawRivalText <- true
                 if frame % 2 = 0 then press "a" else Buttons.none
             | "BattleScene" ->
+                battleAtStart <- driver.Snapshot.Battle
                 sawBattle <- true
                 Buttons.none
             | _ -> Buttons.none
@@ -322,6 +324,36 @@ let ``A2 Cherrygrove rival coord event fires on return from MrPokemon`` () =
 
     Assert.True(sawRivalText, "Rival encounter should show text at coord (33,7)")
     Assert.True(sawBattle, "Rival encounter should start a battle")
+    let battle = battleAtStart |> Option.defaultWith (fun () -> failwith "expected battle snapshot")
+    Assert.StartsWith("Trainer:RIVAL1", battle.Kind)
+    Assert.DoesNotContain(battle.PendingMessages, fun msg -> msg.StartsWith("Wild "))
+    Assert.Contains(battle.PendingMessages, fun msg -> msg.Contains("wants to battle"))
+    Assert.Contains(battle.PendingMessages, fun msg -> msg.Contains("sent out"))
+
+    advanceRuntimeUntil
+        driver
+        1000
+        (fun snapshot ->
+            match snapshot.Battle with
+            | Some battle -> battle.Mode = "CommandMenu" && not battle.MessageActive && List.isEmpty battle.PendingMessages
+            | None -> false)
+
+    driver.Press(directionButton Down)
+    driver.Press(directionButton Right)
+    driver.Press(press "a")
+
+    let afterRun = driver.Snapshot.Battle |> Option.defaultWith (fun () -> failwith "expected battle after RUN attempt")
+    Assert.Equal("BattleScene", driver.Snapshot.TopScene)
+    Assert.True(afterRun.Outcome.IsNone)
+    let sawNoRunningMessage =
+        driver.Trace
+        |> List.exists (fun tick ->
+            match tick.Snapshot.Battle with
+            | Some battle ->
+                battle.PendingMessages
+                |> List.exists (fun msg -> msg.Contains("no running", System.StringComparison.OrdinalIgnoreCase))
+            | None -> false)
+    Assert.True(sawNoRunningMessage, "RUN should enqueue the trainer-battle no-running message")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
 [<Fact>]

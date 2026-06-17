@@ -123,6 +123,47 @@ module BattleRenderer =
 
             drawText fb font 3 row item)
 
+    let drawCommandMenu (fb: Framebuffer) (font: Font) (cursor: int) =
+        drawBox fb font
+
+        let entries =
+            [| "FIGHT", 3, 13
+               "PKMN", 12, 13
+               "PACK", 3, 15
+               "RUN", 12, 15 |]
+
+        entries
+        |> Array.iteri (fun i (label, col, row) ->
+            if i = cursor then
+                for y in 0..6 do
+                    for x in 0..4 do
+                        if x <= y && x <= 6 - y then
+                            fb.SetPixel((col - 1) * 8 + x, row * 8 + 1 + y, 0uy, 0uy, 0uy, 255uy)
+
+            drawText fb font col row label)
+
+    let drawPartyMenu (fb: Framebuffer) (font: Font) (mons: BattleMon list) (cursor: int) (allowCancel: bool) =
+        drawBox fb font
+
+        let entries =
+            [ for mon in mons do
+                let status = if mon.Hp <= 0 then "FNT" else $"{mon.Hp}/{mon.MaxHp}"
+                yield $"{mon.Species.Name} {status}"
+              if allowCancel then
+                yield "CANCEL" ]
+
+        entries
+        |> List.truncate 4
+        |> List.iteri (fun i label ->
+            let row = 13 + i
+            if i = cursor then
+                for y in 0..6 do
+                    for x in 0..4 do
+                        if x <= y && x <= 6 - y then
+                            fb.SetPixel(2 * 8 + x, row * 8 + 1 + y, 0uy, 0uy, 0uy, 255uy)
+
+            drawText fb font 3 row (if label.Length > 16 then label.[..15] else label))
+
     /// Draw a single message line in the bottom box.
     let drawMessage (fb: Framebuffer) (font: Font) (line: string) =
         drawBox fb font

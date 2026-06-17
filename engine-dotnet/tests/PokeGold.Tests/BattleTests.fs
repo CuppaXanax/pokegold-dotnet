@@ -692,25 +692,132 @@ let ``Metal Powder boosts Ditto defenses`` () =
     Assert.True(BattleMon.effectiveSpDefense boosted > BattleMon.effectiveSpDefense ditto)
 
 [<Fact>]
-let ``BattleScene item menu uses Potion on active Pokemon and decrements bag`` () =
+let ``wild and trainer battle constructors use distinct opening text`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let enemy = { mon "TOTODILE" (ty "WATER") (ty "WATER") 5 100 20 20 1 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let trainer =
+        { Group = "RIVAL1"
+          Id = "RIVAL1_1_TOTODILE"
+          Name = "???"
+          ClassName = "RIVAL"
+          WinText = None
+          LossText = None
+          BaseReward = Some 25 }
+
+    let wild = Battle.createWild player enemy 0u
+    let trainerBattle = Battle.createTrainer trainer [ player ] [ enemy ] 0u
+
+    Assert.Contains(wild.Messages, fun msg -> msg = "Wild TOTODILE appeared!")
+    Assert.DoesNotContain(trainerBattle.Messages, fun msg -> msg.StartsWith("Wild "))
+    Assert.Contains(trainerBattle.Messages, fun msg -> msg = "RIVAL ??? wants to battle!")
+    Assert.Contains(trainerBattle.Messages, fun msg -> msg = "RIVAL sent out TOTODILE!")
+
+[<Fact>]
+let ``BattleScene command menu opens fight and backs out with B`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 5 100 20 20 1 with Moves = [ Moves.byName "SPLASH" ]; Pp = [ (Moves.byName "SPLASH").Pp ] }
+    let state = { Battle.create player enemy 0u with Messages = [] }
+    let scene = BattleScene(Content().Font, state)
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+
+    Assert.Equal("CommandMenu", scene.CurrentModeName)
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("MoveMenu", scene.CurrentModeName)
+    tick { Buttons.none with B = true }
+    tick Buttons.none
+
+    Assert.Equal("CommandMenu", scene.CurrentModeName)
+
+[<Fact>]
+let ``BattleScene PKMN command switches to an able bench Pokemon`` () =
+    let tackle = Moves.byName "TACKLE"
+    let active = { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let bench = { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 5 100 20 20 1 with Moves = [ Moves.byName "SPLASH" ]; Pp = [ (Moves.byName "SPLASH").Pp ] }
+    let state = { Battle.createTeam [ active; bench ] [ enemy ] 0u with Messages = [] }
+    let scene = BattleScene(Content().Font, state)
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+
+    tick { Buttons.none with Right = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("PartyMenu", scene.CurrentModeName)
+
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+
+    Assert.Equal("BENCH", scene.CurrentState.Player.Species.Name)
+    Assert.Equal("CommandMenu", scene.CurrentModeName)
+
+[<Fact>]
+let ``BattleScene PACK command can target a benched Pokemon with Potion`` () =
     let potion = "POTION"
     let tackle = Moves.byName "TACKLE"
-    let player =
-        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let bench =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with
             Hp = 40
             Moves = [ tackle ]
             Pp = [ tackle.Pp ] }
     let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 5 100 20 20 1 with Moves = [ Moves.byName "SPLASH" ]; Pp = [ (Moves.byName "SPLASH").Pp ] }
     let mutable bag = Bag.empty |> Bag.add potion 1
-    let state = { Battle.create player enemy 0u with Messages = [] }
+    let state = { Battle.createTeam [ active; bench ] [ enemy ] 0u with Messages = [] }
     let scene = BattleScene(Content().Font, state, bag = bag, onBagChange = (fun b -> bag <- b))
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
 
-    (scene :> Scene).Update { Buttons.none with Right = true } |> ignore
-    (scene :> Scene).Update Buttons.none |> ignore
-    (scene :> Scene).Update { Buttons.none with A = true } |> ignore
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("PackMenu", scene.CurrentModeName)
 
-    Assert.Equal(60, scene.CurrentState.Player.Hp)
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("TargetMenu", scene.CurrentModeName)
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+
+    Assert.Equal(60, scene.CurrentState.PlayerTeam.[1].Hp)
     Assert.Equal(0, Bag.count potion scene.CurrentBag)
+
+[<Fact>]
+let ``trainer battle RUN and ball use are blocked`` () =
+    let tackle = Moves.byName "TACKLE"
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 5 100 20 20 1 with Moves = [ Moves.byName "SPLASH" ]; Pp = [ (Moves.byName "SPLASH").Pp ] }
+    let trainer =
+        { Group = "RIVAL1"
+          Id = "RIVAL1_1_TOTODILE"
+          Name = "???"
+          ClassName = "RIVAL"
+          WinText = None
+          LossText = None
+          BaseReward = Some 25 }
+    let state = { Battle.createTrainer trainer [ player ] [ enemy ] 0u with Messages = [] }
+    let runAttempt = Battle.run state
+
+    Assert.True(runAttempt.Outcome.IsNone)
+    Assert.Contains(runAttempt.Messages, fun msg -> msg.Contains("no running", System.StringComparison.OrdinalIgnoreCase))
+
+    let scene = BattleScene(Content().Font, state, bag = (Bag.empty |> Bag.add "POKE_BALL" 1))
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+
+    Assert.True(scene.CurrentState.Outcome.IsNone)
+    Assert.Equal(1, Bag.count "POKE_BALL" scene.CurrentBag)
 
 [<Fact>]
 let ``a stat-down move lowers the target's stage`` () =
