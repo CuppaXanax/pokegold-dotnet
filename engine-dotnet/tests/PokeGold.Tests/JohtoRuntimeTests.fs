@@ -178,6 +178,100 @@ let private talkUntilLastText (driver: GameDriver) expectedLabel =
 
     Assert.Equal(Some expectedLabel, (owOf driver.Snapshot).LastTextLabel)
 
+let private advanceFreshSaveRouteUntil (driver: GameDriver) maxFrames predicate =
+    let mutable weekdayStep = 0
+    let mutable frame = 0
+
+    while frame < maxFrames && not (predicate driver.Snapshot) do
+        frame <- frame + 1
+
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> press "a"
+            | "WeekdayScene" ->
+                match weekdayStep with
+                | 0 ->
+                    weekdayStep <- 1
+                    press "a"
+                | 1 ->
+                    weekdayStep <- 2
+                    Buttons.none
+                | 2 ->
+                    weekdayStep <- 3
+                    press "a"
+                | _ -> Buttons.none
+            | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+let private assertFreshSaveRouteReached (driver: GameDriver) (predicate: RuntimeSnapshot -> bool) message =
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+    Assert.True(predicate driver.Snapshot, message)
+
+[<Fact>]
+let ``Fresh-save no-shortcuts route reaches Elm starter acquisition`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+
+    // PlayersHouse2F -> PlayersHouse1F via the bedroom stair warp.
+    [ Right; Right; Right; Up; Up; Up; Up ]
+    |> List.iter (fun direction -> driver.Step direction)
+
+    advanceFreshSaveRouteUntil
+        driver
+        5000
+        (fun s ->
+            match s.Overworld with
+            | Some ow -> ow.CanCapture && ow.MapId = "PlayersHouse1F" && ow.SceneId = 1 && ow.LastTextLabel = Some "InstructionsNextText"
+            | None -> false)
+
+    // PlayersHouse1F -> NewBarkTown, then NewBarkTown -> ElmsLab.
+    [ Down; Down; Down; Down; Down; Down; Left; Left; Down
+      Left; Left; Left; Left; Left; Left; Left; Left; Up; Up; Up ]
+    |> List.iter (fun direction -> driver.Step direction)
+
+    advanceFreshSaveRouteUntil
+        driver
+        3000
+        (fun s ->
+            match s.Overworld with
+            | Some ow -> ow.CanCapture && ow.MapId = "ElmsLab" && ow.SceneId = 1 && ow.LastTextLabel = Some "ElmText_Intro"
+            | None -> false)
+
+    // Choose Cyndaquil from its real object script.
+    [ Down; Right; Right; Down; Right; Right; Up ]
+    |> List.iter (fun direction -> driver.Step direction)
+
+    driver.Talk()
+
+    let cyndaquilDex = (Species.byName "CYNDAQUIL").Dex
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.MapId = "ElmsLab"
+            && ow.Player.PartySpecies = [ cyndaquilDex ]
+            && List.contains "PHONE_MOM" ow.Player.PhoneContacts
+            && List.contains "PHONE_ELM" ow.Player.PhoneContacts
+            && List.contains "EVENT_PLAYERS_HOUSE_MOM_1" ow.Events
+            && List.contains "EVENT_GOT_CYNDAQUIL_FROM_ELM" ow.Events
+            && List.contains "EVENT_GOT_A_POKEMON_FROM_ELM" ow.Events
+            && List.contains "ENGINE_POKEGEAR" ow.EngineFlags
+            && List.contains "ENGINE_PHONE_CARD" ow.EngineFlags
+            && Map.tryFind "NEW_BARK_TOWN" ow.Scenes = Some 1
+            && Map.tryFind "ELMS_LAB" ow.Scenes = Some 5
+            && ow.LastTextLabel = Some "GotElmsNumberText"
+        | None -> false
+
+    advanceFreshSaveRouteUntil driver 6000 completed
+
+    assertFreshSaveRouteReached
+        driver
+        completed
+        "Fresh-save no-shortcuts route should reach Elm starter acquisition using only StartNewGame and real inputs."
+
 [<Fact>]
 let ``A1 bedroom stairs warp loads PlayersHouse1F`` () =
     let driver = GameDriver()

@@ -46,6 +46,10 @@ let private anyPixelIn (fb: Framebuffer) (x0: int) (y0: int) (x1: int) (y1: int)
     }
     |> Seq.exists id
 
+let private assertHasSource species (sourceFragment: string) proof =
+    let sources = PokedexObtainability.sourcesFor species proof
+    Assert.Contains(sources, fun (source: string) -> source.Contains(sourceFragment))
+
 // ── Pokedex pure helpers ────────────────────────────────────────────────────────
 
 [<Fact>]
@@ -152,6 +156,28 @@ let ``Pokedex area locations are derived from wild encounter nests`` () =
     let locations = Pokedex.areaLocationsForDexNum 79 // Slowpoke
     Assert.Contains("SLOWPOKE_WELL_B1F", locations)
     Assert.Contains("SLOWPOKE_WELL_B2F", locations)
+
+[<Fact>]
+let ``All 251 species are obtainable in implementation`` () =
+    let proof = PokedexObtainability.buildProof ()
+    let missing = PokedexObtainability.missingSpecies proof
+
+    Assert.Equal(251, Species.all.Count)
+
+    if missing <> [] then
+        let formatted =
+            missing
+            |> List.map (fun (dex, species) -> sprintf "#%03d %s" dex species)
+            |> String.concat ", "
+
+        failwithf "Unobtainable species in implementation: %s" formatted
+
+    assertHasSource "CORSOLA" "fishing" proof
+    assertHasSource "HERACROSS" "headbutt" proof
+    assertHasSource "SCYTHER" "bug-contest" proof
+    assertHasSource "PICHU" "breeding" proof
+    assertHasSource "SCIZOR" "evolution:SCYTHER:EVOLVE_TRADE" proof
+    assertHasSource "CELEBI" "built-in-event" proof
 
 [<Fact>]
 let ``Pokedex dexSpritePath uses front pic for seen species and question mark for unseen`` () =

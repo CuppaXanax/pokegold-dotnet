@@ -7,6 +7,26 @@ open PokeGold.Game.Data
 /// Simplified: trade between player's own party slots (self-trade for evolutions).
 module Trading =
 
+    /// Local D7 terminal imports for species families unavailable from the Gold
+    /// world data itself (version exclusives, legacy starters/fossils, Gen-1
+    /// legendaries). Networking stays out of scope.
+    let offlineImportCatalog : Set<string> =
+        Set.ofList
+            [ "AERODACTYL"; "ARTICUNO"; "BULBASAUR"; "CHARMANDER"; "DELIBIRD"
+              "KABUTO"; "LEDYBA"; "MEOWTH"; "MEWTWO"; "MOLTRES"; "OMANYTE"
+              "PHANPY"; "SKARMORY"; "SQUIRTLE"; "VULPIX"; "ZAPDOS" ]
+
+    let canOfflineImport species =
+        Set.contains species offlineImportCatalog
+
+    let offlineTerminalImport species level =
+        if canOfflineImport species then
+            Species.all
+            |> Map.tryFind species
+            |> Option.map (fun stats -> PartyMon.create stats.Dex level)
+        else
+            None
+
     /// Execute a trade: swap party[indexA] with partner[indexB].
     /// Returns updated (party, partner) or None if indices invalid.
     let executeTrade (party: Party) (indexA: int) (partner: Party) (indexB: int) : (Party * Party) option =

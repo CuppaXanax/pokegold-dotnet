@@ -133,6 +133,7 @@
     <Compile Include="Player\Evolution.fs" />
     <Compile Include="Player\Trading.fs" />
     <Compile Include="Player\DexCompletion.fs" />
+    <Compile Include="Data\PokedexObtainability.fs" />
     <Compile Include="Player\MoveLearn.fs" />
     <Compile Include="Player\TmHm.fs" />
     <Compile Include="Overworld\FieldMoves.fs" />

@@ -23,6 +23,12 @@ module ScriptParser =
 
     let private defEquRx = Regex(@"^\s*DEF\s+([A-Za-z_][A-Za-z0-9_]*)\s+EQU\s+(.+?)\s*$")
 
+    type private UndergroundDoorPart =
+        { X: int
+          Y: int
+          ClosedBlock: int
+          OpenBlock: int }
+
     /// Parse a RGBDS integer literal (`$hex`, `%binary`, `&octal`, or decimal).
     let private parseInt (s: string) : int =
         let t = s.Trim()
@@ -329,6 +335,7 @@ module ScriptParser =
               "text"; "text_far"; "line"; "cont"; "next"; "para"; "done"; "page";
               "text_start"; "text_end"; "raw"; "ascii"; "sound"; "interpret_data";
               "DEF"; "INCLUDE"; "MACRO"; "ENDM"; "add_stdscript";
+              "ugdoor_def";
               "object_const_def"; "const"; "const_def"; "const_skip"; "const_value";
               "map_def"; "map_attributes"; "map_header"; "connection";
               "def_scene_scripts"; "scene_script"; "scene_const";
@@ -422,11 +429,79 @@ module ScriptParser =
 
         collectLocalConstants strict constants text
 
+    let private collectUndergroundDoorDefs (strict: bool) (constants: Map<string, int>) (text: string) : UndergroundDoorPart[][] =
+        let doors = ResizeArray<UndergroundDoorPart[]>()
+
+        for raw in text.Replace("\r\n", "\n").Split('\n') do
+            let body = stripComment raw
+
+            if body <> "" then
+                let mn, args = splitLine body
+
+                if mn = "ugdoor_def" then
+                    if args.Length % 4 <> 0 && strict then
+                        failwithf "ugdoor_def expects x, y, closed, open groups; got %d operands" args.Length
+
+                    let parts =
+                        args
+                        |> List.chunkBySize 4
+                        |> List.choose (function
+                            | [ x; y; closedBlock; openBlock ] ->
+                                Some
+                                    { X = intArg strict constants x
+                                      Y = intArg strict constants y
+                                      ClosedBlock = intArg strict constants closedBlock
+                                      OpenBlock = intArg strict constants openBlock }
+                            | _ -> None)
+                        |> List.toArray
+
+                    doors.Add parts
+
+        doors.ToArray()
+
+    let private expandUndergroundDoorLoops (strict: bool) (constants: Map<string, int>) (doors: UndergroundDoorPart[][]) (text: string) : string =
+        let lines = text.Replace("\r\n", "\n").Split('\n')
+        let expanded = ResizeArray<string>()
+        let mutable lineIndex = 0
+
+        let replaceLoopVar n (line: string) =
+            Regex.Replace(line.Replace("{d:n}", string n), @"(?<![A-Za-z0-9_])n(?![A-Za-z0-9_])", string n)
+
+        while lineIndex < lines.Length do
+            let raw = lines.[lineIndex]
+            let body = stripComment raw
+            let mn, args = splitLine body
+
+            if mn = "for" && args.Length = 3 && args.[0] = "n" && args.[2].Trim() = "ugdoor_n + 1" then
+                let loopBody = ResizeArray<string>()
+                lineIndex <- lineIndex + 1
+
+                while lineIndex < lines.Length && (stripComment lines.[lineIndex] |> splitLine |> fst) <> "endr" do
+                    loopBody.Add lines.[lineIndex]
+                    lineIndex <- lineIndex + 1
+
+                if lineIndex >= lines.Length && strict then
+                    failwith "Unterminated ugdoor_n loop"
+
+                let first = intArg strict constants args.[1]
+
+                for n = first to doors.Length do
+                    for loopLine in loopBody do
+                        expanded.Add(replaceLoopVar n loopLine)
+            else
+                expanded.Add raw
+
+            lineIndex <- lineIndex + 1
+
+        String.concat "\n" expanded
+
     let private parseTextInternal (strict: bool) (extraConstants: Map<string, int>) (text: string) : ScriptProgram =
         let commands = ResizeArray<ScriptCommand>()
         let labels = System.Collections.Generic.Dictionary<string, int>()
         let mutable lastGlobal = ""
         let constants = constantsFor strict extraConstants text
+        let undergroundDoors = collectUndergroundDoorDefs strict constants text
+        let text = expandUndergroundDoorLoops strict constants undergroundDoors text
         let movementLabels = collectMovementLabels text
 
         let mutable inMacro = false
@@ -494,6 +569,24 @@ module ScriptParser =
                         // source and typically starts with `endifjustbattled`, which ends the
                         // immediate post-battle path. Scripts that omit `endifjustbattled` (e.g.
                         // Slowpoke Well Rocket clearing) intentionally run after battle.
+                        let expandUndergroundDoor (args: string list) =
+                            let doorId = intArg strict constants args.[0]
+                            let state = args.[1].Trim().ToUpperInvariant()
+
+                            if doorId < 1 || doorId > undergroundDoors.Length then
+                                if strict then
+                                    failwithf "changeugdoor references unknown underground door id %d" doorId
+                                else
+                                    [||]
+                            else
+                                undergroundDoors.[doorId - 1]
+                                |> Array.map (fun part ->
+                                    match state with
+                                    | "OPEN" -> Changeblock(part.X, part.Y, part.OpenBlock)
+                                    | "CLOSED" -> Changeblock(part.X, part.Y, part.ClosedBlock)
+                                    | _ when strict -> failwithf "changeugdoor references unknown state %s" state
+                                    | _ -> Changeblock(part.X, part.Y, part.ClosedBlock))
+
                         match cmd with
                         | Unsupported("trainer", args) when args.Length >= 7 ->
                             let group = args.[0]
@@ -536,6 +629,8 @@ module ScriptParser =
                             commands.AddRange([| Verbosegiveitem(args.[0], 1); End |])
                         | Unsupported("fruittree", _) ->
                             commands.AddRange([| Verbosegiveitem("BERRY", 1); End |])
+                        | Unsupported("changeugdoor", args) when args.Length >= 2 ->
+                            commands.AddRange(expandUndergroundDoor args)
                         | _ -> commands.Add cmd
                     | LSkip -> ()
 

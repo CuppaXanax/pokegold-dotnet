@@ -7,6 +7,14 @@ module DexCompletion =
     [<Literal>]
     let TotalSpecies = 251
 
+    /// D9 built-in unlocks for event-only species that cannot be obtained from
+    /// cartridge-local Gold encounter data.
+    let builtInEventUnlockSpecies : Set<string> =
+        Set.ofList [ "CELEBI"; "MEW" ]
+
+    let isBuiltInEventUnlock species =
+        Set.contains species builtInEventUnlockSpecies
+
     /// Check if the player has completed the Pokédex (all 251 species owned).
     let isComplete (dexOwn: Set<int>) : bool =
         dexOwn.Count >= TotalSpecies

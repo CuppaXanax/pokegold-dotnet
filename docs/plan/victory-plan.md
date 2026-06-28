@@ -10,9 +10,12 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-06-11:** 993/993 tests green. The script-VM golden path is verified
+**State as of 2026-06-28:** 1288/1288 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
-gates **G1–G14**). The remaining risk is concentrated in Workstream A below.
+gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
+`StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
+251 Pokédex species. The remaining risk is concentrated in extending Workstream A into the
+full Red route.
 
 ---
 
@@ -42,6 +45,8 @@ gates **G1–G14**). The remaining risk is concentrated in Workstream A below.
    `OverworldSchedulerTests.fs`). Boots the real `Game`, ticks real frames, presses real
    buttons. Proves: movement, collision, warps, scene stack, callbacks, coord triggers,
    text boxes, battles-from-overworld. **Only spot-covered. This is the gap.**
+   The current no-shortcuts gate covers the opening prefix from fresh save through starter
+   acquisition; it must be extended until it reaches post-Red credits.
 3. **Eyeball layer** — `dotnet run --project src/PokeGold.Host`. F5 save / F9 load.
 
 ### Battle UX / trainer battle shell
@@ -59,6 +64,9 @@ field move, each with a status (`FaithfulTested` / `ImplementedApproximate` / `S
 `SideSystem`, `Cosmetic`, `LinkOnly`). The ledger is **enforced by tests** — adding a DU
 case or special without classifying it fails the build. When you implement something,
 **move its ledger entry** and say in the note what test covers it.
+As of 2026-06-28, there are no `Unknown` RequiredFor100Percent entries left; remaining
+`StubNoOp` entries are still visible debt and must either be implemented or accurately
+reclassified with ASM-backed notes.
 
 ### Build & test (Windows; the repo root is the disassembly)
 
@@ -81,7 +89,7 @@ fails with XA5300 otherwise. Everything else builds individually.
 - **No runtime `.asm` parsing.** All static data goes through DataGen at build time.
   Parser changes in `PokeGold.MapData` auto-trigger regeneration (the `GenerateGameData`
   MSBuild target keys on those `.fs` files).
-- **`CoverageSweepTests.fs` pins the baked command total (currently 21280).** If you change
+- **`CoverageSweepTests.fs` pins the baked command total (currently 21265).** If you change
   a macro expansion in `ScriptParser.fs`, the pin moves — update it *and* the comment
   explaining the delta, as the existing comments do.
 - **Tests gate everything.** Each work item below ends with a named test. A change without
@@ -199,11 +207,13 @@ Ordered by value:
 | ✅ B12 | `UnownPrinter`/`UnownPuzzle` | `engine/games/unown_puzzle.asm` | Unown dex | puzzle can be a stub-accept (auto-solve prompt) initially; dex tracking already exists |
 | — | `TimeCapsule`/`TradeCenter`/`Colosseum`/link specials | — | **excluded by design (D7)** — leave `LinkOnly` | the offline trade terminal already covers trade evolutions |
 
-Also still stubbed (cosmetic, do last): `HealMachineAnim`, `TryQuickSave`, `FadeOutToBlack`/
+Also still stubbed (cosmetic, do last): `HealMachineAnim`, `FadeOutToBlack`/
 `FadeInFromBlack`/`FadeOutToWhite`/`FadeInFromWhite` (wire to a 4-frame palette fade in the
 scene shell), `Cry`/`PlayCurMonCry`/`PlaySlowCry` (route to the existing SFX synth — cries
 are pitch-bent base cries, see `audio/cries.asm`), `UpdateSprites`/`ReloadSpritesNoPalettes`
 (probably correct as no-ops — verify against call sites before "implementing").
+`TryQuickSave` is link-only (`engine\link\link.asm`, Pokecenter 2F scripts) and remains
+excluded by the offline-terminal design.
 
 ---
 

@@ -52,6 +52,47 @@ let ``parses opcodes with their typed arguments`` () =
     )
 
 [<Fact>]
+let ``expands Goldenrod underground door macros to changeblock commands`` () =
+    let prog =
+        parse
+            "MACRO ugdoor_def\n\
+             ENDM\n\
+             \tugdoor_def 16, 6, $3e, $2d\n\
+             \tugdoor_def 12, 6, $3f, $2a, 12, 8, $3d, $2d\n\
+             S:\n\
+             \tchangeugdoor 1, OPEN\n\
+             \tchangeugdoor 2, CLOSED\n\
+             \tend\n\
+             for n, 1, ugdoor_n + 1\n\
+             .OpenDoor{d:n}:\n\
+             \tchangeugdoor n, OPEN\n\
+             \tend\n\
+             endr\n"
+
+    Assert.DoesNotContain(
+        prog.Commands,
+        fun cmd ->
+            match cmd with
+            | Unsupported _ -> true
+            | _ -> false
+    )
+
+    Assert.Equal<ScriptCommand list>(
+        [ Changeblock(16, 6, 0x2d)
+          Changeblock(12, 6, 0x3f)
+          Changeblock(12, 8, 0x3d)
+          End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+    Assert.Equal<ScriptCommand list>(
+        [ Changeblock(12, 6, 0x2a)
+          Changeblock(12, 8, 0x2d)
+          End ],
+        ScriptProgram.blockAt "S.OpenDoor2" prog
+    )
+
+[<Fact>]
 let ``strict parser resolves symbolic numeric constants and scene ids`` () =
     let constants =
         Map.ofList

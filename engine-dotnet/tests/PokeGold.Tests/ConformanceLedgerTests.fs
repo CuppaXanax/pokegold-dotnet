@@ -145,8 +145,7 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B12 tests cover UnownPuzzle returning solved truth so chamber completion scripts set the right events/flags, plus Research Center UnownPrinter UI dispatch; exact sliding-panel and Game Boy Printer UI fidelity remains future polish."
             [ "UnownPrinter"; "UnownPuzzle" ]
 
-          yield! many ScriptSpecial StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped on visible story/runtime paths."
-            [ "HealMachineAnim"; "TryQuickSave" ]
+          yield entry ScriptSpecial "HealMachineAnim" StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback; StdScriptsTests cover that nurse scripts reach HealParty and HealTests cover continuing past the cosmetic animation seam."
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Routes the setval-staged species through the CheckPoke party effect; the YourTrainerID OT check is unmodelled (all party mons are the player's)."
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
@@ -174,7 +173,7 @@ module ConformanceLedger =
           yield! many ScriptSpecial StubNoOp [ LinkOnly; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for link-only systems."
             [ "CableClubCheckWhichChris"; "CheckBothSelectedSameRoom"; "CheckLinkTimeout_Receptionist"; "CheckTimeCapsuleCompatibility"; "CloseLink"
               "Colosseum"; "DisplayLinkRecord"; "EnterTimeCapsule"; "FailedLinkToPast"; "GameboyCheck"; "SetBitsForBattleRequest"
-              "SetBitsForLinkTradeRequest"; "SetBitsForTimeCapsuleRequest"; "TimeCapsule"; "TradeCenter"; "WaitForLinkedFriend"; "WaitForOtherPlayerToExit" ]
+              "SetBitsForLinkTradeRequest"; "SetBitsForTimeCapsuleRequest"; "TimeCapsule"; "TradeCenter"; "TryQuickSave"; "WaitForLinkedFriend"; "WaitForOtherPlayerToExit" ]
 
           yield! many ObjectType ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "A-press dispatch exists, but type-specific GSC object dispatch still needs conformance work."
             [ "OBJECTTYPE_SCRIPT"; "OBJECTTYPE_TRAINER"; "OBJECTTYPE_ITEMBALL" ]
@@ -348,7 +347,7 @@ module ConformanceLedger =
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."
             []
 
-          yield! many ItemFieldMenu Unknown [ CriticalPathJohto; RequiredFor100Percent ] "Item field-menu behavior exists in data; conformance status has not been audited in the ledger yet."
+          yield! many ItemFieldMenu ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "PackScene builds action menus from item field-menu metadata: PackTests cover ITEMMENU_CLOSE cant-toss key items and PackUseGiveTests cover ITEMMENU_PARTY use/give plus ITEMMENU_NOUSE deferred-use gating; exact per-key-item field effects remain future item polish."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_CURRENT"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
 
           yield entry ItemBattleMenu "ITEMMENU_PARTY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene PACK command supports party-targeted HP/status item use; BattleTests cover using Potion on a benched party mon."
@@ -522,7 +521,7 @@ let ``critical Johto debt is queryable`` () =
 
     Assert.Contains((ScriptCommandCase, "TextRam"), debt)
     Assert.Contains((ScriptSpecial, "HealMachineAnim"), debt)
-    Assert.Contains((ScriptSpecial, "TryQuickSave"), debt)
+    Assert.DoesNotContain((ScriptSpecial, "TryQuickSave"), debt)
 
 [<Fact>]
 let ``link-only debt is separated from normal story debt`` () =
@@ -532,6 +531,7 @@ let ``link-only debt is separated from normal story debt`` () =
         |> Set.ofList
 
     Assert.Contains((ScriptSpecial, "TimeCapsule"), debt)
+    Assert.Contains((ScriptSpecial, "TryQuickSave"), debt)
     Assert.DoesNotContain((ScriptSpecial, "BankOfMom"), debt)
 
 [<Fact>]
@@ -587,5 +587,5 @@ let ``ledger keeps unresolved debt visible`` () =
         |> List.map (fun e -> e.Status)
         |> Set.ofList
 
-    Assert.Contains(Unknown, statuses)
+    Assert.DoesNotContain(Unknown, statuses)
     Assert.Contains(StubNoOp, statuses)
