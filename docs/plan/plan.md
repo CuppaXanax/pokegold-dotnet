@@ -1,884 +1,1065 @@
-# Execution Plan — Pokémon Gold in F#
+# Pokémon Gold for F#/.NET — Completion Plan
 
-This is the actionable plan: ordered milestones, each with concrete deliverables, measurable
-acceptance criteria, dependencies, and risks. The vision and principles live in `README.md`.
+> Replaces the former milestone and victory checklists.  
+> Audit baseline: 2026-07-09.  
+> Target: Pokémon Gold only. Silver support is outside this plan.
 
-> **Status: all milestones below (M0–M25) have landed.** The remaining work between
-> "milestones complete" and a playable all-badges run is captured — in handoff-ready
-> detail — in **[`victory-plan.md`](victory-plan.md)**. Start there.
+## Executive summary
 
-Target: **Pokémon Gold** (international English, game ID `AAUE`, SHA1
-`d8b8a3600a465308c9953dfa04f0081c05bdcb94`) reimplemented in **F#** on **MonoGame** (DesktopGL).
-Reference source is the `pret/pokegold` disassembly in this repo and the analysis in `docs/recon/`.
+The project has a substantial native F#/.NET engine, but it is not yet a demonstrated, 100%-completable game.
 
-**North star — 100%-able Gold.** The done state is the *complete game*, not a tech demo:
-a fresh save can be played start to finish and **fully completed** — all 16 badges (Johto +
-Kanto), the Elite Four, Red, Hall of Fame + credits, and a **completable National Pokédex**
-(all 251 obtainable within the implementation, including trade evolutions and event-only
-species — see D7–D9). Glitchless completion is the bar; glitch-category parity is a separate
-non-goal unless explicitly chosen.
+Estimated current position:
 
-The milestones below build **bottom-up**: M0–M8 prove every subsystem once via a thin vertical
-slice (the fastest path to "it's a game"), then M9–M22 take each subsystem to **full breadth**
-until the north star is met. Slice first so we fail fast; then go wide.
+- Approximately **55% complete toward a 100%-able Pokémon Gold**.
+- Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
+- **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
+- The latest documentation records **1,288 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+
+The following foundations are real and worth preserving:
+
+- Platform-independent F# game library and native MonoGame desktop host.
+- Build-time generation of maps, scripts, encounters, trainers, species, moves, items, audio, and other data directly from repository source assets.
+- No ROM dependency.
+- Runtime rendering, movement, collision, connections, warps, objects, text, menus, saves, audio, battles, and scenes.
+- A typed script VM with no generic `Unsupported` commands in generated map data.
+- Script-level story gates from New Bark through Red.
+- Broad battle move-effect conformance tests.
+- Independent A1–A21 runtime leg tests for many route components.
+
+The main blockers are integration failures:
+
+1. Runtime trainer and wild Pokémon are constructed with Tackle instead of their real moves.
+2. Battle results are not propagated faithfully into persistent party state.
+3. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
+4. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
+5. The only no-shortcuts runtime proof ends after receiving Elm’s starter.
+6. Field moves mostly set variables instead of performing their complete map action.
+7. The all-251 proof counts static or hypothetical sources that players cannot use.
+8. Required script and side-system no-ops remain.
+9. Presentation coverage is broad but frequently approximate.
+
+Work must therefore proceed from battle integrity to exact overworld actions, then through one persistent route, playable acquisition channels, and release verification.
+
+## Status definitions
+
+- ✅ **DONE** — The user-facing outcome works through the real runtime and is protected by a test that would fail if it regressed.
+- 🟡 **PARTIAL** — Useful implementation or component coverage exists, but the user-facing outcome is incomplete, approximate, or dependent on debug setup.
+- ⬜ **TODO** — No acceptable player-facing implementation or proof exists.
+
+A parser, pure helper, static graph, debug command, direct script invocation, injected event, injected badge, or debug warp does not by itself satisfy a player-facing story.
+
+## Verification layers
+
+All work must state which layer it proves:
+
+1. **Data/parser tests** prove that source assets were translated correctly.
+2. **Pure-system tests** prove isolated state transitions and formulas.
+3. **Script-VM tests** prove script branching and effects without physical gameplay.
+4. **Staged runtime tests** prove a local runtime interaction after explicit setup.
+5. **Continuous runtime tests** prove reachability through real input from a prior checkpoint.
+6. **Manual host verification** proves the shipped application is understandable and usable.
+
+Layers 1–4 are valuable component coverage. Only layers 5 and 6 can close route or completion stories.
 
 ---
 
-## Decisions to resolve before/early (gate)
+# Epic 0 — Preserve the working engine foundation
 
-These shape multiple milestones. Each has a recommendation; confirm or override.
+## Story 0.1 — The game builds without a ROM
 
-| # | Decision | Options | Recommendation |
-|---|----------|---------|----------------|
-| D1 | **Asset/data source** *(RESOLVED)* | The repo is complete source: 1,825 gfx files, 286 maps, all tables in `.asm`. No ROM is present or needed (`roms.sha1` is only a build-validation checksum). | **Parse the repo assets directly** — `.png`/`.2bpp`/`.pal` for graphics, `.blk` for maps, `.asm` `db`/`dw` rows for numeric tables. **No ROM build, no ROM input from players.** |
-| D2 | **Versions** | Gold only / Gold + Silver | **Gold only** initially (Silver is mostly data deltas; revisit later) |
-| D3 | **Frame timing** | 60.0 fps / 59.7275 fps (GB rate) | **59.7275** via fixed `TargetElapsedTime`; logic ticks once per frame |
-| D4 | **Presentation** | integer scale / stretch | **Integer scale**, default 4× (640×576), nearest-neighbor, letterbox the rest |
-| D5 | **Content pipeline** | MGCB content pipeline / load raw assets ourselves | **Raw**: we synthesize `Texture2D` from decoded 2bpp + palettes; skip MGCB entirely |
-| D6 | **Save format** | GB SRAM-compatible / our own | **Our own** (versioned), no SRAM compatibility requirement |
-| D7 | **Link / trading** | real netcode / offline "trade terminal" / none | **Offline trade terminal** — a local mechanism that performs trades (and thus trade evolutions) without networking; real link is a non-goal. Needed so the Pokédex is completable single-player. |
-| D8 | **Pokédex-complete bar** | strict (all 251 self-obtainable) / pragmatic | **Pragmatic**: every species obtainable in-impl via normal capture, evolution (incl. trade-evo through D7), in-game trades, gifts, and event hooks (D9). Version exclusives sourced via the offline trade terminal. |
-| D9 | **Event-only species** (Celebi/GS Ball, roamers, Red Gyarados, Lugia/Ho-Oh, Suicune) | emulate Mobile/event / built-in unlocks | **Built-in unlocks** — implement the in-game triggers directly (no Mobile Adapter); GS Ball/Celebi event provided as a standard scripted event so the dex is completable. |
+**Status: ✅ DONE**
 
-> All decisions have working answers; D1 is resolved (parse repo assets directly — no ROM).
-> Revisit D2, D4–D9 only if something forces it.
+The engine consumes repository source assets and generated data without runtime or user-supplied ROM dependencies.
 
-## Asset & legal posture
+### Work items
 
-This repository is a complete reverse-engineered **source** representation of the game: graphics
-as `.png`/`.2bpp`, palettes as `.pal`, maps as `.blk`, and all data tables/text/scripts as `.asm`.
-There is **no ROM in the repo, and none is required** to build or run this port — `roms.sha1` is
-purely a checksum to verify that an RGBDS build of the disassembly reproduces the retail ROM
-byte-for-byte. The F# port loads these source assets directly. **Players do not supply a ROM**,
-exactly as with the SM64 decomp PC ports.
+- ✅ **FND-001 — Maintain the source-asset boundary.**
+  - `PokeGold.DataGen` remains the only build-time generator of `Data/Generated/*`.
+  - Handwritten runtime code must not be placed in generated files.
+  - No ROM path, ROM checksum, emulator, or SRAM file becomes a runtime dependency.
+
+- ✅ **FND-002 — Maintain targeted desktop builds.**
+  - `dotnet build .\src\PokeGold.Game` succeeds.
+  - `dotnet test .\tests\PokeGold.Tests` succeeds.
+  - `dotnet build .\src\PokeGold.Host` succeeds.
+  - Android remains separately gated and must not block desktop work.
+
+## Story 0.2 — Repository data is available to the native runtime
+
+**Status: ✅ DONE**
+
+Maps, scripts, species, moves, encounters, trainers, items, marts, audio metadata, and related source data are generated into typed F# structures.
+
+### Work items
+
+- ✅ **FND-003 — Preserve generated map and script coverage.**
+  - All generated map scripts continue to parse without generic `Unsupported` commands.
+  - Command-count pins are updated only with an explanation tied to parser changes.
+
+- 🟡 **FND-004 — Expand schemas that discard gameplay data.**
+  - Current trainer generation retains only species and level, discarding trainer type, held item, DVs, and explicit moves.
+  - Completion criterion: generated trainer records preserve every `TRAINERTYPE_*` field used by `data/trainers/parties.asm`.
+  - Blocks Epic 1.
+
+## Story 0.3 — Core rendering, audio, input, and save infrastructure exists
+
+**Status: 🟡 PARTIAL**
+
+The systems work, but full-game breadth and exact restoration are not yet proven.
+
+### Work items
+
+- ✅ **FND-005 — Preserve the native host and fixed-step game loop.**
+- ✅ **FND-006 — Preserve map, text, window, menu, sprite, and battle rendering infrastructure.**
+- ✅ **FND-007 — Preserve the four-channel synthesized audio path.**
+- ✅ **FND-008 — Preserve versioned save migration and current player/world round trips.**
+- ⬜ **FND-009 — Prove complete checkpoint restoration.**
+  - Save and reload at representative points during Johto, the Elite Four, Kanto, and species-acquisition work.
+  - Restore map, position, party identity, stats, HP, PP, held items, bag, money, storage, Pokédex, phone, daycare, roamers, scenes, events, engine flags, and persistent map changes.
+  - Test names must identify the checkpoint restored.
+
+### Epic 0 acceptance
+
+Epic 0 is complete when all later epics can use generated source data, save state, rendering, input, and audio without adding a ROM dependency or bypassing the runtime.
 
 ---
 
-## Project layout (created in M0)
+# Epic 1 — Battle and progression integrity
 
+This epic is the first critical-path blocker. Route extension beyond early Johto is not meaningful until real battles produce trustworthy persistent results.
+
+## Story 1.1 — Trainers and wild encounters use authentic battle parties
+
+**Status: ⬜ TODO**
+
+Current runtime construction gives every generated trainer Pokémon and wild Pokémon Tackle only.
+
+### Work items
+
+- ⬜ **BAT-001 — Preserve complete trainer party data.**
+  - Extend generator and runtime schemas with trainer type, moves, held items, and DVs where supplied.
+  - Read `data/trainers/parties.asm` and corresponding trainer-loading assembly first.
+  - Acceptance: Falkner, Whitney, Lance, and Red runtime parties exactly match source species, levels, items, and explicit moves.
+
+- ⬜ **BAT-002 — Derive moves for normal trainer parties.**
+  - For `TRAINERTYPE_NORMAL` and item-only records, derive the correct level-up moveset from generated evolution/learnset data.
+  - Acceptance: tests cover a normal trainer, a moves trainer, an item trainer, and an item-plus-moves trainer.
+
+- ⬜ **BAT-003 — Give wild Pokémon authentic moves and generated attributes.**
+  - Wild Pokémon receive their source-appropriate level-up moves, DVs, held item chances, and encounter attributes.
+  - Acceptance: a deterministic runtime encounter asserts the complete constructed opponent.
+
+- ⬜ **BAT-004 — Remove fallback battle Pokémon from normal gameplay.**
+  - The emergency Cyndaquil/Pidgey/Tackle fallbacks may remain assertion failures or debug-only fixtures.
+  - A missing staged party in a production script must fail a test instead of silently creating a substitute.
+
+## Story 1.2 — Persistent party members enter and leave battle without identity loss
+
+**Status: 🟡 PARTIAL**
+
+HP and some battle state synchronize, but party members are matched by species and level, which is ambiguous.
+
+### Work items
+
+- ⬜ **BAT-005 — Introduce stable party identity.**
+  - Each persistent Pokémon receives a stable identifier that survives party reordering, boxing, saving, and battle conversion.
+  - Acceptance: two same-species, same-level party members leave battle with the correct individual HP, PP, status, held item, EXP, and moves.
+
+- ⬜ **BAT-006 — Model all persistent battle stats correctly.**
+  - Replace DV-zero/stat-exp-zero derivation with Gen 2 per-stat calculations.
+  - Replace scalar `StatExp` if necessary with the actual per-stat representation.
+  - Preserve Attack, Defense, Speed, and Special DVs and HP DV derivation.
+  - Acceptance: worked source-based examples cover all six stats and level-up stat changes.
+
+- ⬜ **BAT-007 — Round-trip complete battle state.**
+  - Synchronize current HP, status, PP, held-item changes, transformed/copied move cleanup, EXP, level, stats, and friendship as applicable.
+  - Acceptance: switching and fainting multiple same-species party members cannot corrupt another member.
+
+## Story 1.3 — Multi-Pokémon trainer battles award correct progression
+
+**Status: 🟡 PARTIAL**
+
+Multi-mon battles run, but overworld integration grants one EXP award based on one representative opponent and only updates the persistent lead.
+
+### Work items
+
+- ⬜ **BAT-008 — Emit per-defeat progression events from the battle engine.**
+  - Record each defeated enemy, participants, EXP Share participation, trainer modifier, stat EXP, and relevant rewards.
+  - Do not recompute the battle history from staged script data after the battle.
+
+- ⬜ **BAT-009 — Award EXP and stat EXP per defeated enemy.**
+  - Each eligible persistent party member receives the correct share.
+  - Acceptance: a multi-mon trainer battle with switches asserts exact EXP for every participant.
+
+- ⬜ **BAT-010 — Process every crossed level.**
+  - A large EXP award must process stats, moves, and evolutions for each intermediate level rather than only the final level.
+
+- ⬜ **BAT-011 — Award money and post-battle rewards exactly once.**
+  - Trainer payout uses the correct trainer class/base reward and final enemy level.
+  - Amulet Coin applies under source-accurate conditions.
+  - Losses, catches, and script retries cannot duplicate rewards.
+
+## Story 1.4 — Move learning and evolution are player-controlled and source-correct
+
+**Status: 🟡 PARTIAL**
+
+Level evolution exists, but move learning automatically replaces the weakest move. Only TM01–TM09 are mapped.
+
+### Work items
+
+- ⬜ **BAT-012 — Add the four-move learning decision flow.**
+  - When a Pokémon knows four moves, show the real learn/decline/delete decision.
+  - Cancellation preserves the old moveset.
+  - HM deletion remains restricted to the Move Deleter where required.
+
+- ⬜ **BAT-013 — Support all TM01–TM50 and HM01–HM07.**
+  - Generate the TM/HM mapping rather than maintaining a partial handwritten match.
+  - Enforce species compatibility.
+  - Consume TMs and preserve HMs according to Gold behavior.
+  - Acceptance: tests cover TM01, TM10, TM50, an HM, compatible and incompatible species, cancellation, and a full moveset.
+
+- ⬜ **BAT-014 — Complete all evolution methods.**
+  - Level, item, friendship, time-of-day, stat comparison, Tyrogue branches, trade, and trade-with-item paths must work.
+  - Evolution cancellation and move learning after evolution must follow source ordering.
+
+- ⬜ **BAT-015 — Update owned/seen Pokédex state after evolution.**
+  - The evolved species is registered without losing the prior species.
+
+## Story 1.5 — Losing a battle causes a real blackout
+
+**Status: ⬜ TODO**
+
+The runtime currently heals the party, halves money, returns `0` to the suspended script, and continues normal script execution. This can allow post-victory commands to run after a loss.
+
+### Work items
+
+- ⬜ **BAT-016 — Add an explicit defeated battle result.**
+  - A loss must not be represented as an ordinary script result that resumes post-victory commands.
+
+- ⬜ **BAT-017 — Implement blackout destination and abort semantics.**
+  - Apply the configured blackout/spawn map.
+  - Deduct the correct money amount.
+  - Heal the party.
+  - Clear transient battle/script state.
+  - Abort the defeated script’s normal continuation.
+
+- ⬜ **BAT-018 — Protect every boss script from loss-as-victory.**
+  - Losing to Falkner grants no badge or TM.
+  - Losing to Lance grants no Hall of Fame entry.
+  - Losing to Red does not remove Red, heal as a victory reward, or roll credits.
+
+- ⬜ **BAT-019 — Prove retry behavior.**
+  - After blackout and save/reload, the trainer remains available and can later be defeated normally.
+
+## Story 1.6 — The battle command shell supports a normal playthrough
+
+**Status: 🟡 PARTIAL**
+
+FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, and broad move-effect behavior exist.
+
+### Work items
+
+- ✅ **BAT-020 — Preserve audited move-effect coverage.**
+  - All generated move effects currently have explicit ledger classification and worked tests.
+  - Do not restart this audit unless route failures expose integration problems.
+
+- 🟡 **BAT-021 — Complete forced-switch and replacement timing.**
+  - A fainted active Pokémon must require a legal replacement before battle proceeds.
+  - Trainer and player replacement ordering must match source behavior.
+
+- 🟡 **BAT-022 — Complete battle item coverage.**
+  - Add Revive/Max Revive, X items, Guard Spec., Poké Doll, PP recovery, status items, and source-accurate restrictions.
+
+- 🟡 **BAT-023 — Complete held-item integration.**
+  - Current effects have targeted coverage; verify consumption and persistence across real runtime battles.
+
+- 🟡 **BAT-024 — Audit trainer AI at the integration layer.**
+  - Gym leaders, Elite Four, Lance, and Red must select from their real moves and switch/use items where the source requires it.
+  - “Simplified AI” is acceptable only if explicitly excluded from the release definition; it cannot invalidate ordinary battle outcomes.
+
+### Epic 1 acceptance
+
+Epic 1 is complete when a fresh party can fight and legitimately defeat representative wild encounters, ordinary trainers, a gym leader, a multi-mon Elite Four trainer, and Red while preserving exact party identity and progression. Losses must blackout and never execute victory-only script commands.
+
+---
+
+# Epic 2 — Overworld action and script integrity
+
+## Story 2.1 — Players can traverse generated maps through real movement
+
+**Status: 🟡 PARTIAL**
+
+Basic walking, collision, warps, connections, ledges, objects, trainer sight, and ice movement exist, but route-wide proof is incomplete.
+
+### Work items
+
+- ✅ **OVR-001 — Preserve ordinary walking, collision, warps, and connections.**
+- ✅ **OVR-002 — Preserve object visibility, A-press dispatch, trainer sight, and coordinate-trigger scheduling.**
+- 🟡 **OVR-003 — Verify special collision families across representative maps.**
+  - Ice, currents, conveyors, directional walls, pits, warp carpets, stairs, doors, ladders, and water features each require runtime tests using real map cells.
+  - Replace Azalea-only representative coverage with a matrix across indoor, outdoor, cave, water, ice, and Kanto maps.
+
+## Story 2.2 — Every route-required field move performs its complete action
+
+**Status: 🟡 PARTIAL**
+
+Badge, move, and some terrain checks exist. Most actions set world variables rather than completing the source map behavior.
+
+### Work items
+
+- ⬜ **OVR-004 — Complete Cut.**
+  - Cut removes the correct tree/grass obstruction and makes the route walkable.
+  - Persistence follows source event/map reload behavior.
+  - Prove on Ilex Forest/Route 34 and at least one second map.
+
+- ⬜ **OVR-005 — Complete Surf.**
+  - Enter surfing state, render the proper player state, traverse water, block invalid terrain, and dismount on valid land.
+  - Save/reload while surfing must restore a legal state.
+
+- 🟡 **OVR-006 — Complete Strength.**
+  - Existing boulder pushing and selected Ice Path hole handling are retained.
+  - Generalize hole/event handling from map-specific coordinate matches to source-generated behavior.
+  - Prove Ice Path and a non-Ice-Path Strength puzzle.
+
+- ⬜ **OVR-007 — Complete Whirlpool.**
+  - Remove or traverse the correct obstruction, preserve surf state, and allow the Dragon’s Den/Whirl Islands routes.
+
+- ⬜ **OVR-008 — Complete Waterfall.**
+  - Implement required facing, ascent/descent, forced movement, animation state, and landing behavior.
+
+- ⬜ **OVR-009 — Complete Fly.**
+  - Present discovered destinations, move to the correct destination warp, and preserve state.
+  - A `__fly_requested` variable is not completion.
+
+- 🟡 **OVR-010 — Complete Flash.**
+  - Existing eligibility state must control actual cave darkness rendering and survive map transitions as the source requires.
+
+- ⬜ **OVR-011 — Add runtime Headbutt.**
+  - The script command currently pauses only.
+  - Select encounters from generated tree tables for the current map/tree group and start a catchable battle.
+
+## Story 2.3 — Required script commands have real semantics
+
+**Status: 🟡 PARTIAL**
+
+Generated commands are typed, but many are approximate and several required commands are no-ops or fixed dummy results.
+
+### Work items
+
+- ⬜ **SCR-001 — Fix battle-script control flow.**
+  - `startbattle`, `reloadmapafterbattle`, `checkjustbattled`, and `endifjustbattled` must use explicit win/loss/catch/run state.
+  - Acceptance is covered jointly with BAT-016 through BAT-019.
+
+- ⬜ **SCR-002 — Implement route-relevant command stubs.**
+  - `Prompt`, `Catchtutorial`, and `TextRam` receive source-backed behavior and runtime tests.
+
+- ⬜ **SCR-003 — Implement required side-system command stubs.**
+  - Audit and implement or accurately exclude:
+    - `Pokepic`, `Closepokepic`, `Itemnotify`
+    - `Elevator`, `Elevfloor`
+    - `Trade`
+    - `Givepokemail`, `Checkpokemail`
+    - `Writeobjectxy`, `Ugdoor`, `Warpcheck`
+    - `Checkjustbattled`
+    - `ConditionalEvent`, `Describedecoration`, `Stonetable`
+    - `Cmdqueue`, `Writecmdqueue`
+  - No item may remain tagged `RequiredFor100Percent` and `StubNoOp` at release.
+
+- ⬜ **SCR-004 — Add command-level conformance tests for approximate critical commands.**
+  - Prioritize map callbacks, object events, scene changes, changeblock, door state, follow/movement, money/items, and battle staging.
+  - Each ledger upgrade names its proving test.
+
+## Story 2.4 — Required specials and side systems are player-facing
+
+**Status: 🟡 PARTIAL**
+
+Many specials have useful seams, but some are simplified or skipped.
+
+### Work items
+
+- 🟡 **SCR-005 — Finish daycare behavior.**
+  - Replace unconditional compatibility.
+  - Implement egg groups, gender rules, Ditto rules, species inheritance, move inheritance, hatch cycles, and parent growth.
+  - Advance egg generation through runtime steps.
+
+- ⬜ **SCR-006 — Implement egg hatching.**
+  - Eggs count down while walking, hatch through a runtime scene, become usable Pokémon, and update the Pokédex.
+  - Saving and loading preserves remaining cycles.
+
+- 🟡 **SCR-007 — Finish the Bug-Catching Contest.**
+  - Replace deterministic/minimal contest behavior with a playable timed or explicitly approved equivalent loop.
+  - Park Balls, temporary party handling, catch selection, judging, prizes, and save state must compose correctly.
+
+- 🟡 **SCR-008 — Finish Game Corner acquisition paths.**
+  - The player can earn or acquire coins and exchange them for prize Pokémon through the runtime.
+  - Pure helpers or directly seeded coins do not count.
+
+- ⬜ **SCR-009 — Burn down non-link completion-special stubs.**
+  - Triage and implement the required behavior for Lucky Number, Daisy grooming, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Oak’s PC completion checks, Diploma, and related normal-play specials.
+  - Link-only cable-club behavior remains excluded.
+
+- ⬜ **SCR-010 — Define deliberate replacements for unavailable external services.**
+  - Mystery Gift, Mobile/event distribution, and version trading need documented offline equivalents where required for completion.
+  - The replacement must be accessible through gameplay and must not silently grant completion state.
+
+## Story 2.5 — Menus and inventory expose all required player actions
+
+**Status: 🟡 PARTIAL**
+
+The menu framework is broad, but several actions are missing or simplified.
+
+### Work items
+
+- ⬜ **UI-001 — Wire fishing rods from Pack to overworld.**
+  - `PackScene` returns the selected rod.
+  - The overworld validates facing water, chooses from generated fish-group data, and starts a battle.
+  - The existing hard-coded helper is replaced or restricted to tests.
+
+- ⬜ **UI-002 — Complete item field-use behavior.**
+  - Stones, Rare Candy, vitamins, PP items, Escape Rope, Repels, evolutionary items, key items, rods, bicycles, and TM/HM use have runtime outcomes.
+
+- 🟡 **UI-003 — Complete party, storage, mail, and PC workflows.**
+  - Deposit, withdraw, move, release, held items, mail, full boxes, and last-usable-party constraints work through menus and save/load.
+
+### Epic 2 acceptance
+
+Epic 2 is complete when every action required by the continuous route and the 251-species acquisition plan is performed through ordinary menus, movement, map interactions, and source-backed script semantics.
+
+---
+
+# Epic 3 — Continuous fresh-save route through Red
+
+## Route proof policy
+
+The existing A1–A21 tests are retained as staged component tests. They contain approximately:
+
+- 111 debug warps.
+- 40 direct event mutations.
+- 12 direct badge/engine-flag mutations.
+- 14 direct scene mutations.
+
+Those tests remain useful for fast diagnosis, but their checklist status does not mean the corresponding story is playable.
+
+Every route story below has two proof obligations:
+
+1. Preserve its independent staged component tests.
+2. Add its checkpoint to one persistent `StartNewGame` run using only normal input and state earned by earlier checkpoints.
+
+The continuous route may use deterministic controller automation and accelerated text, but it may not call debug warp, set-event, set-flag, set-scene, seed-party, seed-item, or auto-win controls.
+
+## Story 3.1 — Route harness supports long-lived checkpoints
+
+**Status: 🟡 PARTIAL**
+
+A no-shortcuts runtime test reaches Elm’s starter; the remaining route uses staged tests.
+
+### Work items
+
+- ✅ **RTE-001 — Preserve `GameDriver` and per-frame invariants.**
+- ✅ **RTE-002 — Preserve the opening no-shortcuts proof through Elm’s starter.**
+- ⬜ **RTE-003 — Add durable route checkpoint helpers.**
+  - Checkpoints are ordinary save files captured from the continuous run, not constructed state.
+  - Each later test may load the prior earned checkpoint to control test duration.
+  - A separate chaining test verifies checkpoint ancestry and hashes.
+
+- ⬜ **RTE-004 — Remove false completion labels.**
+  - A1–A21 are marked PARTIAL until their continuous checkpoint passes.
+  - Script-VM gates are described as script coverage, not victory proof.
+
+## Johto stories
+
+### Story 3.2 — A1: New Bark to Cherrygrove is continuously playable
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Staged movement, home warp, New Bark triggers, and connections have coverage.
+- ✅ The continuous prefix reaches the starter.
+- ⬜ Walk from the earned starter state through Route 29 into Cherrygrove without debug setup.
+- ⬜ Assert map transitions, collisions, encounters, party state, and save/reload.
+
+### Story 3.3 — A2: Cherrygrove to Violet is continuously playable
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Mr. Pokémon and rival script/component coverage exists.
+- ⬜ Walk Route 30/31, complete Mr. Pokémon’s visit, return, legitimately battle the rival, and reach Violet.
+- ⬜ The rival must use the correct starter and authentic moves; losing must blackout.
+
+### Story 3.4 — A3: Falkner can be defeated for the Zephyr Badge
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Gym warp, trainer sight, and boss-script components exist.
+- ⬜ Defeat gym trainers and Falkner using the persistent party.
+- ⬜ Assert the badge and TM31 were absent before victory and granted exactly once afterward.
+- ⬜ Add a loss test proving no badge, TM, beaten event, or post-battle script continuation.
+
+### Story 3.5 — A4: Route 32 and Union Cave lead to Azalea
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Route, cave, connection, and Slowpoke Well blocker components exist.
+- ⬜ Continue from the Falkner checkpoint through Route 32, Union Cave, Route 33, and Azalea.
+- ⬜ Prove required encounter, darkness, warp, and blocker behavior without injected flags.
+
+### Story 3.6 — A5: Slowpoke Well, Bugsy, and the rival are completable
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Script and staged runtime coverage exists for the Azalea arc.
+- ⬜ Clear Slowpoke Well through real battles and observe the town transition.
+- ⬜ Defeat Bugsy for Hive Badge and TM49.
+- ⬜ Defeat the Ilex rival encounter; losses must not advance any branch.
+
+### Story 3.7 — A6: Ilex Forest and Cut open the Goldenrod route
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Farfetch’d/HM script and Cut eligibility components exist.
+- ⬜ Complete the Farfetch’d puzzle through movement.
+- ⬜ Receive and teach Cut through normal menus.
+- ⬜ Cut the real obstruction and walk through the newly opened route.
+
+### Story 3.8 — A7: Whitney and SquirtBottle progression work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Gym/script component coverage exists.
+- ⬜ Reach Goldenrod, defeat Whitney, complete her delayed badge conversation, and receive Plain Badge/TM45.
+- ⬜ Obtain the SquirtBottle through its actual prerequisites.
+- ⬜ Save/reload between the gym and flower shop without losing progression.
+
+### Story 3.9 — A8: Sudowoodo and the Burned Tower arc work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Sudowoodo, rival, and beast-release script coverage exists.
+- ⬜ Use the SquirtBottle, win or capture the real Sudowoodo, and open Route 36.
+- ⬜ Complete the Burned Tower rival fight and release the beasts through movement.
+- ⬜ Roamer state must be generated and persisted, not merely represented by an event flag.
+
+### Story 3.10 — A9: Morty, Olivine, Surf, and Cianwood work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Staged Morty, lighthouse, and Surf-gate coverage exists.
+- ⬜ Defeat Morty and receive Fog Badge.
+- ⬜ Teach Surf and cross water using the completed surfing state.
+- ⬜ Climb the lighthouse and reach Cianwood without debug transitions.
+
+### Story 3.11 — A10: Chuck, Jasmine, and Lake of Rage work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Pharmacy, boss-script, and Red Gyarados components exist.
+- ⬜ Obtain medicine, defeat Chuck, return to Jasmine, and defeat her.
+- ⬜ Reach Lake of Rage and win or capture the forced Red Gyarados.
+- ⬜ Continue into the Lance/Rocket arc with earned state only.
+
+### Story 3.12 — A11: Rocket Hideout, Pryce, and Radio Tower work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Isolated guards, battles, scripts, and persistence checks exist.
+- ⬜ Clear the hideout’s traps, switches, passwords, boss battles, and Electrode sequence.
+- ⬜ Defeat Pryce and complete the Radio Tower takeover and Director rescue.
+- ⬜ Save/reload at two points in the arc and resume correctly.
+
+### Story 3.13 — A12: Ice Path, Clair, and Dragon’s Den work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Ice movement, selected boulder handling, gym scripts, and field-move eligibility have coverage.
+- ⬜ Solve Ice Path and boulder-hole puzzles through movement.
+- ⬜ Complete Whirlpool and Waterfall interactions required by the route.
+- ⬜ Defeat Clair, complete Dragon’s Den, and receive Rising Badge through the source sequence.
+
+### Story 3.14 — A13: The Pokémon League is reachable
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Badge-guard and route components exist.
+- ⬜ Travel from New Bark through Routes 27/26 and Victory Road.
+- ⬜ Prove each badge guard rejects insufficient progress and accepts the earned eight badges.
+- ⬜ Reach Indigo Plateau with no injected badge flags.
+
+### Story 3.15 — A14: The Elite Four and Lance can be defeated
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Room, door, Hall of Fame, and credit components exist.
+- ⬜ Defeat Will, Koga, Bruno, Karen, and Lance sequentially with authentic teams.
+- ⬜ Door locking, healing restrictions, EXP, money, party damage, and item use persist between fights.
+- ⬜ A loss to any member blackouts and does not enter the Hall of Fame.
+- ⬜ A legitimate Lance victory records the Hall of Fame, rolls credits, and creates the post-game save.
+
+## Kanto stories
+
+### Story 3.16 — A15: The S.S. Aqua reaches Kanto
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Ticket, gangway, ship, and granddaughter components exist.
+- ⬜ Obtain the S.S. Ticket from earned post-game state.
+- ⬜ Board, complete the ship quest through movement, and arrive in Vermilion.
+- ⬜ The sailor rejects the player before the ticket is earned.
+
+### Story 3.17 — A16: Surge, Saffron, and Sabrina work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Gym and gate-script components exist.
+- ⬜ Defeat Surge and Sabrina through real battles.
+- ⬜ Prove Saffron gates reflect the actual Power Plant state without injected events.
+
+### Story 3.18 — A17: The Machine Part quest works
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Hidden Machine Part A-press dispatch has strong staged coverage.
+- ⬜ Traverse Cerulean and Power Plant locations, confront the Rocket, find the hidden item, and return it.
+- ⬜ Assert item consumption and power-restoration state across save/reload.
+
+### Story 3.19 — A18: EXPN Card and Snorlax work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Radio tuning and Snorlax staged runtime behavior exist.
+- ⬜ Obtain the EXPN Card through the continuous route.
+- ⬜ Tune the Poké Flute through Pokégear and win or capture Snorlax.
+- ⬜ Losing leaves Snorlax present; victory/capture removes it exactly once.
+
+### Story 3.20 — A19: Brock, Erika, and Janine work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Isolated gym and map components exist.
+- ⬜ Traverse Diglett’s Cave, Pewter, Celadon, and Fuchsia and legitimately win all three badges.
+
+### Story 3.21 — A20: Blaine and Blue work
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Cinnabar/Seafoam/Viridian scripts and Blue visibility components exist.
+- ⬜ Defeat Blaine, trigger Blue’s return, and defeat Blue in Viridian.
+- ⬜ Badge count reaches 16 only from real gym victories.
+
+### Story 3.22 — A21: Red can be legitimately defeated
+
+**Status: 🟡 PARTIAL**
+
+- ✅ Oak, Mt. Silver guard, Red script, disappearance, and credits components exist.
+- ⬜ Speak to Oak with 16 earned badges and unlock Mt. Silver.
+- ⬜ Traverse Route 28 and Mt. Silver through normal movement.
+- ⬜ Defeat Red’s authentic six-Pokémon team.
+- ⬜ Losing to Red blackouts, leaves Red present, and never reaches credits.
+- ⬜ Winning removes Red and reaches post-Red credits exactly once.
+
+### Epic 3 acceptance
+
+A deterministic test must start with `StartNewGame` and reach post-Red credits through earned checkpoints. The chain may reload saves produced by its own earlier checkpoints, but may not construct or mutate progression state. Every required boss battle must end in an actual win.
+
+---
+
+# Epic 4 — Playable acquisition of all 251 species
+
+The current static obtainability graph is useful as an inventory, but it is not proof that a player can complete the Pokédex.
+
+## Story 4.1 — Obtainability is tracked as executable acquisition channels
+
+**Status: 🟡 PARTIAL**
+
+### Work items
+
+- ✅ **DEX-001 — Preserve the static source inventory.**
+  - Rename it to make clear that it proves data coverage, not player obtainability.
+
+- ⬜ **DEX-002 — Define one runtime acquisition recipe per species.**
+  - Each species maps to a concrete channel: grass, water, fishing, headbutt, static battle, gift, in-game trade, evolution, breeding, roamer, contest, swarm, offline import, or built-in event.
+  - The recipe names prerequisites, map, time, item, and predecessor species.
+
+- ⬜ **DEX-003 — Reject inaccessible sources.**
+  - A species counts only if its channel has a player-facing runtime test.
+  - Hard-coded lists alone cannot satisfy the proof.
+
+## Story 4.2 — Ordinary encounter channels are playable
+
+**Status: 🟡 PARTIAL**
+
+### Work items
+
+- 🟡 **DEX-004 — Verify grass and surfing encounters.**
+  - Generated time-of-day slots, encounter rates, Repel, held modifiers, and catches update party/storage/dex state.
+
+- ⬜ **DEX-005 — Implement generated fishing encounters.**
+  - Use the real fish groups, rod slots, time groups, and swarms.
+  - Prove at least one species unique to fishing.
+
+- ⬜ **DEX-006 — Implement headbutt encounters.**
+  - Use generated tree groups and rare-tree behavior.
+  - Prove Heracross or another headbutt-dependent species from a real tree.
+
+- 🟡 **DEX-007 — Complete swarm behavior.**
+  - Phone/event activation changes the appropriate grass or fishing tables and persists.
+
+- 🟡 **DEX-008 — Complete roaming encounters.**
+  - Raikou, Entei, and Suicune have persistent route, HP/status, movement, and capture state.
+  - A static “roamer source” entry is insufficient.
+
+## Story 4.3 — Gifts, static encounters, contests, and events are playable
+
+**Status: 🟡 PARTIAL**
+
+### Work items
+
+- 🟡 **DEX-009 — Audit all gifts and static encounters.**
+  - Each must be reachable, battle/capture or gift correctly, disappear once, and update owned state.
+
+- 🟡 **DEX-010 — Complete Bug-Catching Contest acquisition.**
+  - Scyther and Pinsir must be catchable through the contest runtime.
+
+- ⬜ **DEX-011 — Provide playable Celebi and Mew policies.**
+  - Implement the documented built-in event replacement through visible scripts and prerequisites.
+  - A set containing `"CELEBI"` and `"MEW"` is not an acquisition path.
+
+- 🟡 **DEX-012 — Verify Lugia, Ho-Oh, Red Gyarados, and other one-time encounters.**
+  - Loss, run, capture, faint, and reload behavior must follow the chosen source-compatible policy.
+
+## Story 4.4 — Breeding produces and hatches required species
+
+**Status: ⬜ TODO**
+
+### Work items
+
+- ⬜ **DEX-013 — Implement authentic compatibility and inheritance.**
+- ⬜ **DEX-014 — Generate eggs through runtime walking.**
+- ⬜ **DEX-015 — Hatch eggs through runtime walking.**
+- ⬜ **DEX-016 — Prove each baby-species family.**
+  - Pichu, Cleffa, Igglybuff, Smoochum, Elekid, and Magby must be acquired in a runtime test from obtainable parents.
+
+## Story 4.5 — Offline trading makes Gold self-completable
+
+**Status: ⬜ TODO**
+
+Pure trading helpers and an import catalog exist, but there is no playable terminal.
+
+### Work items
+
+- ⬜ **DEX-017 — Build a player-facing offline trade terminal.**
+  - Accessible at a documented in-game location.
+  - Supports local trade evolution and the approved import catalog.
+  - Uses menus, confirmations, party/storage capacity rules, and save persistence.
+
+- ⬜ **DEX-018 — Define the cost and unlock policy.**
+  - Imports cannot be an unlabelled debug grant.
+  - The policy must be deterministic, documented, and achievable in one save.
+
+- ⬜ **DEX-019 — Complete trade evolutions.**
+  - Kadabra, Machoke, Graveler, Haunter, Poliwhirl with King’s Rock, Slowpoke with King’s Rock, Onix with Metal Coat, Scyther with Metal Coat, Seadra with Dragon Scale, and Porygon with Up-Grade are covered.
+
+- ⬜ **DEX-020 — Prove version-exclusive and legacy imports.**
+  - Every catalog entry is acquired through the terminal and registered in party/storage/dex state.
+
+## Story 4.6 — One long-lived save can own all 251 species
+
+**Status: ⬜ TODO**
+
+### Work items
+
+- ⬜ **DEX-021 — Add per-channel runtime fixtures.**
+  - Each acquisition mechanism has at least one real-runtime test.
+
+- ⬜ **DEX-022 — Add the compositional completion save.**
+  - Start from a real post-game save.
+  - Execute or replay authenticated acquisition receipts for all channels.
+  - End with 251 distinct valid species IDs in `DexOwn`.
+  - Every owned entry corresponds to a Pokémon currently or historically acquired through the runtime.
+
+- ⬜ **DEX-023 — Handle party and storage capacity.**
+  - The player can store the complete living collection if that is the chosen bar, or the documentation explicitly defines owned-history completion.
+  - Full boxes must never silently discard captures or gifts.
+
+- ⬜ **DEX-024 — Present the completion outcome.**
+  - Oak’s evaluation and Diploma work from the completed runtime save.
+
+### Epic 4 acceptance
+
+The static graph contains 251 recipes, every recipe’s acquisition channel has runtime proof, and one persistent save reaches `DexOwn.Count = 251` without debug mutation.
+
+---
+
+# Epic 5 — Completion content, presentation, and release quality
+
+## Story 5.1 — No required gameplay surface is a silent no-op
+
+**Status: ⬜ TODO**
+
+### Work items
+
+- ⬜ **REL-001 — Burn down the conformance ledger.**
+  - No `RequiredFor100Percent` entry remains `Unknown` or `StubNoOp`.
+  - `ImplementedApproximate` entries identify their exact divergence and have a test proving the approximation does not block completion.
+  - Link-only entries remain clearly excluded.
+
+- ⬜ **REL-002 — Audit fallback branches.**
+  - Generic script-special fallback, dummy menu results, fallback Pokémon, and unknown labels must fail visibly in tests when reached by normal gameplay.
+
+## Story 5.2 — Required graphics and feedback are visible
+
+**Status: 🟡 PARTIAL**
+
+### Work items
+
+- ⬜ **REL-003 — Close overworld sprite gaps.**
+  - Every sprite type reachable during the route or completion content renders a nonblank correct asset.
+  - Add an automated inventory test and representative host captures.
+
+- 🟡 **REL-004 — Replace generic battle-animation tints.**
+  - Animation scripts are parsed, but the renderer currently reduces them to generic full-screen tints.
+  - Implement enough animation primitives to visibly distinguish objects, movement, background effects, sound, waits, calls, and loops.
+  - This is release quality rather than a route blocker unless an animation obscures control flow.
+
+- 🟡 **REL-005 — Finish cries, fades, credits, and Pokédex presentation.**
+  - Existing implementations are retained.
+  - Verify each through the host and close reachable blank or misleading states.
+
+- ⬜ **REL-006 — Ensure all required text and menus are understandable.**
+  - No placeholder, internal constant, empty menu, or dummy choice appears on the golden route or acquisition paths.
+
+## Story 5.3 — The release survives ordinary player variation
+
+**Status: ⬜ TODO**
+
+### Work items
+
+- ⬜ **REL-007 — Test all three starters.**
+  - Each starter reaches at least the first badge and can complete representative battles and evolution.
+
+- ⬜ **REL-008 — Test losses and retries.**
+  - Wild loss, ordinary trainer loss, gym loss, Elite Four loss, Red loss, and no-money loss.
+
+- ⬜ **REL-009 — Test save/load interruption points.**
+  - During scripts, between trainer battles, while surfing, during the Elite Four sequence, with daycare/roamers active, and with nearly full storage.
+
+- ⬜ **REL-010 — Test menu cancellation and full-capacity cases.**
+  - Full party, full box, full bag pocket, four moves, no usable Pokémon, no money, cancelled trade, cancelled evolution, and cancelled item use.
+
+## Story 5.4 — A clean desktop release is demonstrably usable
+
+**Status: ⬜ TODO**
+
+### Work items
+
+- ⬜ **REL-011 — Perform a manual fresh-save playthrough.**
+  - A human completes the golden route through Red using the desktop host.
+  - Every defect is recorded and either fixed or explicitly accepted.
+
+- ⬜ **REL-012 — Perform a manual completion-channel pass.**
+  - Exercise fishing, headbutt, breeding/hatching, contest, roamer, trade terminal, storage, and built-in events.
+
+- ⬜ **REL-013 — Validate a clean-machine build.**
+  - Document prerequisites and exact commands.
+  - Build and run without an Android SDK and without a ROM.
+
+- ⬜ **REL-014 — Align public documentation.**
+  - Update `README.md`, `docs/status.md`, and this plan together.
+  - State exactly what was proven, the current test command/count, supported platform, Gold-only scope, and known divergences.
+
+- ⬜ **REL-015 — Record release evidence.**
+  - Current screenshots and gameplay video show the native host, overworld, menus, battle, Hall of Fame/credits, and completion systems.
+
+### Epic 5 acceptance
+
+A clean desktop build can be installed, played, saved, resumed, completed through Red, and used to obtain all 251 species without blank required assets, silent no-ops, debug controls, or undocumented setup.
+
+---
+
+# Scale back and clean up
+
+## 1. Keep Azalea coverage, remove Azalea as the architectural center
+
+The original vertical slice left strong Azalea-specific residue:
+
+- `loadAzalea`, `DebugLoadAzalea`, `LoadDebugAzalea`, and the `debug-azalea` command.
+- Azalea-specific debug seed state.
+- Many foundational tests use Azalea as their only map, connection, music, nurse, mart, object, text, or movement example.
+- Some comments and type descriptions still describe later work as future “slices.”
+
+Actions:
+
+- 🟡 Keep the Azalea debug command as an explicitly development-only fixture.
+- ⬜ Remove production fallbacks or defaults that implicitly choose Azalea.
+- ⬜ Generalize representative tests into data-driven matrices:
+  - Outdoor town: Azalea.
+  - Early route: Route 29.
+  - Interior: player house or Pokécenter.
+  - Cave: Union Cave.
+  - Ice: Ice Path.
+  - Water: Route 40/Whirl Islands.
+  - Kanto city/route: Saffron or Route 16.
+- ⬜ Retain a smaller set of exact Azalea regression tests where the map genuinely exercises unique behavior.
+
+## 2. Stop treating staged route legs as completed gameplay
+
+The A1–A21 structure is useful and should remain. The problem is status, not test existence.
+
+Actions:
+
+- Rename or document staged tests as component tests.
+- Remove completion checkmarks until the corresponding continuous checkpoint passes.
+- Keep debug setup local to staged tests.
+- Prevent debug controls from being referenced by the continuous route assembly.
+
+## 3. Reclassify the all-251 graph as an inventory
+
+`PokedexObtainability` currently mixes real generated encounters with hard-coded fishing, headbutt, roamer, offline import, and event source lists.
+
+Actions:
+
+- Keep it as a static coverage report.
+- Rename its tests so they do not claim runtime obtainability.
+- Add channel readiness to every source.
+- Fail the true completion test when a recipe points to a channel without player-facing implementation.
+
+## 4. Pause low-level battle polish until battle integration is sound
+
+The move-effect audit is substantial and should be preserved. More isolated effect refinement has lower value than fixing opponent construction, party identity, progression, and blackout flow.
+
+Actions:
+
+- Freeze new effect micro-conformance work unless required by a failing authentic boss battle.
+- Direct battle work first to BAT-001 through BAT-019.
+- Reopen effect-level work from real route failures.
+
+## 5. Remove duplicated or misleading state
+
+Likely cleanup targets include:
+
+- Badge count in `PlayerState` versus badge engine flags in the script world.
+- Battle progression recomputed after the fact from staged trainer/wild data.
+- Map-specific boulder-hole coordinate matches.
+- Script result integers standing in for distinct outcomes such as win, loss, catch, run, and cancel.
+- Species-and-level matching used as party identity.
+- Handwritten TM tables when source-generated data exists.
+
+Actions:
+
+- Establish one authoritative representation for each fact.
+- Derive display counts from authoritative flags where practical.
+- Introduce typed outcomes instead of magic integers at subsystem boundaries.
+- Keep migrations small and test-backed; do not combine this with a broad functional rewrite.
+
+## 6. Retire obsolete milestone narration
+
+The old plan repeatedly says all milestones landed while also describing required work as deferred.
+
+Actions:
+
+- Replace milestone completion claims with this epic/story/task plan.
+- Archive superseded milestone prose if historical context is useful.
+- Make `docs/status.md` report only currently passing enforced gates.
+- Change the agent prompt from “first unchecked old row” to “first unblocked TODO on the critical path.”
+
+---
+
+# Critical path and dependency order
+
+```text
+Epic 0 data schema expansion
+        |
+        v
+Epic 1 authentic battles and persistent progression
+        |
+        +--------------------+
+        |                    |
+        v                    v
+Epic 2 exact field/script    Epic 4 acquisition-channel foundations
+actions                      (fishing, breeding, trade terminal)
+        |
+        v
+Epic 3 A1-A14 continuous Johto
+        |
+        v
+Epic 3 A15-A21 continuous Kanto and Red
+        |
+        +--------------------+
+        |                    |
+        v                    v
+Epic 4 all-251 save      Epic 5 presentation and variation QA
+        |                    |
+        +----------+---------+
+                   |
+                   v
+             Release gate
 ```
-PokeGold.sln
-src/
-  PokeGold.Game/      F# library — data, scripts (DUs), systems, state. No MonoGame dependency.
-  PokeGold.Host/      F# executable — MonoGame DesktopGL shell: window, loop, input, audio, present.
-tools/
-  PokeGold.DataGen/   F# tool — turns pret assets/ROM into PokeGold.Game data + resources (per D1).
-tests/
-  PokeGold.Tests/     F# tests — data spot-checks and interpreter unit tests.
-```
 
-Boundary rule: `PokeGold.Game` is platform-agnostic and produces a 160×144 indexed/RGBA framebuffer
-and audio sample buffers each tick. `PokeGold.Host` owns all MonoGame types.
+Mandatory execution order:
 
----
+1. Expand trainer and persistent Pokémon data.
+2. Fix battle party construction, synchronization, EXP, move learning, evolution, and blackout.
+3. Complete route-required field moves and script battle semantics.
+4. Extend the continuous route one earned checkpoint at a time through Lance.
+5. Continue through Kanto and Red.
+6. In parallel after stable battle persistence, implement acquisition channels.
+7. Produce the all-251 long-lived save.
+8. Burn down required no-ops, close visual gaps, run manual QA, and package the desktop release.
 
-## Milestones
-
-Bottom-up: something on screen early; each milestone exercises the next. Sizing is rough
-(S/M/L/XL).
-
-### M0 — Solution scaffold & shell  · S
-- **Deliverables:** `PokeGold.sln`; `PokeGold.Game` (F# lib, empty); `PokeGold.Host` (F# exe)
-  referencing `MonoGame.Framework.DesktopGL`; a `Game` subclass that creates a 160×144
-  `RenderTarget2D`, clears it each frame, and presents it scaled per D4 with point sampling under a
-  fixed timestep per D3.
-- **Acceptance:** `dotnet run --project src/PokeGold.Host` opens a 640×576 window showing a solid
-  cleared 160×144 buffer scaled with nearest-neighbor; stable fixed-step loop; clean exit. Builds
-  and runs on Windows.
-- **Depends on:** —
-- **Risks:** F#+MonoGame project friction (templates are C#-first). *Mitigation:* reference the
-  DesktopGL NuGet package directly from an F# exe; write the `Game` subclass in F#.
-
-### M1 — Framebuffer & GB graphics primitives  · M
-- **Deliverables (in `PokeGold.Game`):** `Framebuffer` (160×144 of palette indices → RGBA32);
-  `Tile` decoder (16-byte 2bpp → 8×8 of 2-bit indices); `Palette` (4 × GBC RGB555 → RGBA); a tile
-  blitter that draws an 8×8 tile at (x,y) with a palette into the framebuffer.
-- **Acceptance:** unit test decodes a known 16-byte tile to the expected 8×8 index grid; a demo
-  in the Host draws a hand-made tilesheet with a chosen palette and it appears correct on screen.
-- **Depends on:** M0.
-- **Risks:** RGB555→RGBA color conversion fidelity (GBC color curve). *Mitigation:* start with a
-  straight 5→8-bit scale; refine later if colors look off.
-
-### M2 — Asset/data pipeline, first slice  · L
-- **Deliverables:** per D1/D5, `PokeGold.DataGen` (or a direct loader) that produces a loadable
-  first slice: one tileset (`.2bpp` + `.pal`), one map's blockset + `.blk` + dimensions +
-  collision/attributes, surfaced as `PokeGold.Game` values.
-- **Acceptance:** the slice loads at runtime into typed F# values; counts/sizes spot-checked
-  against the source files (e.g., tile count, map width×height, block count) in a test.
-- **Depends on:** M1; decision D1.
-- **Risks:** Gen-2 map model has several layers (tiles → blocks/metatiles → map). *Mitigation:*
-  model exactly the layers the slice needs; document the block format (32×32px blocks of 8×8 tiles).
-
-### M3 — Overworld map render  · M
-- **Deliverables:** block/metatile model; map = grid of block IDs expanded to tiles; a camera; a
-  renderer that composes the visible region into the framebuffer.
-- **Acceptance:** a real map (e.g. the player's bedroom or New Bark Town) renders correctly,
-  matching a screenshot from the original to tile accuracy.
-- **Depends on:** M2.
-- **Risks:** off-by-one in block expansion / camera edges. *Mitigation:* golden-image compare in a
-  test against a captured reference frame.
-
-### M4 — Player movement & collision  · M
-- **Deliverables:** input mapping (`PokeGold.Host` keyboard → GB button set consumed by Game);
-  grid-stepped player movement with walking animation; collision from block/tile attributes;
-  camera follow.
-- **Acceptance:** the player walks the map with smooth grid steps, correct facing/animation, and
-  cannot pass solid tiles; camera tracks within map bounds.
-- **Depends on:** M3.
-- **Risks:** matching the original's grid-step cadence/feel. *Mitigation:* tune step duration in
-  frames against video reference.
-
-#### M4 addendum — locomotion taxonomy & ledge hops
-
-The base M4 above covers *walk + face + block-on-solid*. The disassembly's player
-movement, however, is a small state machine over the collision permission table: the
-high nybble of a tile's `COLL_*` id selects a **movement behavior**, not just
-"passable / solid." Captured here so later milestones don't rediscover it. Source of
-truth: `engine/overworld/player_movement.asm` (`DoPlayerMovement`), the permission
-scan `GetMovementPermissions` (`home/map.asm`), `constants/collision_constants.asm`,
-and `data/collision/collision_permissions.asm`.
-
-**Player states** (`wPlayerState`): `NORMAL`, `BIKE`, `SKATE` (ice), `SURF`,
-`SURF_PIKA`. **Step types** (animation + distance): `STEP_SLOW`, `STEP_WALK`,
-`STEP_BIKE` (fast), `STEP_LEDGE` (2-tile hop), `STEP_ICE` (slide), `STEP_TURN`,
-`STEP_BACK_LEDGE`, `STEP_WALK_IN_PLACE`.
-
-**Permission-tile behaviors** (high nybble groups):
-- **Plain:** `LAND_TILE`/`WATER_TILE`/`WALL_TILE` — walk, surf, block *(have)*.
-- **Ledges** (`$a0-$a7`, `HI_NYBBLE_LEDGES`): `HOP_DOWN/LEFT/RIGHT` (+ diagonals;
-  `UP` variants unused) — one-way hop, allowed only if facing matches a per-ledge
-  mask; plays `SFX_JUMP_OVER_LEDGE`, runs `STEP_LEDGE` (2-tile arc + shadow).
-- **Grass:** `TALL_GRASS` ($18), `LONG_GRASS` ($14) — walkable; hook for wild
-  encounter check + rustle (encounter system itself is M6/M9).
-- **Ice:** `ICE` ($23) — forced-continue in last direction (`STEP_ICE` slide).
-- **Water features:** `WHIRLPOOL` ($24), `WATERFALL` ($33), `CURRENT_*` ($38-$3b) —
-  force movement in a fixed direction (surf-state only).
-- **Conveyors:** `WALK_*` ($41-$44, alt $50-$53) force-walk; `BRAKE_*` stop.
-- **Directional one-way walls** (`$b0-$b7`) and **buoys** (`$c0-$c7`).
-- **Entrances** gated to approach-from-above: `DOOR` ($71), `STAIRCASE` ($7a),
-  `CAVE` ($7b); `LADDER` ($72) is visual-only walkable.
-- **Warps:** directional `WARP_CARPET_*` ($70/$76/$78/$7e), `WARP_PANEL` ($7c),
-  `PIT` ($60) — trigger a warp/teleport.
-- **Talk-through walls** (`WALL_TILE | TALK`, `$90-$9f`): `COUNTER`, `PC`, `TV`,
-  `BOOKSHELF`, `MART_SHELF`, `WINDOW`, … — solid but interactable.
-- **Field-move gates:** `CUT_TREE` ($12), `HEADBUTT_TREE` ($15) — solid until the
-  matching field move; strength boulders are objects, not tiles.
-
-**In scope for M4 (this addendum) — ledge hops only — ✅ IMPLEMENTED:**
-- **Deliverables:** detect ledge tiles by the `HI_NYBBLE_LEDGES` ($a0) group on the
-  player's **current** cell (the tile being stood on, *not* the destination); a
-  facing→allow mask; a `STEP_LEDGE` state that hops **two cells** in the faced
-  direction with a parabolic arc, not re-validating the landing cell. Hop SFX
-  deferred to M8 — silent hop is acceptable.
-- **Acceptance:** standing on a south ledge and pressing Down hops two cells south
-  and lands; pressing into that ledge from any other facing is blocked; left/right
-  ledges behave symmetrically. (Covered by `MovementTests.fs` ledge tests.)
-
-**Rubber-duck findings (verified against the disassembly + our code):**
-- **The ledge is on the tile the player STANDS on, not the destination.**
-  `wPlayerTileCollision` = collision of the player's current cell
-  (`home/map.asm` `GetMovementPermissions`), and `.TryJump`
-  (`player_movement.asm:354-391`) reads *that* tile. Dispatch order is `.TryStep`
-  (normal walk) **then** `.TryJump`: the hop only fires once the forward step is
-  blocked (the cell ahead of a ledge is a wall in real maps). **Implication:** in
-  `Movement.step` the ledge check runs in the *else* branch, after the normal
-  `cellWalkable` test fails — not before it.
-- **Ledge tiles are `LAND_TILE` permission**, so the player walks *onto* the ledge
-  tile normally (it looks like ordinary ground), then a second press in the hop
-  direction vaults over the cliff below it. `.CheckHiNybble` only matches
-  `SIDE_WALLS`/`SIDE_BUOYS`, so `.MovementPermissionsData` does **not** apply to
-  ledges — standing on a ledge imposes no special directional permission; the hop
-  is driven purely by (current tile is ledge) + (forward blocked) + (facing in mask).
-- **Hops are always cardinal.** The ledge_table (`player_movement.asm:383-390`) maps a
-  ledge id's low nybble (0-7) to a *facing mask*, and the hop runs in the player's
-  walking direction (`jump_step DOWN/UP/LEFT/RIGHT`). Diagonal ledge ids ($a4-$a7)
-  only permit **two approach facings** (e.g. `FACE_RIGHT | FACE_DOWN`); they never
-  produce diagonal movement. So all 8 ids are handled by one mask table — no diagonal
-  movement, nothing to defer. Mask table (low nybble → allowed facings):
-  `0→R, 1→L, 2→U, 3→D, 4→{R,D}, 5→{D,L}, 6→{U,R}, 7→{U,L}`.
-- **Data already supports this:** `Collision.BlockColl` keeps the raw `COLL_*` id per
-  quadrant. Added pure accessors `Collision.collisionIdAt coll blockId qx qy` and
-  `Collision.tryLedge : byte -> Direction list option`; no parser changes.
-- **Movement reuse:** existing interpolation uses `(cellX - srcX)`, so setting
-  `CellX = SrcX + 2·dx` covers a 2-cell hop for free; added a `Hopping` flag for a
-  `sin(π·t)` vertical arc and a longer `HopFrames` (32 = 2× `StepFrames`) duration.
-  Landing tile is **not** re-validated (mirrors the original). Shadow sprite deferred.
-- **Testability:** `Player.create cx cy` already lets tests place the player on any
-  cell. The ledge tests scan the real Azalea map for a ledge, place the player on it,
-  and assert a 2-cell hop; plus pure `Collision` unit tests for ledge-id detection + mask.
-
-**Out of scope (catalogued above, deferred):** surfing & water-force tiles, ice
-slide, bike speed, conveyors/one-way walls/buoys, doors/stairs/warps (→ overworld
-events / M9+), grass encounters (→ M6/M9), field-move gates, NPC collision.
-
-Rubber-duck review: **passed** (findings folded in above).
-
-
-### M5 — Text engine  · L
-- **Deliverables:** font tiles; text-box rendering; the **text script language** as a DU
-  (`TX_*` commands + inline tokens) with an interpreter; typewriter output, line break, scroll,
-  prompt/pause.
-- **Acceptance:** triggering a real sign/NPC text from the slice map renders the correct string,
-  honoring control codes (newline, scroll, wait-for-button).
-- **Depends on:** M3 (render), M2 (text data).
-- **Risks:** token/terminator subtleties (`done` vs `text_end`). *Mitigation:* enumerate the
-  command set from the disassembly; unit-test the interpreter against known text streams.
-
-### M6 — Battle vertical slice  · XL
-- **Deliverables:** species base stats (32 B) and move data (7 B) loaded as records; battle state
-  model; turn loop; Gen-2 damage formula; the **battle-effect command language** as a DU with an
-  interpreter; minimal battle UI (HP bars, move menu); one scripted wild encounter.
-- **Acceptance:** start a scripted wild battle, choose a move, deal damage matching the Gen-2
-  formula for a fixed input (no-crit, fixed roll), and reach faint/win/run.
-- **Depends on:** M1, M2, M5.
-- **Risks:** damage-formula edge cases (stat stages, type effectiveness, crit). *Mitigation:*
-  table-driven unit tests with worked examples from the disassembly.
-
-### M7 — Save / load  · M  ✅ (scope-appropriate slice)
-- **Deliverables:** versioned own-format save (per D6) round-tripping party, position, event
-  flags, and bag.
-- **Status:** **Done for current scope.** A versioned **JSON** save (`SaveData { Version;
-  Overworld }`) round-trips the only player-owned state that exists today — map id + player
-  cell + facing — through `%LocalAppData%/PokeGold/pokegold.sav`. `Save/SaveData.fs`
-  (pure capture/apply) + `Save/SaveFile.fs` (System.Text.Json + IO, version-gated read).
-  Host **F5 = save / F9 = load**. Party/bag/event-flag fields join `SaveData` as those
-  systems land (M6+/M9/M11); the `Version` gate is the migration seam.
-- **Acceptance:** save, restart the process, load — game state is restored exactly. ✓
-- **Depends on:** M4 (state to save); grows as systems are added.
-- **Risks:** schema churn as state grows. *Mitigation:* version the format from day one.
-
-### M8 — Audio  · L  ✅ (full 4-channel synth)
-- **Deliverables:** high-level audio engine — channel model + the **audio script language**
-  interpreter — feeding `DynamicSoundEffectInstance` in the Host; one BGM and a couple SFX.
-- **Acceptance:** the slice map's BGM plays and loops; a menu/selection SFX triggers on input.
-- **Depends on:** M2 (audio data); recon notes audio internals are under-documented — expect
-  exploration.
-- **Risks:** synthesizing the 4 GB channels (pulse/wave/noise) and tempo correctly.
-  *Mitigation:* start with one pulse channel + a single track; expand.
-- **Done:** pure `Audio/` subsystem in PokeGold.Game (AudioData, SoundCommand, SongParser,
-  Synth, AudioEngine) parses the GSC script from `.asm` at the macro level, sequences it on a
-  60 Hz frame clock, and software-synths all four channels (2 pulse, wave, noise/LFSR) to float
-  PCM. Host `HostAudio.fs` pumps a `DynamicSoundEffectInstance` (44100 Hz stereo). Azalea Town
-  BGM loops on overworld load; `Sfx_Menu` fires on the A/Start edge. 7 new tests (78 total).
-
-### M9+ — Full game (breadth to 100%)
-
-M0–M8 prove every subsystem once on a thin slice. M9–M22 take each to full breadth until the
-**north star (100%-able Gold)** is met. Sizing stays rough; these are coarser than M0–M8 and will
-be split into sub-tasks as each is picked up. They cluster into four phases.
-
-#### Phase A — Overworld at scale
-
-##### M9 — Event & script engine  · XL
-- **Deliverables:** the **overworld script command language** as a DU + interpreter (the `pret`
-  `*_script` macros): NPC/sign text, triggers, item balls, give/take, `setflag`/`clearflag` event
-  flags and variables, script-driven warps and movement, `applymovement` actor paths, yes/no &
-  multi-choice prompts, money/item give, battle-from-script. Map event records (warps, coord
-  events, bg events, object events) parsed into typed values.
-- **Acceptance:** on a real map, talking to a scripted NPC runs its script (sets a flag, gives an
-  item, branches on the flag next time); stepping on a trigger fires once; an item ball is
-  collectable and doesn't respawn after save/reload.
-- **Depends on:** M5 (text), M4 (movement). **Risks:** command-set breadth. *Mitigation:* enumerate
-  the full command table from the disassembly; unit-test the interpreter against real script bytes.
+An autonomous agent should select the first TODO whose dependencies are complete, read the cited assembly sources, add a failing test at the highest applicable verification layer, implement the smallest conformance fix, run the smallest relevant tests, then run the full desktop test suite.
 
 ---
 
-#### M9 — Implementation Plan (verified against the disassembly)
+# Final victory criteria
 
-**Ground truth (read directly from the repo, not memory):**
-- The script VM lives in `engine/overworld/scripting.asm`. `ScriptCommandTable` (line 64) has
-  **162 commands**, opcodes `$00–$a1`, one `dw Script_*` each. The `*_command` constants and arg
-  layouts are in `macros/scripts/events.asm` (1016 lines).
-- Real opcodes (verified, the explore agent's first guesses were wrong): `scall $00`, `sjump $03`,
-  `ifequal $06`, `ifnotequal $07`, `iffalse $08`, `iftrue $09`, `ifgreater $0a`, `ifless $0b`,
-  `special $0f`, `setval $15`, `readvar $1c`, `giveitem $1f` (item,qty), `takeitem $20`,
-  `checkitem $21`, `checkevent $31`, `clearevent $32`, `setevent $33`, `checkflag $34`,
-  `clearflag $35`, `setflag $36`, `warp $3c`, `opentext $47`, `closetext $49`, `writetext $4c`,
-  `yesorno $4e`, `jumptextfaceplayer $51`, `jumptext $52`, `waitbutton $53`, `promptbutton $54`,
-  `loadtrainer $5d`, `startbattle $5e`, `reloadmapafterbattle $5f`, `setlasttalked $67`,
-  `applymovement $68`, `faceplayer $6a`, `disappear $6d`, `appear $6e`, `playmusic $7e`,
-  `playsound $84`, `waitsfx $85`, `verbosegiveitem $9d`, `warpfacing $a1`, `end $90`.
-- Map events (`maps/AzaleaTown.asm`, macros in `macros/scripts/maps.asm`): four blocks —
-  `def_warp_events` (`warp_event x,y,destMap,destWarpId`), `def_coord_events`
-  (`coord_event x,y,sceneId,script`), `def_bg_events` (`bg_event x,y,type,script`),
-  `def_object_events` (`object_event x,y,SPRITE,MOVEDATA,radX,radY,timeStart,timeEnd,palette,
-  OBJECTTYPE,sightRange,script,eventFlag`). `eventFlag = -1` ⇒ always present.
-- Event flags: `constants/event_flags.asm` (`EVENT_*` indices into `wEventFlags` bitset);
-  bit get/set/clear via `home/flag.asm::FlagAction` (line 32). Engine flags (`ENGINE_*`, badges)
-  are a *separate* bitset via `setflag`/`checkflag`.
-- Suspension points: `writetext`/`jumptext` suspend until the textbox closes; `yesorno` until a
-  choice; `applymovement` until movement finishes; `startbattle` until the battle returns its
-  result into `wScriptVar`. `scall`/`sjump` use a script call-stack; `end` pops or stops.
-- Text seam already exists (M5): scripts hold a text pointer/label; `writetext` feeds the existing
-  `TextStream`/`TextBox`. Integration replaces `OverworldScene`'s hardcoded `DemoText` A-press.
+The project may claim “100%-completable Pokémon Gold” only when all of the following are true.
 
-**Design — re-express, don't transcribe** (mirrors our Audio/Battle DU+interpreter pattern):
-- **Parse `.asm`, not bytecode.** A `ScriptParser` reads a map's `.asm` (like `SongParser` reads
-  audio `.asm`), producing `Map<Label, ScriptCommand list>` with jumps/calls referencing labels
-  symbolically. "The source is the spec."
-- **`ScriptCommand` DU** for the M9 slice (~35 commands, not all 162 — defer phone/trade/menu/
-  decoration/elevator to later milestones). Unknown opcodes parse to `Unsupported of name` so a
-  whole map still loads and we can see coverage gaps.
-- **Resumable VM.** `Script.step` runs commands until it hits a *yield*, returning a
-  `ScriptYield`: `ShowText label`, `AskYesNo`, `Move (objId, path)`, `StartBattle spec`,
-  `Warp dest`, `PlaySound id`, or `Finished`. The VM state is `{ Pc; Stack; }`; the scene handles
-  the yield (push textbox/battle, run movement) and calls `resume` with the result
-  (`YesNo bool`, `BattleResult`, `Unit`). This keeps the interpreter pure and total.
-- **`ScriptContext`** = the mutable world the VM reads/writes: `EventFlags` bitset, `EngineFlags`
-  bitset, `wScriptVar`, bag/money (thin slices), and object visibility. Lives beside
-  `OverworldState`.
-- **Event flags persist** via M7 save: extend `SaveData` with the `EventFlags` (+ engine flags)
-  bitset so a collected item ball / set event survives reload (the acceptance gate).
+## Build and architecture
 
-**Sub-milestones (each = build + tests + green before next):**
-1. **M9.1 — Script DU + parser.** `Overworld/Script/ScriptCommand.fs` (the DU) +
-   `ScriptParser.fs` (`.asm` label-block → `ScriptCommand list`, symbolic jumps, `Unsupported`
-   fallback). Tests: parse `AzaleaTownGrampsScript` and Bugsy's script from the real map files;
-   assert exact command sequences.
-2. **M9.2 — Event/engine flag store + VM core.** `EventFlags.fs` (bitset get/set/clear keyed by
-   `EVENT_*`/`ENGINE_*` names from the constants) + `Script.fs` (`step`/`resume`, call-stack,
-   `iftrue/iffalse/ifequal`, `checkevent/setevent/clearevent`, `checkflag/setflag/clearflag`,
-   `setval/readvar`, `scall/sjump/end`). Tests: flag round-trips; a branch that takes the
-   `iftrue` path only after `setevent`; call/return nesting.
-3. **M9.3 — Map event records + parser.** `MapEvents.fs` (warp/coord/bg/object DUs) +
-   parse the four `def_*_events` blocks from a map `.asm`. Wire into `OverworldState` (objects →
-   NPC sprites with positions; gate visibility on `eventFlag`). Tests: AzaleaTown event counts &
-   first records match the file.
-4. **M9.4 — Overworld integration.** `OverworldScene` runs the VM: **A** while facing an
-   `object_event` runs its script (faceplayer→text→…); **stepping** onto a `coord_event` whose
-   scene matches fires it once; `writetext`/`yesorno` push the existing TextBox/choice scene and
-   resume on close; `verbosegiveitem`/`giveitem` add to the bag and set `wScriptVar`. Replaces the
-   hardcoded `DemoText`. Manual + scripted-input tests.
-5. **M9.5 — Warps + persistence.** `warp`/`warpfacing` switch maps (extend
-   `OverworldState.loadAssets` map table); collected item balls / set events persist through
-   `SaveData` (round-trip test = the **acceptance gate**).
-6. **M9.6 — Coverage pass + commit.** Run a parser sweep over all bundled map `.asm` files;
-   report `Unsupported` opcode frequency to size the next slice. Full `dotnet test` green; commit
-   per sub-milestone (author Xander, Copilot trailer).
+- `PokeGold.Game`, `PokeGold.Tests`, and `PokeGold.Host` build on a clean supported desktop environment.
+- No ROM is required.
+- Generated data remains separated from handwritten runtime code.
+- Gold is the only claimed supported version.
 
-**Acceptance (unchanged, now testable):** talk to a scripted NPC → runs its script (sets a flag,
-gives an item, branches on the flag next time); a coord trigger fires once; an item ball is
-collectable and doesn't respawn after save/reload.
+## Continuous route
 
-**Out of scope for M9 (explicit defers):** phone/cellnum, trade, `_2dmenu`/`verticalmenu`/
-`loadmenu` complex menus, decorations, fruit trees, elevators, credits/hall-of-fame, `callasm`/
-`memcall` raw-ASM commands → these `Unsupported`-fallback now, picked up by M11/M12/M17+.
+- One authenticated checkpoint chain begins with `StartNewGame`.
+- It obtains all eight Johto badges, defeats the Elite Four and Lance, obtains all eight Kanto badges, unlocks Mt. Silver, defeats Red, and reaches post-Red credits.
+- The chain uses real input, movement, collision, warps, scripts, menus, battles, and saves.
+- It contains no debug warps, direct event mutations, direct flag mutations, scene mutation, party seeding, item seeding, or battle auto-win.
+- Every boss battle is actually won.
+- Per-frame runtime invariants hold throughout.
 
-##### M10 — World assembly & NPC objects  · L
-- **Deliverables:** load **all 286 maps**; map connections/streaming and warp transitions between
-  maps; per-map tileset/palette/music binding; overworld **object/NPC sprites** with movement
-  patterns (`SPRITEMOVEDATA_*`), facing, animation, and player↔object collision; map-change music.
-- **Acceptance:** walk a connected region (e.g. New Bark → Route 29 → Cherrygrove) crossing map
-  borders with no seams; warps move between interior/exterior; NPCs wander and block the player and
-  can be talked to (via M9).
-- **Depends on:** M9, M3. **Risks:** connection/border math, object slot limits. *Mitigation:*
-  golden-image border tests; model the real object-engine slot rules.
+## Battle integrity
 
-###### M10 addendum — build-time data generation (no runtime ASM)
+- Trainer and wild parties use authentic species, levels, moves, items, and relevant generated attributes.
+- Persistent Pokémon retain correct individual identity.
+- HP, status, PP, held items, EXP, levels, stats, moves, evolution, friendship, money, and Pokédex state survive battle and save/load correctly.
+- Multi-Pokémon battles award progression per defeated opponent and participant.
+- A loss causes blackout, aborts victory-only script execution, and permits a legitimate retry.
+- Red cannot disappear or trigger credits after a loss.
 
-**Directive (user):** static GBC `.text`/data should live baked in our binary, not parsed from `.asm`
-at runtime. Follow the existing **`PokeGold.DataGen`** pattern that already bakes Species/Moves/Type
-chart into `Data/Generated/*.Generated.fs`. M9 shipped the map/script/text/event parsers but wired
-them at **runtime** (`MapEventParser.parseFile`/`ScriptParser.parseFile`/`MapText.parseFile` →
-`Assets.readText`). M10 moves that parsing to **build time**: the parsers run in DataGen and emit F#
-literals; the runtime loads generated values, never `.asm`.
+## Overworld and scripts
 
-Key constraints discovered (the planner must honour these):
-- `PokeGold.Game` has a `ProjectReference` to `PokeGold.DataGen` and runs it via the
-  `GenerateGameData` MSBuild target (`BeforeTargets="CoreCompile"`). So **DataGen cannot reference
-  `PokeGold.Game` types** (would be circular). DataGen emits plain F# *source text*; that text is
-  compiled *inside* `PokeGold.Game`, so it CAN construct Game DUs (`ScriptCommand`, `ScriptEffect`,
-  `MapEvents`/`ObjectEvent`/`WarpEvent` records, etc.).
-- Today the parse logic lives in `PokeGold.Game` (`Overworld/Script/*`). To run it at build time
-  without duplicating, the pure parser logic likely needs to move to a place DataGen can use (e.g. a
-  shared `PokeGold.Core`/`PokeGold.AsmParse` library both reference, or relocate the pure
-  `parseText` functions into DataGen and have Game consume only generated values). The planner picks
-  the cleanest option and documents the migration so the 125 existing tests stay green.
-- `.blk` block data is already **binary** (`INCBIN`), not ASM text — decide whether to keep loading
-  it as a binary content asset or embed it; metadata/events/scripts/text are the ASM-text tables to
-  bake.
+- All route-required field moves complete their actual map action.
+- Route-required objects, callbacks, triggers, map mutations, puzzles, and blockers work through gameplay.
+- No reachable required script command or special silently no-ops.
+- Save/load restores every persistent route state needed to continue.
 
-**M10.0 — build-time map data generation — DONE.** Resolved the circular-reference constraint
-via a new shared **`PokeGold.MapData`** library (Option B): it holds the map DUs/records
-(`ScriptCommand`, `MapEvents`/`WarpEvent`/`CoordEvent`/`BgEvent`/`ObjectEvent`, `MapMeta`/`Connection`,
-`GeneratedMap`) + the pure parsers (`ScriptParser`/`MapText`/`MapEventParser`/`MapMetaParser`), and is
-referenced by BOTH `PokeGold.Game` and `PokeGold.DataGen` — no DU duplication, DUs keep namespace
-`PokeGold.Game.Overworld.Script` so Game consumers need no `open` changes. DataGen's new
-`MapParsers.fs`/`EmitMaps.fs` parse all **368 maps** at build time (metadata, 142 connections, warps/
-coords/bg/object events, scripts, text) and emit `Data/Generated/Maps.Generated.fs` (~1.97 MB, module
-`MapsData` with `all : Map<string,GeneratedMap>` + `byName`), git-ignored and regenerated by the
-`GenerateGameData` MSBuild target (now keyed on `constants/map_constants.asm`, `data/maps/{maps,
-attributes}.asm`, `maps/*.asm`). Game compiles the generated file in ~10 s (single file — no region
-split needed). Runtime still parses via the new `Overworld/Script/AsmLoad.fs` seam (M10.1 removes it);
-the `MapEvents` query module stays in Game (needs `World`). 129/129 tests green (4 new `MapDataTests`
-gating count=368 + connections + NewBarkTown warps + name/const integrity).
+## All 251 species
 
-**M10.1 — OverworldState consumes MapsData — DONE.** Repointed the overworld load
-path at the baked table: `eventsFor`/`scriptFor`/`textFor` now read `MapsData.byName`
-(no more `AsmLoad` in the load path), `loadAssets` derives dimensions + tileset stem
-from the baked `MapMeta` (`TILESET_JOHTO_MODERN` → `johto_modern`) instead of a
-hard-coded Azalea case, and `mapIdOfConst` is a `Const→Name` map built from all 368
-maps. `tryWarp` now resolves any map's warp and loads it when its on-disk assets
-(`.blk` + tileset gfx + collision) are present, no-opping otherwise (interiors whose
-`.blk` isn't in the tree yet). `AsmLoad.fs` is retained as a test-only utility (parse
-live `.asm` to assert against the baked data). `OverworldState.fs` has zero
-`Assets.readText`. 130/130 tests green (new gate: loading AzaleaTown yields the exact
-baked Events/Script/Text; the no-op warp test repointed to a `.blk`-less map).
+- Every species has a concrete runtime acquisition recipe.
+- Grass, water, fishing, headbutt, swarm, roamer, contest, gift, static, evolution, breeding, trade, offline import, and built-in event channels are playable where used.
+- Eggs generate and hatch through runtime steps.
+- The offline terminal is player-facing and supports version imports and trade evolutions.
+- One persistent save reaches 251 owned species without debug state mutation.
+- Oak/Diploma completion behavior recognizes that save.
 
-**M10.2 — per-map music binding — DONE.** The overworld now plays each map's own
-BGM. Added a build-time `MUSIC_* → song-file` table (`Music.Generated.fs`, module
-`MusicData.byId`, 93 entries): `MusicParsers` zips the parallel `music_constants.asm`
-(ordered ids) and `audio/music_pointers.asm` (`dba Music_<Label>`) tables by index,
-then resolves each to `audio/music/<label>.asm`, filtering to shipped files. This
-pointer-table join is authoritative — a naive `MUSIC_X → x.asm` convention is wrong
-for ~24 songs (e.g. `MUSIC_TITLE → Music_TitleScreen → titlescreen.asm`).
-`OverworldScene.musicFor` resolves `MapsData.byName(mapId).Meta.Music` through
-`MusicData.byId`, returning `option` (no track for `MUSIC_NONE`/unshipped songs)
-instead of the old hard-coded `azaleatown.asm`. 131/131 tests green (new gate: ≥90
-bindings, the `MUSIC_TITLE` exception, and AzaleaTown's id resolves to a real file).
+## Release quality
 
-**M10.3 — map connections — DONE.** Baked per-map `Connection` records (border map,
-offset, streaming window) from `data/maps/maps.asm`; `OverworldState` streams the
-neighbouring map's border tiles and crosses seams without a visible join, camera
-clamped per the connection math. Border golden checks in `ConnectionsTests`.
+- All required sprites, menus, text, and feedback are visible and understandable.
+- Alternate starters, battle losses, cancellations, full capacity, and representative save/load interruptions have regression coverage.
+- A human completes a fresh-save desktop-host run through Red.
+- A human exercises every acquisition channel.
+- README, status, and plan claims match the enforced evidence.
+- Current screenshots or video demonstrate the shipped native application.
 
-**M10.4 — explicit script warps — DONE.** `warp`/`warpfacing` script effects move
-the player between maps (interior↔exterior), loading the destination's assets and
-placing the player at the target warp with the requested facing.
-
-**M10.5 — NPC object engine — DONE.** A pure wander state machine (`ObjectStep`)
-reproducing GSC `map_objects.asm` (sleep → pick direction → walk a tile inside the
-wander radius → re-sleep) seeded per object for deterministic tests; `SPRITEMOVEDATA_*`
-classifies each object's behaviour. NPCs render with facing/animation; occupancy is
-threaded so two NPCs never share a cell. `ObjectTests` (13 gates).
-
-**M10.6 — player↔NPC collision — DONE.** `ObjectStep.stepAllBlocked` folds the
-player's occupied cells into NPC walkability and excludes NPC cells from the player's
-walkable set — the player can no longer walk through Gramps, and wanderers don't step
-onto the player. Two collision gates added.
-
-**M10.7 — applymovement actor paths — DONE.** Movement scripts (`step`/`turn_head`/
-`step_sleep`/…) are baked at build time into `GeneratedMap.Movements` (+ `ObjectConsts`
-for object→index resolution); `MovementRunner` drives one NPC through a scripted path
-one frame at a time (collision-checked), suspending the map VM until the path
-completes, then resuming. The 348 `applymovement` call sites across the maps now enact
-real motion. `MovementScriptTests` (9 gates).
-
-**M10.8 — overworld locomotion SFX — DONE.** Ledge hop → `Sfx_JumpOverLedge` and wall
-bump → `Sfx_Bump`, wired in the scene layer off the pre-existing `Player.Motion`/
-`Player.Bumped` hooks (movement model stays pure). `OverworldSfxTests`.
-
-**M10.9 — coverage sweep — DONE.** A regression gate over the baked world rather than a
-runtime parse: 18 770 script commands across all 368 maps (stable vs the M9.6 sweep);
-1 819 movement commands of which only 6 distinct macros remain unsupported
-(`fix_facing`/`remove_fixed_facing`/`set_sliding`/`remove_sliding`/`teleport_from`/
-`tree_shake` — all explicitly deferred to M11+/field-move milestones), ≥96% movement
-coverage; and an enumerated overworld-sprite art gap (112 referenced, 33 without PNGs —
-Pokémon-overworld + deferred field objects, rendered as blanks). `CoverageSweepTests`.
-
-**M10 COMPLETE.** All sub-milestones (M10.0–M10.9) landed; 169/169 tests green. The
-overworld loads every baked map, streams connections, warps between maps, plays per-map
-music, runs wandering + scripted NPCs that collide with the player, and emits locomotion
-SFX — all from build-time-baked data, no runtime `.asm` parsing.
-
-###### M10 addendum — inherited deferrals (from M4/M8) to enumerate here
-
-
-These were explicitly catalogued as out-of-scope during the thin-slice milestones and now come
-due as part of M10's "NPCs block the player" + overworld-feel work. None are bugs today; the seams
-already exist in the code.
-
-- **NPC / object collision (from M4 "Out of scope: NPC collision").** `Movement.cellWalkable`
-  currently checks only the map tile-collision table — object positions aren't passed in, so the
-  player walks through Gramps. M10 must fold the live object set into the walkability test (a cell
-  occupied by a non-passable object is blocked), matching the real object-engine's occupied-tile
-  rules (`wObjectStructs` / `GetObjectStruct`; objects reserve their current **and** target tile
-  while stepping). Player↔object **and** object↔object (so wanderers don't overlap).
-- **Overworld SFX seams (from M4/M8 "Hop SFX deferred"; M8 shipped synth only).** The audio synth
-  exists and `ISoundBoard.PlaySfx` works (used for `Sfx_Menu`); only the overworld triggers are
-  unwired. Two pre-built hooks to consume:
-  - **Ledge hop → `SFX_JUMP_OVER_LEDGE`.** `Player.Motion = Hopping` already marks the hop frame;
-    play the cry-less SFX on the hop's first frame.
-  - **Wall bump → `SFX_BUMP`** (`constants/sfx_constants.asm:39`, label `Sfx_Bump`; played in
-    `engine/overworld/player_movement.asm:771-776`, debounced against itself). `Player.Bumped` is
-    already set true for exactly the one frame a bump begins (its comment literally says "so a
-    future audio system can play the bump SFX").
-  - Plain walking is **silent in GSC by design** — no footstep SFX to add.
-  - Wire these in the scene layer (where `ISoundBoard` lives), not in pure `Movement`/`Player`,
-    keeping the movement model pure and testable. The SFX labels resolve via `audio/sfx_pointers.asm`
-    (`Sfx_JumpOverLedge`, `Sfx_Bump`).
-- **`applymovement` actor paths (M9 effect, enacted here).** M9 surfaces `ApplyMovement(obj, path)`
-  as a suspending effect but the scene currently no-ops it; M10's object engine is where scripted
-  movement is actually played out (the object-movement step function M10 builds for wandering NPCs
-  is the same one that runs a scripted path to completion).
-
-
-##### M11 — Menus & UI shell  · L
-- **Deliverables:** the windowing/menu framework, then the core menus: Start menu, **Party**
-  (summary, switch order), **Bag** (pockets, use/give/toss), **Pokémon summary** pages, **Pokédex**
-  (seen/own, area, search), **Options**, and the **Save** menu (drives M7). Field-move use from
-  menus (Cut/Surf/etc. dispatched to M17 gating).
-- **Acceptance:** open each menu over the overworld, navigate with the GB button set, use an item
-  on a Pokémon, reorder the party, and view a populated Pokédex entry; all render to tile accuracy.
-- **Depends on:** M5, M7. **Risks:** menu-state breadth. *Mitigation:* shared menu DU + interpreter;
-  build incrementally per menu.
-
-##### M12 — Town services & storage  · M
-- **Deliverables:** **Pokémon Center** healing + nurse script; **Poké Mart** buy/sell with the
-  money/economy; the **PC box storage system** (Bill's PC: deposit/withdraw/move across all boxes);
-  PC item storage; mailbox basics.
-- **Acceptance:** faint, heal at a Center to full; buy and sell items with correct prices and money
-  math; deposit/withdraw a Pokémon across boxes and have it persist through save/reload.
-- **Depends on:** M9, M11, M7. **Risks:** box-data volume/persistence. *Mitigation:* version box
-  schema (D6) from the start.
-
-#### Phase B — Battle to full coverage
-
-##### M13 — Complete battle mechanics  · XL
-- **Deliverables:** finish the **battle-effect command interpreter** to cover **every move effect**;
-  status conditions, stat stages, the full type chart, criticals, multi-turn/charge/recharge moves,
-  weather, flinch/recoil/drain/OHKO/etc.; **capture mechanics** (all balls + Gen-2 catch formula);
-  end-of-turn resolution order.
-- **Acceptance:** a table-driven suite of worked examples from the disassembly passes for damage,
-  status, stat-stage, type, crit, and catch-rate cases; a wild battle can be won, lost, fled, or
-  caught.
-- **Depends on:** M6. **Risks:** effect long-tail & ordering bugs. *Mitigation:* one unit test per
-  move effect id, sourced from the disassembly.
-
-##### M13.R — Devil's advocate: M0–M13 gap closure  · M
-
-Items that were not explicitly owned by any M0–M13 milestone but are required for correct
-gameplay before the content milestones (M16+) can be considered complete. Agents picking up
-M14+ work should check these off first or in parallel.
-
-- **Wild encounter wiring.** The grass/water/cave encounter *trigger* loop is not owned by any
-  milestone. M6 proved a scripted wild battle; M13 completed battle mechanics including capture;
-  M16 bakes encounter tables — but the actual "step in grass → RNG roll against encounter rate →
-  spawn a wild mon from the map's table → enter battle" overworld hook is an integration seam
-  that falls between M9 (scripts), M13 (battle), and M16 (data). **Action:** wire the encounter
-  trigger in the overworld step loop, reading `TALL_GRASS`/`LONG_GRASS`/`WATER_TILE` collision
-  ids (already catalogued in the M4 addendum), consulting the map's baked encounter table (M16),
-  rolling against the per-tile encounter rate, and dispatching to the battle scene (M13). The
-  repel check (below) gates the roll. Source of truth:
-  `engine/overworld/wildmons.asm::TryWildEncounter`.
-- **Repel system.** `REPEL`/`SUPER_REPEL`/`MAX_REPEL` decrement a step counter (`wRepelEffect`)
-  and suppress encounters when the lead party mon's level exceeds the wild mon's. Trivial logic
-  but blocks any serious playtesting — without it, grass is either always-encounter or
-  never-encounter. Source: `engine/overworld/wildmons.asm::CanEncounter` + item-use effect.
-  Needs an item-use handler in the Bag/Pack scene (M11) and a step-counter field in save (M7).
-- **Fishing.** Old Rod / Good Rod / Super Rod are field-move items that trigger a
-  "fishing minigame" (dot timing prompt) and then a water-encounter from a separate table.
-  Not mentioned in M17's HM/field-move list. **Action:** add rod use as a field-move-adjacent
-  item action in M17; encounter tables come from M16 (`data/wild/*.asm` `fish_group` entries).
-  Source: `engine/overworld/events.asm::FishingRod`, `engine/overworld/wildmons.asm::WildFish`.
-- **Shiny Pokémon.** Gen-2 shininess is DV-based (attack DV = 2/3/6/7/10/11/14/15, all other
-  DVs = 10+). Detection is a pure function of the 4 DV nybbles and should be threaded through
-  `PartyMon`/`BattleMon` creation. Visual indicator: a star sparkle on send-out + a star icon
-  in the summary screen. Without this, shinies exist in the data but the player can never tell.
-  Source: `engine/pokemon/search.asm::CheckShininess`. **Action:** add `IsShiny` derived
-  property to `PartyMon`; render star in `SummaryScene`; sparkle SFX in `BattleScene` send-out.
-- **Unown letter forms.** The 26 Unown forms are determined by DVs (each DV nybble contributes
-  bits to a letter index). M21 mentions the Ruins of Alph puzzles but not the per-form sprite
-  loading, the Unown dex (a separate tracked list of caught letters), or the word-display wall
-  in the Ruins. Source: `engine/pokemon/unown_form.asm`, `data/pokemon/unown_words.asm`.
-  **Action:** add `UnownLetter` derivation; track caught-letters set in save; load per-letter
-  sprites from `gfx/pokemon/unown/`.
-- **Intro / title screen / new-game flow.** No milestone owns the boot sequence: Game Freak
-  logo → title screen (Ho-Oh animation, press Start) → New Game / Continue / Options → Prof. Oak
-  intro → player/rival name entry → wake up in bedroom. Currently the game hard-boots into the
-  overworld. **Action:** see new milestone M24 below.
-
-##### M14 — Trainers & battle AI  · L
-- **Deliverables:** **trainer battles** (all trainer-class/party data), switching, multi-Pokémon
-  flow, item-in-battle, the **enemy AI** (move scoring + switch logic per the disassembly), battle
-  rewards (money, EXP split, EVs/stat-exp).
-- **Acceptance:** a scripted trainer battle plays out with AI choosing moves/switches, awards correct
-  money and EXP, and ends the encounter cleanly; double-checks against disassembly AI tables.
-- **Depends on:** M13, M9. **Risks:** AI fidelity. *Mitigation:* port the AI scoring tables directly;
-  spot-test decisions.
-
-##### M15 — Growth systems  · M
-- **Deliverables:** EXP curves & leveling, stat/stat-exp recalculation, **move learnsets** (level/
-  TM/HM/tutor), **evolution** (level, item, trade [via D7], happiness, time-of-day, stats),
-  held-item effects, friendship.
-- **Acceptance:** a Pokémon gains EXP, levels, learns a level-up move (with the "forget a move"
-  prompt), and evolves by each trigger type (incl. a trade-evo through the offline terminal).
-- **Depends on:** M13, M16 (data). **Risks:** evolution trigger coverage. *Mitigation:* enumerate
-  evolution methods from `evos_attacks`.
-
-#### Phase C — Content & progression
-
-##### M16 — Full game data  · L
-- **Deliverables:** all **251 species** (base stats, types, learnsets, evolutions, dex entries),
-  every **move** and **item**, the full type chart, and **all encounter tables** for every map
-  (grass/water/headbutt/rod, time-of-day and swarm variants).
-- **Acceptance:** data spot-checks across the whole tables (species count = 251, per-map encounter
-  slots, item/move counts) pass against the disassembly; encounters in any map draw from the right
-  table for the time of day.
-- **Depends on:** M2. **Risks:** volume/format edge cases. *Mitigation:* generated loaders + count
-  assertions per table.
-
-##### M17 — Johto story, gyms & field moves  · XL
-- **Deliverables:** the complete **Johto main-story scripts/cutscenes**; all **8 gym leaders +
-  badges**; **HM/field-move gating** (Cut, Surf, Strength, Whirlpool, Waterfall, Fly, Flash) wired
-  to overworld locomotion (extends the M4 addendum); **fishing** (Old Rod / Good Rod / Super Rod
-  as field-move-adjacent item actions, dot-timing prompt, water encounter tables from M16);
-  rival fights and the **Team Rocket** arc (Slowpoke Well, Radio Tower).
-- **Acceptance:** a continuous playthrough from New Bark through all 8 Johto badges is possible,
-  gated correctly by badges/HMs, with story events firing in order and persisting across saves;
-  fishing from a water tile produces the correct species for the map's fish group.
-- **Depends on:** M9, M10, M14, M15, M16. **Risks:** script breadth & ordering. *Mitigation:* lean
-  on the M9 interpreter; track story flags explicitly.
-
-##### M18 — Elite Four, Hall of Fame & post-game unlock  · M
-- **Deliverables:** Victory Road, the **Elite Four + Champion** gauntlet, **Hall of Fame** record +
-  **credits**, and the post-game unlock (S.S. Aqua to Kanto, Pokémon expanded, etc.).
-- **Acceptance:** beat the Elite Four from a valid save, see Hall of Fame + credits, and land in the
-  post-game state with Kanto accessible.
-- **Depends on:** M17. **Risks:** Hall-of-Fame data persistence. *Mitigation:* version it into the
-  save (D6).
-
-##### M19 — Kanto  · XL
-- **Deliverables:** all **16 Kanto maps**, the **8 Kanto gyms/badges**, Kanto trainers/encounters,
-  rematches, the Power Plant/Cerulean Rocket events, and **Red** on Mt. Silver.
-- **Acceptance:** travel to Kanto, earn all 8 Kanto badges, and battle Red to completion; world,
-  encounters, and scripts behave as in Johto.
-- **Depends on:** M18. **Risks:** content volume. *Mitigation:* reuse M9/M10/M14 wholesale; it's
-  data + scripts, not new systems.
-
-#### Phase D — Gen-2 signature systems & the last mile
-
-##### M23 — GBC overworld color & per-tile palettes  · M
-- **Why this exists:** the overworld currently renders with a single hand-picked 4-shade palette
-  for the whole map and a grayscale sprite palette (`OverworldState.fs` `mapPalette`/`spritePalette`),
-  so every area reads as one hue (Azalea = green). The color *pipeline* already exists — `Palette`
-  does RGB555→RGBA and parses pret `.pal` files, and the renderers already take a palette argument —
-  what's missing is the **per-tile/per-object palette data wiring** that gives the real Game Boy
-  Color look. This milestone supplies that data and the attribute lookups that drive it. It is a
-  prerequisite for M20's day/night **tinting**, which swaps between palette sets per time-of-day.
-- **Deliverables:**
-  - **Baked palette data (DataGen):** generate per-tileset CGB palettes from the disassembly's
-    `gfx/tilesets/<name>.pal` and the per-tile palette-attribute maps
-    (`gfx/tilesets/<name>_palette_map.asm` / metatile attribute bytes), emitted as a generated F#
-    table keyed by tileset stem — no runtime `.asm`/`.pal` parsing on the hot path.
-  - **Per-tile palette selection in `MapRenderer`:** each metatile/tile picks its CGB BG palette
-    index from the attribute map instead of a single global palette; the blitter resolves the 2bpp
-    pixel through that tile's palette.
-  - **Per-object/sprite palettes:** honour the `object_event` `palette` field we already parse
-    (plan §M10, line ~300) plus the OW sprite palette table, so NPCs and the player use their
-    assigned CGB OBJ palettes rather than one grayscale ramp.
-  - **Time-of-day palette sets** structured so M20 can select morning/day/night variants without
-    re-plumbing the renderer (the selection hook lands here; the *clock* that drives it is M20).
-- **Acceptance:** Azalea Town (and a second, differently-tinted map — e.g. a cave or interior)
-  render in their correct multi-palette GBC colors, matching the disassembly's tileset palettes to
-  a spot-checked golden image; NPCs show their assigned palettes; switching the time-of-day variant
-  by hand visibly re-tints without artefacts.
-- **Depends on:** M3 (palette/decoder primitives), M9/M10 (maps, tilesets, objects). **Risks:**
-  RGB555→RGBA color-curve fidelity (already flagged in M3) and attribute-map extraction accuracy.
-  *Mitigation:* start from the straight 5→8-bit scale, golden-image per tileset, and a later
-  optional perceptual curve.
-
-##### M20 — Time, Pokégear & telephony  · L
-- **Deliverables:** **RTC day/night** clock and time-of-day tinting (selecting the palette sets
-  built in **M23**); time-based events &
-  encounters (incl. swarms, morning/day/night tables); the **Pokégear UI** (map screen with
-  fly-point markers, radio tuner with station selection, phone contact list — the gear itself is
-  opened from the Start menu / select button and hosts the phone/radio/map tabs); the **phone**
-  (register/receive calls, rematches, gifts, tips); **trainer rematches** (phone-registered
-  trainers offer rematches with progressively stronger teams — requires the rematch party data
-  from `data/trainers/` and a rematch-ready flag per trainer, checked on phone call generation);
-  the **bug-catching contest**; **Radio** programs (Prof. Oak's talk, Pokémon music, Lucky Channel,
-  Buena's Password, Team Rocket radio — each program has scripted effects on encounters/events).
-- **Acceptance:** the clock advances day/night with correct palettes and encounter tables; the
-  Pokégear opens with working map/radio/phone tabs; a registered trainer calls and offers a
-  rematch with a stronger team; the bug contest runs on its schedule; radio stations produce
-  their scripted effects.
-- **Depends on:** M9, M16, M11 (menu framework). **Risks:** RTC source-of-truth. *Mitigation:*
-  drive from real wall clock; make it test-injectable.
-
-##### M21 — Breeding, apricorns & diversions  · L
-- **Deliverables:** **Day-Care & breeding** (egg generation, inheritance, hatching); **berries**;
-  **apricorns + Kurt's custom Poké Balls**; the **Game Corner** (slots/prizes); **Mom's savings**;
-  the **Ruins of Alph** puzzles (unlock Unown); and **Unown letter forms** — DV-based letter
-  derivation (`engine/pokemon/unown_form.asm`), per-letter sprite loading from
-  `gfx/pokemon/unown/`, the Unown dex (a tracked set of caught letter forms persisted in save),
-  and the word-display wall inside the Ruins.
-- **Acceptance:** leave two compatible Pokémon at the Day-Care, receive and hatch an egg with
-  inherited moves; turn apricorns into balls via Kurt; Ruins of Alph puzzles unlock Unown;
-  catching Unown records the letter form in the Unown dex; all 26 letter forms are visually
-  distinct and derivable from DVs.
-- **Depends on:** M15, M9. **Risks:** breeding-inheritance rules. *Mitigation:* port inheritance
-  tables from the disassembly; unit-test egg generation.
-
-##### M22 — Trading, events & Pokédex completion  · L
-- **Deliverables:** the **offline trade terminal** (D7) enabling trades + trade-evolutions and
-  version-exclusive sourcing; **in-game trades**; **event/legendary** triggers (D9) — roaming
-  beasts (Suicune story, Raikou/Entei), Lugia/Ho-Oh, Red Gyarados, the GS Ball/Celebi event; the
-  **Pokédex-complete** reward/flow.
-- **Acceptance:** **the National Pokédex can be completed** to all 251 within the implementation
-  (capture + evolve + trade-evo + in-game trade + events), and dex-completion triggers its reward.
-  This is the **project Definition of Done gate**.
-- **Depends on:** M15, M16, M17, M19. **Risks:** the "completable dex" constraint (trade-evos,
-  exclusives, events). *Mitigation:* D7–D9 make every species reachable single-player.
-
-##### M24 — Intro, title screen & new-game flow  · M
-- **Why this exists:** the game currently hard-boots into the overworld with a pre-seeded save
-  state. A real playthrough needs the full boot sequence. Without this, there is no "fresh save"
-  path to DoD-2.
-- **Deliverables:**
-  - **Title screen:** Game Freak logo fade → title screen with Ho-Oh sprite animation, scrolling
-    Pokémon, "PRESS START" prompt. Source: `engine/menus/title.asm`, `gfx/title/`.
-  - **Main menu:** New Game / Continue / Options (+ Mystery Gift placeholder). Continue loads the
-    existing M7 save; Options drives the existing `OptionsScene`.
-    Source: `engine/menus/main_menu.asm`.
-  - **New-game sequence:** Prof. Oak intro (sprite + text), player name entry (keyboard grid or
-    preset names), rival name entry, gender selection (Crystal had it; Gold does not — confirm
-    and skip), opening cutscene (shrink into Game Boy, wake up in bedroom).
-    Source: `engine/menus/intro_menu.asm`, `engine/menus/naming_screen.asm`.
-  - **Name-entry screen:** reusable keyboard-grid scene (also needed for box naming, Pokémon
-    nicknames). Source: `gfx/naming_screen/`, `engine/menus/naming_screen.asm`.
-- **Acceptance:** cold-start the game → see title → select New Game → enter a name → arrive in
-  the player's bedroom in New Bark Town with the starter event ready to fire; Continue loads an
-  existing save correctly.
-- **Depends on:** M11 (menu framework), M9 (scripting for Oak's intro), M5 (text).
-- **Risks:** the intro has bespoke animations not used elsewhere. *Mitigation:* these are
-  self-contained scenes; implement as one-off renderers, not general systems.
-
-##### M25 — Battle move animations  · M  *(optional — conscious scope decision)*
-- **Status:** **Deferred by design.** The original game has ~250 move animations built from a
-  custom animation scripting language (`engine/battle_anims/`, `data/battle_anims/`). These are
-  purely cosmetic — they don't affect gameplay correctness. The port can ship DoD-2 without them
-  (moves resolve instantly with HP bar changes and text, as they currently do).
-- **If picked up:** parse the battle animation script language (`anim_*` macros in
-  `macros/scripts/battle_anims.asm`) into a DU; implement the ~30 animation primitives
-  (sprite movement, palette flash, screen shake, particle spawn) in `BattleRenderer`; bake
-  animation data via DataGen. This is high effort / low gameplay value but high *feel* value.
-- **Recommendation:** revisit after DoD-2. A post-DoD polish pass where move animations,
-  evolution animations, and Hall of Fame animations all land together.
-
-##### M26 — Multiplayer (future)  · XL  *(post-DoD-2, not on critical path)*
-- **Why this exists:** the `PokeGold.Game` / `PokeGold.Host` architecture already separates
-  pure game logic from platform I/O. The battle engine is deterministic (seeded LCG RNG).
-  These properties make multiplayer structurally feasible without a rewrite.
-- **Deliverables (sketch — to be scoped when picked up):**
-  - **Online trading:** extend the offline trade terminal (D7/M22) with a network transport.
-    Two players connect, browse each other's boxes, propose/accept trades. The `TradeData`
-    contract already exists; the transport is the new work (WebSocket or relay server).
-  - **Online battling:** two clients share a battle seed + team data; each turn, both select a
-    move and exchange selections. The deterministic battle engine runs identically on both
-    sides — only move indices are transmitted, not game state. Latency-tolerant by design
-    (turn-based). Needs a lobby/matchmaking stub and a spectator-friendly replay log.
-  - **Link Cable emulation (stretch):** a virtual "link cable" session that mimics the GB serial
-    protocol at a high level — enabling any link-cable interaction (trade, battle, time capsule,
-    mystery gift) through a single transport. Lower priority than purpose-built trade/battle.
-- **Acceptance:** two instances of the game on different machines can trade a Pokémon and battle
-  each other with correct move resolution.
-- **Depends on:** M22 (trading infrastructure), M14 (battle), M15 (growth — traded mons must
-  level correctly). **Risks:** NAT traversal, relay hosting, cheat prevention. *Mitigation:*
-  start with LAN/direct-connect; relay and anti-cheat are separate milestones.
-
-#### Engineering tooling (cross-cutting, not on the content critical path)
-
-These support development/debugging of the milestones above; they ship outside the M-number
-sequence and can land whenever useful.
-
-##### T1 — Debug command pipe  · S  *(in progress)*
-- **Deliverables:** an in-process **named-pipe debug server** (`PokeGold.Game/Debug`) exposing the
-  running game over a simple newline command protocol, plus a thread-safe **command queue** so all
-  inspection/mutation runs on the MonoGame update thread (no races against the frame loop). A small
-  command set covers live inspection (`player`, `npcs`, `flags`, `vars`, `map`, `bag`, `scene`,
-  `frame`) and mutation (`warp`, `tp`, `setflag`/`clearflag`, `setvar`). A PowerShell client
-  (`engine-dotnet/tools/debug-cli.ps1`) lets a developer **or an agent** poke a running instance.
-- **Acceptance:** with the game running, a client can read player position/NPC state/flags and warp
-  or set a flag and see the effect on screen, all without stalling or corrupting the frame loop.
-- **Depends on:** M10 (a live overworld scene to inspect). **Risks:** thread-safety vs. the game
-  loop. *Mitigation:* commands are marshalled onto the update thread via the queue; the pipe thread
-  only blocks its own client.
-
-##### T2 — Embedded FSI REPL over the debug pipe  · M  *(post-game / future)*
-- **Deliverables:** host an `FSharp.Compiler.Service` `FsiEvaluationSession` inside the game,
-  bound to the live scene/world objects, reachable **through the same T1 pipe** (a `:fsi <expr>`
-  mode) so a developer or agent can evaluate arbitrary F# against running state
-  (e.g. `scene.DebugState.Npcs |> Array.filter ...`). The pipe transport, command queue, and
-  game-thread marshalling are reused wholesale from T1; T2 only adds the FCS evaluation backend and
-  a bound symbol environment.
-- **Acceptance:** over the pipe, an arbitrary F# expression referencing live game state evaluates on
-  the game thread and returns its rendered result; errors are reported without crashing the game.
-- **Depends on:** T1. **Risks:** FCS is a heavy dependency with version sensitivity, and arbitrary
-  eval on the game thread can stall it. *Mitigation:* keep it opt-in (debug builds / explicit flag),
-  time-box/serialise evaluations on the queue, and treat T1's fixed command set as the default path.
-
----
-
-## Dependency graph
-
-```
-Vertical slice (M0–M8):  ✅ ALL COMPLETE
-  M0 → M1 → M2 → M3 → M4 ─┐
-                 │        ├→ M7
-                 └→ M5 ───┤
-                          └→ M6
-  M2 → M8
-
-Full game (M9–M22+):
-  M5,M4 → M9 ─┬→ M10 ┐                        ✅ M9–M13 COMPLETE
-              │       ├→ M17 → M18 → M19 ┐
-  M2 → M16 ───┼→ M15 ┤                   ├→ M22  (Definition of Done)
-  M6 → M13 → M14 ─────┘                  │
-  M7 → M11 → M12                         │
-  M9,M16 → M20                           │
-  M3,M9,M10 → M23 → M20                  │
-  M15,M9 → M21 ──────────────────────────┘
-  M13.R (gap closure) — parallel to M14+, no hard deps, items feed into M16/M17
-  M11,M9,M5 → M24 (intro/new-game — required for DoD-2 "fresh save" gate)
-
-Post-DoD-2 (not on critical path):
-  M22 → M25 (move animations — optional polish)
-  M22,M14,M15 → M26 (multiplayer)
-```
-Phase A (M9–M12) widens the overworld; Phase B (M13–M15) completes battle & growth; Phase C
-(M16–M19) is content & progression through Red; Phase D (M20–M22) adds Gen-2 systems and closes
-on a completable Pokédex. M24 (intro) is required for DoD-2 but can land any time after M11.
-M25 (move animations) and M26 (multiplayer) are post-DoD-2 stretch goals.
-
-## Risk register (top)
-
-| Risk | Impact | Likelihood | Mitigation / owner-action |
-|------|--------|------------|---------------------------|
-| F#+MonoGame tooling friction | Blocks M0 | Med | ✅ Resolved — F# exe + DesktopGL NuGet works |
-| Data-extraction strategy churn (D1) | Rework M2+ | Med | ✅ Resolved — parse repo assets directly |
-| Gen-2 map/block model complexity | Slips M2/M3 | Med | ✅ Resolved — model complete, golden-image tests pass |
-| Damage formula / battle edge cases | Subtle M6/M13 bugs | High | ✅ Mitigated — 120+ effects implemented with worked-example tests |
-| Audio synthesis fidelity | M8 sounds wrong | High | ✅ Mitigated — faithful APU emulator from PyBoy reference |
-| Script/event command long-tail | Story gaps, M9/M17 slip | High | Enumerate the full command table up front; ~110 opcodes remain for M17+ |
-| Content volume (M16–M19, M21) | Long grind, data bugs | High | Generated loaders + per-table count/spot-check tests; reuse systems, add only data |
-| Completable-dex constraints (trade-evo, exclusives, events) | Blocks DoD-2 at M22 | Med | D7–D9: offline trade terminal + built-in event unlocks make every species single-player-reachable |
-| Save schema churn as state grows | Save/reload breakage | Med | Version the save from M7; migrate on load (v4 schema in place) |
-| Wild encounter integration gap | Grass/water encounters never trigger | High | M13.R explicitly owns the wiring; source of truth identified (`TryWildEncounter`) |
-| Intro/new-game flow missing | No "fresh save" path to DoD-2 | Med | M24 added; can land any time after M11; self-contained scenes |
-| Shiny/Unown visual identity | Players can't identify shinies or Unown forms | Low | M13.R (shiny) + M21 (Unown) — pure DV derivation, low risk |
-| Pokégear UI not owned | Phone/radio/map tabs have no scene | Med | M20 now explicitly owns the Pokégear scene + all tabs |
-| Multiplayer scope creep | NAT/relay/cheat concerns grow unbounded | Med | M26 explicitly post-DoD-2; start LAN-only; relay is a separate milestone |
-
-## Definition of done
-
-Two gates, in order:
-
-**DoD-1 — Vertical slice (after M8).** A single contiguous slice is playable end to end: boot →
-walk one real map → read an NPC/sign → enter and finish one wild battle → save and reload. Data in
-that slice is spot-checked against the disassembly; interpreters have unit tests; the slice renders
-to tile accuracy. *(This proves the architecture — it is a checkpoint, not the finish line.)*
-
-**DoD-2 — 100%-able Gold (the north star, gated at M22).** From a fresh save the game can be
-**fully completed**: all 16 badges (Johto + Kanto), Elite Four + Champion, Hall of Fame + credits,
-Red on Mt. Silver, and a **completable National Pokédex** (all 251 obtainable in-impl per D7–D9).
-Throughout, save/reload preserves all state; story/event flags fire in the correct order;
-encounters, battles, and growth match the disassembly on a table-driven test suite. Glitchless
-completion is the bar.
-
-## Tracking
-
-Milestones M0–M26 are mirrored as todos in the session database with dependencies. Update status
-there as work proceeds. M0–M13 (vertical slice + battle mechanics) are **complete**. M13.R (gap
-closure) runs in parallel with M14+. M14–M22 + M24 are the DoD-2 critical path. M25 (move
-animations) and M26 (multiplayer) are post-DoD-2 stretch goals.
+Until every criterion above is satisfied, the project should describe itself as an advanced reimplementation framework or playable prototype—not a complete Pokémon Gold release.
