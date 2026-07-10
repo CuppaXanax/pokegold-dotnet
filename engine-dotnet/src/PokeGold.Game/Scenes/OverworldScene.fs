@@ -58,7 +58,7 @@ type private PaletteFadeRun =
 /// [`ScriptEffect`] (text box, yes/no, battle, flags, items) and resuming the VM
 /// with the result. Pure commands run inline within one frame; effects that need a
 /// child scene push it and suspend until it pops.
-type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldState) =
+type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldState, ?encounterRandom: System.Random) =
     let mutable state = initial
     /// The script flag/var/scene world — mutated as scripts run; persisted in save.
     /// Starts empty; seeded by Load (debug) or Restore (save/new-game).
@@ -113,7 +113,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable prevA = false
     let mutable prevStart = false
     /// Wild encounter RNG for the overworld trigger hook.
-    let encounterRng = System.Random()
+    let encounterRng = defaultArg encounterRandom (System.Random())
     let fundsResult current amount =
         if current > amount then 0
         elif current = amount then 1
@@ -1007,6 +1007,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 MaxHp = mon.MaxHp
                 Status = statusCode mon.Status
                 Moves = moves
+                Dvs = mon.Dvs
                 HeldItem = mon.HeldItem }
 
         let updatedPlayer =
@@ -1055,14 +1056,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 |> List.map Moves.byName
 
                             { BattleMon.ofSpecies stats tm.Level moves with
-                                HeldItem = tm.HeldItem }
+                                HeldItem = tm.HeldItem
+                                Dvs = trainer.Dvs
+                                Gender = BattleMon.genderFromDvs stats trainer.Dvs }
                         | None -> BattleMon.ofSpecies (Species.byName "PIDGEY") tm.Level [ Moves.byName "TACKLE" ])
                 | None -> [ BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ] ]
             | None ->
                 match stagedWild with
                 | Some(species, level) ->
                     match Map.tryFind species Species.all with
-                    | Some stats -> [ BattleMon.ofSpecies stats level [ Moves.byName "TACKLE" ] ]
+                    | Some stats ->
+                        let battleType =
+                            World.getVar "VAR_BATTLETYPE" world
+                            |> WildOpponent.ofBattleTypeValue
+                        [ WildOpponent.create battleType encounterRng stats level ]
                     | None -> [ BattleMon.ofSpecies (Species.byName "PIDGEY") level [ Moves.byName "TACKLE" ] ]
                 | None ->
                     [ BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ] ]
@@ -2024,6 +2031,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                             stagedWild <- None
                             stagedTrainer <- None
+                            world <- World.setVar "VAR_BATTLETYPE" 0 world
                             stagedWinText <- ""
                             stagedLossText <- ""
                             lastBattleOutcome <- None
@@ -2154,6 +2162,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Some(species, level) ->
                             stagedWild <- Some(species, level)
                             stagedTrainer <- None
+                            world <- World.setVar "VAR_BATTLETYPE" 0 world
                             encounterTransition <- Push(this.BuildBattle() :> Scene)
                         | None -> ()
 

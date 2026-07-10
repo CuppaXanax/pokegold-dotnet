@@ -125,6 +125,9 @@ let private species name t1 t2 : BaseStats =
       Type2 = t2
       CatchRate = 45
       BaseExp = 64
+      Item1 = None
+      Item2 = None
+      GenderRatio = 255
       GrowthRate = 0 }
 
 /// A battler with explicit stats (physical == special so the class never changes
@@ -132,6 +135,7 @@ let private species name t1 t2 : BaseStats =
 let private mon name t1 t2 level hp atk def spd : BattleMon =
     { Species = species name t1 t2
       Level = level
+      Dvs = 0
       MaxHp = hp
       Hp = hp
       Attack = atk

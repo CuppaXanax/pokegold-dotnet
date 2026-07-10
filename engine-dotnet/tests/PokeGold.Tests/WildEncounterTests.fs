@@ -3,6 +3,7 @@ module PokeGold.Tests.WildEncounterTests
 open Xunit
 open PokeGold.Game.Core
 open PokeGold.Game.Data
+open PokeGold.Game.Battle
 open PokeGold.Game.Overworld
 open PokeGold.Game.Overworld.Script
 open PokeGold.Game.Player
@@ -75,6 +76,34 @@ let ``RUINS_OF_ALPH_OUTSIDE has water encounters`` () =
         Assert.Equal(3, t.Water.Length)
         Assert.Equal("WOOPER", t.Water.[0].Species)
     | None -> Assert.Fail("should have data")
+
+[<Fact>]
+let ``BAT-003 generated species preserve wild item slots and gender ratio`` () =
+    let pikachu = Species.byName "PIKACHU"
+
+    Assert.Equal(None, pikachu.Item1)
+    Assert.Equal(Some "BERRY", pikachu.Item2)
+    Assert.Equal(127, pikachu.GenderRatio)
+
+[<Fact>]
+let ``BAT-003 wild held item rolls match source boundaries`` () =
+    let furret = Species.byName "FURRET"
+
+    Assert.Equal(None, WildOpponent.rollHeldItem WildBattleType.Normal (FixedRandom([ 191 ])) furret)
+    Assert.Equal(Some "GOLD_BERRY", WildOpponent.rollHeldItem WildBattleType.Normal (FixedRandom([ 192; 19 ])) furret)
+    Assert.Equal(Some "BERRY", WildOpponent.rollHeldItem WildBattleType.Normal (FixedRandom([ 192; 20 ])) furret)
+    Assert.Equal(Some "BERRY", WildOpponent.rollHeldItem WildBattleType.ForceItem (FixedRandom([])) furret)
+
+[<Fact>]
+let ``BAT-003 wild DVs and gender derive from source attributes`` () =
+    let pikachu = Species.byName "PIKACHU"
+    let hoOh = Species.byName "HO_OH"
+    let dvs = WildOpponent.rollDvs WildBattleType.Normal (FixedRandom([ 0xAB; 0xCD ]))
+
+    Assert.Equal(0xABCD, dvs)
+    Assert.Equal(0xEAAA, WildOpponent.rollDvs WildBattleType.ForceShiny (FixedRandom([])))
+    Assert.Equal(Male, WildOpponent.genderFromDvs pikachu dvs)
+    Assert.Equal(Genderless, WildOpponent.genderFromDvs hoOh dvs)
 
 [<Fact>]
 let ``InitRoamMons seeds beasts at disassembly starting routes`` () =

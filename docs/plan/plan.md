@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,296 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,300 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -28,7 +28,7 @@ The following foundations are real and worth preserving:
 
 The main blockers are integration failures:
 
-1. Wild Pokémon are still constructed with Tackle instead of source-derived moves and attributes; trainer moves now follow their source party type.
+1. Missing or invalid staged battle data can still silently create fallback Cyndaquil/Pidgey/Tackle combatants.
 2. Battle results are not propagated faithfully into persistent party state.
 3. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
 4. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
@@ -131,7 +131,7 @@ This epic is the first critical-path blocker. Route extension beyond early Johto
 
 **Status: ⬜ TODO**
 
-Runtime trainer construction now uses explicit moves where supplied and source-derived current-species learnsets for normal/item-only records. Wild Pokémon still use the temporary Tackle path.
+Runtime trainer and wild construction now use source moves, held-item data, and preserved DVs/gender. Production fallback combatants remain to be removed.
 
 ### Work items
 
@@ -146,9 +146,10 @@ Runtime trainer construction now uses explicit moves where supplied and source-d
   - Acceptance: tests cover a normal trainer, a moves trainer, an item trainer, and an item-plus-moves trainer.
   - Proved by `BAT-002 runtime derives normal and item moves while preserving explicit moves`, `BAT-002 source starting moves skip duplicates and retain the latest four`, and the synthetic `BAT-002 synthetic item plus moves trainer keeps explicit source slots` because Gold has no `TRAINERTYPE_ITEM_MOVES` record.
 
-- ⬜ **BAT-003 — Give wild Pokémon authentic moves and generated attributes.**
+- ✅ **BAT-003 — Give wild Pokémon authentic moves and generated attributes.**
   - Wild Pokémon receive their source-appropriate level-up moves, DVs, held item chances, and encounter attributes.
   - Acceptance: a deterministic runtime encounter asserts the complete constructed opponent.
+  - Proved by `BAT-003 Route 2 encounter constructs a complete source wild opponent`, the BAT-003 item/DV/gender boundary tests, and the runtime Master Ball catch preserving DVs.
 
 - ⬜ **BAT-004 — Remove fallback battle Pokémon from normal gameplay.**
   - The emergency Cyndaquil/Pidgey/Tackle fallbacks may remain assertion failures or debug-only fixtures.

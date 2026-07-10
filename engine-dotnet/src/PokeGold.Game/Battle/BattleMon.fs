@@ -160,6 +160,8 @@ module VolatileStatus =
 type BattleMon =
     { Species: BaseStats
       Level: int
+      /// Packed Attack/Defense/Speed/Special DVs from the persistent or wild mon.
+      Dvs: int
       MaxHp: int
       Hp: int
       Attack: int
@@ -189,6 +191,19 @@ type BattleMon =
       Volatile: VolatileStatus }
 
 module BattleMon =
+
+    /// Derive Gen 2 gender from the species ratio and packed Attack/Speed DVs.
+    /// See engine/pokemon/mon_stats.asm::GetGender.
+    let genderFromDvs (species: BaseStats) (dvs: int) : Gender =
+        if species.GenderRatio = 255 then
+            Genderless
+        elif species.GenderRatio = 0 then
+            Male
+        elif species.GenderRatio = 254 then
+            Female
+        else
+            let attackAndSpeed = ((dvs >>> 8) &&& 0xF0) ||| ((dvs >>> 4) &&& 0x0F)
+            if species.GenderRatio < attackAndSpeed then Male else Female
 
     /// Stage → (numerator, denominator), the `data/battle/stat_multipliers.asm`
     /// ratios for stages −6..+6. Indexed by `stage + 6`.
@@ -302,6 +317,7 @@ module BattleMon =
 
         { Species = species
           Level = level
+          Dvs = 0
           MaxHp = maxHp
           Hp = maxHp
           Attack = calcStat species.Attack level

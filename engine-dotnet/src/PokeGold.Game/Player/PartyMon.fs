@@ -69,7 +69,8 @@ module PartyMon =
                 { Dex = mon.SpeciesId; Name = string mon.SpeciesId
                   Hp = 45; Attack = 45; Defense = 45; Speed = 45; SpAttack = 45; SpDefense = 45
                   Type1 = 0; Type2 = 0
-                  CatchRate = 45; BaseExp = 64; GrowthRate = 0 })
+                  CatchRate = 45; BaseExp = 64
+                  Item1 = None; Item2 = None; GenderRatio = 255; GrowthRate = 0 })
         let moveDatas =
             mon.Moves
             |> List.choose (fun (moveId, _pp) ->
@@ -78,7 +79,9 @@ module PartyMon =
         let bm = BattleMon.ofSpecies species mon.Level moveDatas
         { bm with
             Hp = min mon.Hp bm.MaxHp
-            HeldItem = mon.HeldItem }
+            HeldItem = mon.HeldItem
+            Dvs = mon.Dvs
+            Gender = BattleMon.genderFromDvs species mon.Dvs }
 
     /// Extract individual DVs from the packed int.
     /// Format: bits 15-12 = Atk, 11-8 = Def, 7-4 = Spd, 3-0 = Spc

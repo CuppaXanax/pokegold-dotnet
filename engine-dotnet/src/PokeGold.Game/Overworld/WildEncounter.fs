@@ -71,6 +71,52 @@ module Roaming =
                     |> Option.filter (fun roamer -> canonicalMapId roamer.MapId = currentMap)
                     |> Option.map (fun roamer -> roamer.Species, roamer.Level)
 
+[<RequireQualifiedAccess>]
+type WildBattleType =
+    | Normal
+    | ForceItem
+    | ForceShiny
+
+module WildOpponent =
+
+    let ofBattleTypeValue value =
+        match value with
+        | 7 -> WildBattleType.ForceShiny
+        | 10 -> WildBattleType.ForceItem
+        | _ -> WildBattleType.Normal
+
+    /// Source thresholds: 0..191 none, then 0..19 rare item, otherwise common.
+    let rollHeldItem (battleType: WildBattleType) (rng: System.Random) (species: BaseStats) : string option =
+        match battleType with
+        | WildBattleType.ForceItem -> species.Item1
+        | _ ->
+            if rng.Next(256) < 192 then
+                None
+            elif rng.Next(256) < 20 then
+                species.Item2
+            else
+                species.Item1
+
+    let rollDvs (battleType: WildBattleType) (rng: System.Random) : int =
+        match battleType with
+        | WildBattleType.ForceShiny -> 0xEAAA
+        | _ -> (rng.Next(256) <<< 8) ||| rng.Next(256)
+
+    let genderFromDvs (species: BaseStats) (dvs: int) : Gender =
+        BattleMon.genderFromDvs species dvs
+
+    let create (battleType: WildBattleType) (rng: System.Random) (species: BaseStats) (level: int) : BattleMon =
+        let heldItem = rollHeldItem battleType rng species
+        let dvs = rollDvs battleType rng
+        let moves =
+            MoveLearn.startingMoveNames species.Name level
+            |> List.map Moves.byName
+
+        { BattleMon.ofSpecies species level moves with
+            HeldItem = heldItem
+            Dvs = dvs
+            Gender = genderFromDvs species dvs }
+
 /// Wild encounter trigger logic.
 /// Source: engine/overworld/wildmons.asm::TryWildEncounter
 module WildEncounter =

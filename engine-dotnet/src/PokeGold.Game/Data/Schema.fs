@@ -21,6 +21,9 @@ type BaseStats =
       Type2: int
       CatchRate: int
       BaseExp: int
+      Item1: string option
+      Item2: string option
+      GenderRatio: int
       GrowthRate: int }
 
 /// A single evolution entry for a species.

@@ -31,12 +31,15 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   parties use their source species, levels, and explicit moves.
 - Normal and item-only trainer parties derive moves with the source `FillMoves`
   order, duplicate suppression, and oldest-move replacement behavior.
+- Generated wild opponents use source learnsets, common/rare held-item chances,
+  packed DVs, gender ratios, and special forced-item/forced-shiny attributes;
+  caught Pokémon retain their DVs.
 - Battle, party, bag, storage, save/load, audio, menu, field-move, encounter,
   evolution, trading, breeding, Pokedex, and conformance-ledger tests.
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1296/1296) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1300/1300) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -45,8 +48,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - The public engineering gate is still the full fresh-save route proof through
   the real runtime; the no-shortcuts test currently proves only the opening
   route prefix through Elm's starter gift.
-- Wild moves and attributes, persistent party identity, progression, and
-  blackout semantics remain battle critical-path work.
+- Production fallback combatants, persistent party identity, DV-aware stats,
+  progression, and blackout semantics remain battle critical-path work.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -61,8 +64,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-003 through BAT-019: wild construction, stable party identity,
-   progression, evolution, and blackout.
+1. Complete BAT-004 through BAT-019: remove production battle fallbacks, add
+   stable party identity, and finish progression, evolution, and blackout.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

@@ -2,6 +2,7 @@ module PokeGold.Tests.OverworldSchedulerTests
 
 open Xunit
 open PokeGold.Game.Audio
+open PokeGold.Game.Battle
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
@@ -15,6 +16,17 @@ type private SilentSound() =
         member _.PlaySfx _ = ()
         member _.PlayJingle _ = ()
         member _.StopMusic() = ()
+
+type private FixedRandom(values: int list) =
+    inherit System.Random()
+    let mutable remaining = values
+
+    override _.Next(maxValue: int) =
+        match remaining with
+        | value :: rest ->
+            remaining <- rest
+            value % maxValue
+        | [] -> 0
 
 let private directionButton (dir: Direction) : Buttons =
     match dir with
@@ -509,6 +521,61 @@ let ``BAT-002 runtime derives normal and item moves while preserving explicit mo
         | transition -> failwithf "expected %s battle scene, got %A" group transition
 
 [<Fact>]
+let ``BAT-003 Route 2 encounter constructs a complete source wild opponent`` () =
+    let content = Content()
+    let route = OverworldState.loadById content "Route2"
+    let occupied x y = route.Npcs |> Array.exists (fun npc -> npc.CellX = x && npc.CellY = y)
+
+    let startX, startY, direction =
+        [ for y in 0 .. route.Map.Height * 2 - 1 do
+              for x in 0 .. route.Map.Width * 2 - 1 do
+                  let collision = Movement.collisionIdAtCell route.Map route.Collision x y
+
+                  if WildEncounter.isEncounterTile collision && not (occupied x y) then
+                      for direction in [ Down; Up; Left; Right ] do
+                          let dx, dy = delta direction
+                          let sx, sy = x - dx, y - dy
+
+                          if sx >= 0
+                             && sy >= 0
+                             && sx < route.Map.Width * 2
+                             && sy < route.Map.Height * 2
+                             && Movement.cellWalkable route.Map route.Collision sx sy
+                             && not (WildEncounter.isEncounterTile (Movement.collisionIdAtCell route.Map route.Collision sx sy))
+                             && not (occupied sx sy) then
+                              yield sx, sy, direction ]
+        |> List.tryHead
+        |> Option.defaultWith (fun () -> failwith "expected Route 2 grass with an open adjacent land cell")
+
+    let state = OverworldState.loadByIdAt content "Route2" startX startY direction
+    let rng = FixedRandom([ 0; 255; 99; 192; 19; 0xAB; 0xCD ])
+    let scene = OverworldScene(content, SilentSound(), state, encounterRandom = rng)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ MoveLearn.seedStartingMoves (PartyMon.create 155 20) ] })
+
+    let mutable transition = Stay
+    let mutable frame = 0
+    let isPush = function Push _ -> true | _ -> false
+
+    while frame < 32 && not (isPush transition) do
+        let buttons = if frame = 0 then directionButton direction else Buttons.none
+        transition <- (scene :> Scene).Update buttons
+        frame <- frame + 1
+
+    match transition with
+    | Push (:? BattleScene as battle) ->
+        let pikachu = Assert.Single(battle.CurrentState.EnemyTeam)
+        Assert.Equal("PIKACHU", pikachu.Species.Name)
+        Assert.Equal(4, pikachu.Level)
+        Assert.Equal<string list>([ "THUNDERSHOCK"; "GROWL" ], pikachu.Moves |> List.map (fun move -> move.Name))
+        Assert.Equal<int list>(pikachu.Moves |> List.map (fun move -> move.Pp), pikachu.Pp)
+        Assert.Equal(Some "BERRY", pikachu.HeldItem)
+        Assert.Equal(0xABCD, pikachu.Dvs)
+        Assert.Equal(Male, pikachu.Gender)
+        Assert.Equal(Healthy, pikachu.Status)
+        Assert.Equal(pikachu.MaxHp, pikachu.Hp)
+    | other -> failwithf "expected Route 2 wild battle, got %A after %d frames" other frame
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =
@@ -533,7 +600,7 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
         { PlayerStateOps.initial with
             Party = [ mon ]
             Bag = Bag.add "MASTER_BALL" 1 Bag.empty }
-    let scene = OverworldScene(content, SilentSound(), state)
+    let scene = OverworldScene(content, SilentSound(), state, encounterRandom = FixedRandom([ 191; 0xAB; 0xCD ]))
     scene.Restore(World.empty, player)
 
     let stack = ResizeArray<Scene>()
@@ -556,6 +623,7 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let rattataDex = (Species.byName "RATTATA").Dex
     Assert.Equal(0, Bag.count "MASTER_BALL" scene.DebugPlayer.Bag)
     Assert.Equal(2, scene.DebugPlayer.Party.Length)
+    Assert.Equal(0xABCD, (List.last scene.DebugPlayer.Party).Dvs)
     Assert.Contains(rattataDex, scene.DebugPlayer.DexOwn)
     Assert.Contains(rattataDex, scene.DebugPlayer.DexSeen)
     Assert.Equal(Some "CatchDone", scene.RuntimeSnapshot.LastTextLabel)

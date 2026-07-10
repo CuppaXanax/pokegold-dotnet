@@ -92,8 +92,11 @@ module Emit =
         for s in Parsers.species do
             sb.AppendLine(
                 sprintf
-                    "            (\"%s\", { Dex = %d; Name = \"%s\"; Hp = %d; Attack = %d; Defense = %d; Speed = %d; SpAttack = %d; SpDefense = %d; Type1 = %d; Type2 = %d; CatchRate = %d; BaseExp = %d; GrowthRate = %d })"
-                    s.Constant s.Dex s.Constant s.Hp s.Attack s.Defense s.Speed s.SpAttack s.SpDefense s.Type1 s.Type2 s.CatchRate s.BaseExp s.GrowthRate
+                    "            (\"%s\", { Dex = %d; Name = \"%s\"; Hp = %d; Attack = %d; Defense = %d; Speed = %d; SpAttack = %d; SpDefense = %d; Type1 = %d; Type2 = %d; CatchRate = %d; BaseExp = %d; Item1 = %s; Item2 = %s; GenderRatio = %d; GrowthRate = %d })"
+                    s.Constant s.Dex s.Constant s.Hp s.Attack s.Defense s.Speed s.SpAttack s.SpDefense s.Type1 s.Type2 s.CatchRate s.BaseExp
+                    (s.Item1 |> Option.map (sprintf "Some \"%s\"") |> Option.defaultValue "None")
+                    (s.Item2 |> Option.map (sprintf "Some \"%s\"") |> Option.defaultValue "None")
+                    s.GenderRatio s.GrowthRate
             )
             |> ignore
 

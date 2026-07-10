@@ -165,6 +165,9 @@ module Parsers =
           Type2: int
           CatchRate: int
           BaseExp: int
+          Item1: string option
+          Item2: string option
+          GenderRatio: int
           GrowthRate: int }
 
     let private dex = AsmConstants.load "constants/pokemon_constants.asm"
@@ -173,6 +176,7 @@ module Parsers =
     let private pairRx = Regex(@"db\s+([A-Za-z_]\w*),\s*([A-Za-z_]\w*)")
     let private singleIntDbRx = Regex(@"^\s*db\s+(\d+)\s*$")
     let private growthRx = Regex(@"^\s*db\s+(GROWTH_\w+)")
+    let private genderRx = Regex(@"^\s*db\s+(GENDER_\w+)\b")
     let private growthRates =
         Map.ofList [
             "GROWTH_MEDIUM_FAST", 0
@@ -181,6 +185,16 @@ module Parsers =
             "GROWTH_MEDIUM_SLOW", 3
             "GROWTH_FAST", 4
             "GROWTH_SLOW", 5
+        ]
+    let private genderRatios =
+        Map.ofList [
+            "GENDER_F0", 0
+            "GENDER_F12_5", 31
+            "GENDER_F25", 63
+            "GENDER_F50", 127
+            "GENDER_F75", 191
+            "GENDER_F100", 254
+            "GENDER_UNKNOWN", 255
         ]
 
     let private parseSpecies (file: string) : Species =
@@ -228,6 +242,24 @@ module Parsers =
         let catchRate = if singleDbAfterType.Length > 0 then singleDbAfterType.[0] else 0
         let baseExp = if singleDbAfterType.Length > 1 then singleDbAfterType.[1] else 0
 
+        let itemLineIndex, item1, item2 =
+            lines
+            |> List.mapi (fun i l -> i, l)
+            |> List.tryPick (fun (i, l) ->
+                let m = pairRx.Match l
+                if i > typeLineIndex && m.Success then Some(i, m.Groups.[1].Value, m.Groups.[2].Value) else None)
+            |> Option.defaultWith (fun () -> failwithf "No held-item line in %s" file)
+
+        let heldItem item = if item = "NO_ITEM" then None else Some item
+
+        let genderRatio =
+            lines
+            |> List.mapi (fun i l -> i, l)
+            |> List.tryPick (fun (i, l) ->
+                let m = genderRx.Match l
+                if i > itemLineIndex && m.Success then genderRatios.TryFind m.Groups.[1].Value else None)
+            |> Option.defaultWith (fun () -> failwithf "No gender ratio in %s" file)
+
         let growthRate =
             lines
             |> List.tryPick (fun l ->
@@ -247,6 +279,9 @@ module Parsers =
           Type2 = t2
           CatchRate = catchRate
           BaseExp = baseExp
+          Item1 = heldItem item1
+          Item2 = heldItem item2
+          GenderRatio = genderRatio
           GrowthRate = growthRate }
 
     /// Every species' base stats, ordered by national dex number.
