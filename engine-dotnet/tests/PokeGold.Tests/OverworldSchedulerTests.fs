@@ -576,6 +576,33 @@ let ``BAT-003 Route 2 encounter constructs a complete source wild opponent`` () 
     | other -> failwithf "expected Route 2 wild battle, got %A after %d frames" other frame
 
 [<Fact>]
+let ``BAT-004 production battles reject missing or invalid staged combatants`` () =
+    let content = Content()
+    let validMon = MoveLearn.seedStartingMoves (PartyMon.create (Species.byName "CYNDAQUIL").Dex 20)
+    let validPlayer = { PlayerStateOps.initial with Party = [ validMon ] }
+
+    let expectFailure label commands player expectedMessage =
+        let state = scriptedScene content "NewBarkTown" 5 5 Down label commands
+        let scene = OverworldScene(content, SilentSound(), state)
+
+        let error =
+            Assert.Throws<System.InvalidOperationException>(fun () ->
+                scene.Restore(World.empty, player)
+                (scene :> Scene).Update Buttons.none |> ignore)
+
+        Assert.Contains(expectedMessage, error.Message)
+
+    expectFailure "NoOpponentBattle" [| Startbattle; End |] validPlayer "no staged opponent"
+    expectFailure "UnknownTrainerBattle" [| Loadtrainer("NOT_A_TRAINER", "1"); Startbattle; End |] validPlayer "Unknown trainer"
+    expectFailure "UnknownWildBattle" [| Loadwildmon("MISSINGNO", 5); Startbattle; End |] validPlayer "Unknown wild species"
+    expectFailure "EmptyPartyBattle" [| Loadwildmon("PIDGEY", 3); Startbattle; End |] PlayerStateOps.initial "no usable player Pokemon"
+    expectFailure
+        "FaintedPartyBattle"
+        [| Loadwildmon("PIDGEY", 3); Startbattle; End |]
+        { PlayerStateOps.initial with Party = [ { validMon with Hp = 0 } ] }
+        "no usable player Pokemon"
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =

@@ -73,6 +73,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable stagedTrainer: (string * string) option = None
     let mutable stagedWinText: string = ""
     let mutable stagedLossText: string = ""
+    /// Explicit debug-control sessions may use a fixture combatant when a route
+    /// probe starts before acquiring a real party. Normal restore/play never sets it.
+    let mutable allowDebugBattleFixture = false
     let mutable balanceOverlay: BalanceDisplay option = None
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
@@ -1035,16 +1038,21 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             |> List.filter (fun m -> m.Hp > 0)
             |> List.map PartyMon.toBattleMon
             |> function
-                | [] -> [ BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ] ]
+                | [] when allowDebugBattleFixture ->
+                    [ BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ] ]
+                | [] -> invalidOp $"Cannot start battle on {state.MapId}: no usable player Pokemon"
                 | t -> t
 
         let trainerData =
             stagedTrainer
-            |> Option.bind (fun (group, id) -> Trainers.lookupByName group id)
+            |> Option.map (fun (group, id) ->
+                Trainers.lookupByName group id
+                |> Option.defaultWith (fun () ->
+                    invalidOp $"Unknown trainer {group}/{id} staged on {state.MapId}"))
 
         let enemyTeam =
             match stagedTrainer with
-            | Some _ ->
+            | Some(group, id) ->
                 match trainerData with
                 | Some trainer ->
                     trainer.Party
@@ -1059,8 +1067,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 HeldItem = tm.HeldItem
                                 Dvs = trainer.Dvs
                                 Gender = BattleMon.genderFromDvs stats trainer.Dvs }
-                        | None -> BattleMon.ofSpecies (Species.byName "PIDGEY") tm.Level [ Moves.byName "TACKLE" ])
-                | None -> [ BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ] ]
+                        | None ->
+                            invalidOp
+                                $"Unknown trainer species {tm.Species} for {group}/{id} on {state.MapId}")
+                | None -> invalidOp $"Trainer {group}/{id} was not resolved on {state.MapId}"
             | None ->
                 match stagedWild with
                 | Some(species, level) ->
@@ -1070,24 +1080,29 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             World.getVar "VAR_BATTLETYPE" world
                             |> WildOpponent.ofBattleTypeValue
                         [ WildOpponent.create battleType encounterRng stats level ]
-                    | None -> [ BattleMon.ofSpecies (Species.byName "PIDGEY") level [ Moves.byName "TACKLE" ] ]
+                    | None -> invalidOp $"Unknown wild species {species} level {level} staged on {state.MapId}"
                 | None ->
-                    [ BattleMon.ofSpecies (Species.byName "PIDGEY") 3 [ Moves.byName "TACKLE" ] ]
+                    invalidOp $"Cannot start battle on {state.MapId}: no staged opponent"
 
         let battleState =
             match stagedTrainer with
             | Some(group, id) ->
+                let trainer =
+                    trainerData
+                    |> Option.defaultWith (fun () ->
+                        invalidOp $"Trainer {group}/{id} was not resolved on {state.MapId}")
+
                 let className =
                     Regex.Replace(group.ToUpperInvariant(), @"\d+$", "").Replace("_", " ")
 
                 let context =
                     { Group = group
                       Id = id
-                      Name = trainerData |> Option.map (fun trainer -> trainer.Name) |> Option.defaultValue "???"
+                      Name = trainer.Name
                       ClassName = className
                       WinText = if stagedWinText = "" then None else Some stagedWinText
                       LossText = if stagedLossText = "" then None else Some stagedLossText
-                      BaseReward = trainerData |> Option.map (fun trainer -> trainer.BaseReward) }
+                      BaseReward = Some trainer.BaseReward }
 
                 Battle.createTrainer context playerTeam enemyTeam 0x1234u
             | None ->
@@ -1671,6 +1686,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        allowDebugBattleFixture <- false
         balanceOverlay <- None
         fadeOverlay <- None
         fadeRun <- None
@@ -1796,6 +1812,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// and neighbours and switching music. Throws if the map id is unknown or its
     /// assets aren't present (the channel turns that into an `error:` reply).
     member this.DebugWarp (mapId: string) (x: int) (y: int) (facing: Direction) =
+        allowDebugBattleFixture <- true
         let ns = OverworldState.loadByIdAt content mapId x y facing
         scriptQueue.Clear()
         pending <- None

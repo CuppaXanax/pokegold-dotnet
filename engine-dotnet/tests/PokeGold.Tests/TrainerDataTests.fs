@@ -109,3 +109,15 @@ let ``all generated loadtrainer operands resolve exactly`` () =
                   | _ -> () ]
 
     Assert.True(List.isEmpty unresolved, "Unresolved loadtrainer operands: " + System.String.Join("; ", unresolved))
+
+[<Fact>]
+let ``all generated loadwildmon operands resolve exactly`` () =
+    let unresolved =
+        [ for KeyValue(mapId, map) in MapsData.all do
+              for command in map.Script.Commands do
+                  match command with
+                  | Loadwildmon(species, _) when Species.all |> Map.containsKey species |> not ->
+                      yield $"{mapId}: {species}"
+                  | _ -> () ]
+
+    Assert.True(List.isEmpty unresolved, "Unresolved loadwildmon operands: " + System.String.Join("; ", unresolved))

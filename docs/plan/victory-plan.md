@@ -13,14 +13,15 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-09:** 1300/1300 tests green. The script-VM golden path is verified
+**State as of 2026-07-10:** 1302/1302 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
 251 Pokédex species as a static source inventory, not as a runtime completion proof. Explicit
 trainer and wild source moves, held items, and generated attributes now reach runtime
-battles; the remaining critical path starts with removing production battle fallbacks and
-fixing persistent battle progression before extending the continuous Red route.
+battles, while missing or invalid production staging fails visibly instead of creating a
+substitute. The remaining critical path starts with stable party identity and persistent
+battle progression before extending the continuous Red route.
 
 ---
 

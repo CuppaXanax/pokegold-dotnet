@@ -17,8 +17,9 @@ This is an active port, not a finished game release. The plan documents track a
 large amount of engine work as complete, including source-asset data generation,
 overworld systems, script VM work, battle systems, save/load, audio, UI scenes,
 and a substantial xUnit conformance suite. The current desktop suite has
-1,300/1,300 tests green as of 2026-07-09, including a script-VM golden path from
-New Bark bedroom to post-Red credits and source-authentic explicit trainer teams.
+1,302/1,302 tests green as of 2026-07-10, including a script-VM golden path from
+New Bark bedroom to post-Red credits, source-authentic trainer/wild construction,
+and visible failure for missing production battle data.
 
 The remaining public bar is stronger than "tests exist": prove the route through
 the real runtime with real inputs, movement, collision, warps, triggers, battles,

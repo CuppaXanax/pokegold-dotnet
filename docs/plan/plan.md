@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,300 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,302 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -28,13 +28,12 @@ The following foundations are real and worth preserving:
 
 The main blockers are integration failures:
 
-1. Missing or invalid staged battle data can still silently create fallback Cyndaquil/Pidgey/Tackle combatants.
-2. Battle results are not propagated faithfully into persistent party state.
-3. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
-4. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
-5. The only no-shortcuts runtime proof ends after receiving Elm’s starter.
-6. Field moves mostly set variables instead of performing their complete map action.
-7. The all-251 proof counts static or hypothetical sources that players cannot use.
+1. Battle results are not propagated faithfully into persistent party state.
+2. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
+3. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
+4. The only no-shortcuts runtime proof ends after receiving Elm’s starter.
+5. Field moves mostly set variables instead of performing their complete map action.
+6. The all-251 proof counts static or hypothetical sources that players cannot use.
 8. Required script and side-system no-ops remain.
 9. Presentation coverage is broad but frequently approximate.
 
@@ -129,9 +128,9 @@ This epic is the first critical-path blocker. Route extension beyond early Johto
 
 ## Story 1.1 — Trainers and wild encounters use authentic battle parties
 
-**Status: ⬜ TODO**
+**Status: ✅ COMPLETE**
 
-Runtime trainer and wild construction now use source moves, held-item data, and preserved DVs/gender. Production fallback combatants remain to be removed.
+Runtime trainer and wild construction uses source moves, held-item data, and preserved DVs/gender. Missing or invalid production battle staging now fails visibly; the old fixture is isolated behind explicit debug warps.
 
 ### Work items
 
@@ -151,9 +150,10 @@ Runtime trainer and wild construction now use source moves, held-item data, and 
   - Acceptance: a deterministic runtime encounter asserts the complete constructed opponent.
   - Proved by `BAT-003 Route 2 encounter constructs a complete source wild opponent`, the BAT-003 item/DV/gender boundary tests, and the runtime Master Ball catch preserving DVs.
 
-- ⬜ **BAT-004 — Remove fallback battle Pokémon from normal gameplay.**
+- ✅ **BAT-004 — Remove fallback battle Pokémon from normal gameplay.**
   - The emergency Cyndaquil/Pidgey/Tackle fallbacks may remain assertion failures or debug-only fixtures.
   - A missing staged party in a production script must fail a test instead of silently creating a substitute.
+  - Proved by `BAT-004 production battles reject missing or invalid staged combatants` and `all generated loadwildmon operands resolve exactly`.
 
 ## Story 1.2 — Persistent party members enter and leave battle without identity loss
 
