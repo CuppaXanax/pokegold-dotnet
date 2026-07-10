@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Save
 
+open System
 open PokeGold.Game.Core
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
@@ -44,7 +45,8 @@ type MovesSave = { MoveId: int; Pp: int }
 
 [<CLIMutable>]
 type PartyMonSave =
-    { SpeciesId: int; Nickname: string; Level: int; Exp: int
+    { Id: Guid
+      SpeciesId: int; Nickname: string; Level: int; Exp: int
       Hp: int; MaxHp: int; Status: string
       Moves: MovesSave[]; Dvs: int; StatExp: int
       HeldItem: string; OtName: string; OtId: int; Friendship: int }
@@ -99,6 +101,7 @@ type PlayerSave =
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
 /// v3 saves have a full Player block; v2 saves only have a flat Bag array.
+/// v7 adds native stable identities to persistent Pokemon records.
 /// The `Version` lets `SaveFile` reject or migrate older shapes.
 [<CLIMutable>]
 type SaveData =
@@ -112,7 +115,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 6
+    let CurrentVersion = 7
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -185,7 +188,8 @@ module SaveData =
 
     // PartyMon conversions
     let private partyMonToSave (pm: PartyMon) : PartyMonSave =
-        { SpeciesId = pm.SpeciesId; Nickname = pm.Nickname; Level = pm.Level; Exp = pm.Exp
+        { Id = pm.Id
+          SpeciesId = pm.SpeciesId; Nickname = pm.Nickname; Level = pm.Level; Exp = pm.Exp
           Hp = pm.Hp; MaxHp = pm.MaxHp; Status = pm.Status
           Moves = pm.Moves |> List.map (fun (mid, pp) -> { MoveId = mid; Pp = pp }) |> List.toArray
           Dvs = pm.Dvs; StatExp = pm.StatExp
@@ -193,7 +197,8 @@ module SaveData =
           OtName = pm.OtName; OtId = pm.OtId; Friendship = pm.Friendship }
 
     let private partyMonOfSave (s: PartyMonSave) : PartyMon =
-        { SpeciesId = s.SpeciesId; Nickname = nullToEmptyStr s.Nickname
+        { Id = if s.Id = Guid.Empty then Guid.NewGuid() else s.Id
+          SpeciesId = s.SpeciesId; Nickname = nullToEmptyStr s.Nickname
           Level = s.Level; Exp = s.Exp; Hp = s.Hp; MaxHp = s.MaxHp
           Status = nullToEmptyStr s.Status
           Moves = nullToEmpty s.Moves |> Array.map (fun m -> m.MoveId, m.Pp) |> Array.toList

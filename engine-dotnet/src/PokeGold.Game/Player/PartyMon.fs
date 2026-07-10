@@ -1,12 +1,14 @@
 namespace PokeGold.Game.Player
 
+open System
 open PokeGold.Game.Data
 open PokeGold.Game.Battle
 
 /// A Pokémon in the persistent party (on the player's team).
 /// All fields are preservation of the GSC save-file struct.
 type PartyMon =
-    { SpeciesId: int            // national dex number
+    { Id: Guid                  // stable native-engine identity (not a ROM field)
+      SpeciesId: int            // national dex number
       Nickname: string
       Level: int
       Exp: int
@@ -42,7 +44,8 @@ module PartyMon =
             Species.all
             |> Map.tryPick (fun k s -> if s.Dex = speciesId then Some k else None)
             |> Option.defaultValue (string speciesId)
-        { SpeciesId = speciesId
+        { Id = Guid.NewGuid()
+          SpeciesId = speciesId
           Nickname = name
           Level = level
           Exp = 0
@@ -71,15 +74,26 @@ module PartyMon =
                   Type1 = 0; Type2 = 0
                   CatchRate = 45; BaseExp = 64
                   Item1 = None; Item2 = None; GenderRatio = 255; GrowthRate = 0 })
-        let moveDatas =
+        let moveSlots =
             mon.Moves
-            |> List.choose (fun (moveId, _pp) ->
-                Moves.tryByIndex moveId)
+            |> List.choose (fun (moveId, pp) ->
+                Moves.tryByIndex moveId |> Option.map (fun move -> move, pp))
             |> List.truncate 4
-        let bm = BattleMon.ofSpecies species mon.Level moveDatas
+        let status =
+            match mon.Status with
+            | "SLP" -> Sleep 1
+            | "PSN" -> Poison
+            | "BRN" -> Burn
+            | "FRZ" -> Freeze
+            | "PAR" -> Paralysis
+            | _ -> Healthy
+        let bm = BattleMon.ofSpecies species mon.Level (moveSlots |> List.map fst)
         { bm with
+            PersistentId = Some mon.Id
             Hp = min mon.Hp bm.MaxHp
+            Pp = moveSlots |> List.map snd
             HeldItem = mon.HeldItem
+            Status = status
             Dvs = mon.Dvs
             Gender = BattleMon.genderFromDvs species mon.Dvs }
 

@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1302/1302) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1304/1304) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -48,9 +48,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - The public engineering gate is still the full fresh-save route proof through
   the real runtime; the no-shortcuts test currently proves only the opening
   route prefix through Elm's starter gift.
-- Production battle staging now rejects missing/invalid combatants instead of
-  substituting Cyndaquil/Pidgey. Persistent party identity, DV-aware stats,
-  progression, and blackout semantics remain battle critical-path work.
+- Production battle staging rejects missing/invalid combatants, and stable
+  Pokémon identities now survive battle, reordering, boxing, and save migration.
+  DV-aware stats, progression, and blackout semantics remain critical-path work.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -65,8 +65,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-005 through BAT-019: add stable party identity and finish
-   persistent stats, progression, evolution, and blackout.
+1. Complete BAT-006 through BAT-019: finish persistent stats, complete battle
+   round-tripping, progression, evolution, and blackout.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

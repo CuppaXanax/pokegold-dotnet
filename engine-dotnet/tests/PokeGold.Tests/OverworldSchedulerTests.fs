@@ -603,6 +603,72 @@ let ``BAT-004 production battles reject missing or invalid staged combatants`` (
         "no usable player Pokemon"
 
 [<Fact>]
+let ``BAT-005 duplicate party members keep individual battle state`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "IdentityBattle"
+            [| Loadwildmon("MAGIKARP", 2); Startbattle; End |]
+
+    let stats = Species.byName "CYNDAQUIL"
+    let first =
+        { PartyMon.create stats.Dex 50 with
+            Nickname = "FIRST"
+            Exp = 100
+            Moves = [ moveId "TACKLE", 5 ]
+            HeldItem = Some "BERRY" }
+    let second =
+        { PartyMon.create stats.Dex 50 with
+            Nickname = "SECOND"
+            Exp = 200
+            Hp = first.MaxHp - 7
+            Status = "PAR"
+            Moves = [ moveId "EMBER", 7 ]
+            HeldItem = Some "ANTIDOTE" }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ first; second ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let buttons = if frame % 2 = 0 then { Buttons.none with A = true } else Buttons.none
+        applyTransition stack (stack.[stack.Count - 1].Update buttons)
+
+    Assert.Equal(1, stack.Count)
+    (scene :> Scene).Update Buttons.none |> ignore
+
+    let actualFirst, actualSecond =
+        match scene.DebugPlayer.Party with
+        | [ a; b ] -> a, b
+        | party -> failwithf "expected two party members, got %d" party.Length
+
+    Assert.Equal("FIRST", actualFirst.Nickname)
+    Assert.Equal(first.Id, actualFirst.Id)
+    Assert.Equal(first.Hp, actualFirst.Hp)
+    Assert.Equal("", actualFirst.Status)
+    Assert.Equal(Some "BERRY", actualFirst.HeldItem)
+    Assert.Equal<(int * int) list>([ moveId "TACKLE", 4 ], actualFirst.Moves)
+    Assert.True(actualFirst.Exp > first.Exp, "the participating lead should receive EXP")
+
+    Assert.Equal("SECOND", actualSecond.Nickname)
+    Assert.Equal(second.Id, actualSecond.Id)
+    Assert.NotEqual(actualFirst.Id, actualSecond.Id)
+    Assert.Equal(second.Hp, actualSecond.Hp)
+    Assert.Equal("PAR", actualSecond.Status)
+    Assert.Equal(Some "ANTIDOTE", actualSecond.HeldItem)
+    Assert.Equal<(int * int) list>([ moveId "EMBER", 7 ], actualSecond.Moves)
+    Assert.Equal(second.Exp, actualSecond.Exp)
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =

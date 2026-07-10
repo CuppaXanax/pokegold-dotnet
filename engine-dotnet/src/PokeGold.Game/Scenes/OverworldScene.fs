@@ -975,14 +975,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 Status = statusCode battleMon.Status
                 HeldItem = battleMon.HeldItem
                 Moves =
-                    List.map2 (fun (moveId, _) pp -> (moveId, pp)) partyMon.Moves battleMon.Pp }
+                    partyMon.Moves
+                    |> List.mapi (fun i (moveId, oldPp) ->
+                        let pp = battleMon.Pp |> List.tryItem i |> Option.defaultValue oldPp
+                        moveId, pp) }
 
         let syncedParty =
             player.Party
             |> List.map (fun partyMon ->
                 battle.PlayerTeam
-                |> List.tryFind (fun b -> b.Species.Dex = partyMon.SpeciesId && b.Level = partyMon.Level)
+                |> List.tryFind (fun b -> b.PersistentId = Some partyMon.Id)
                 |> Option.map (fun battleMon -> syncPartyMon partyMon battleMon)
+                // Captures are appended before this callback and were never part
+                // of PlayerTeam, so records absent from the battle pass through.
                 |> Option.defaultValue partyMon)
 
         player <- { player with Party = syncedParty }
@@ -1042,6 +1047,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     [ BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ] ]
                 | [] -> invalidOp $"Cannot start battle on {state.MapId}: no usable player Pokemon"
                 | t -> t
+
+        let playerIds = playerTeam |> List.choose (fun mon -> mon.PersistentId)
+        if not allowDebugBattleFixture && playerIds.Length <> playerTeam.Length then
+            invalidOp $"Cannot start battle on {state.MapId}: player Pokemon is missing persistent identity"
+        if playerIds.Length <> (playerIds |> Set.ofList |> Set.count) then
+            invalidOp $"Cannot start battle on {state.MapId}: duplicate persistent Pokemon identity"
 
         let trainerData =
             stagedTrainer

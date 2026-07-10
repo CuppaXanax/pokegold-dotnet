@@ -41,8 +41,41 @@ let ``save round-trip preserves a deposited mon in box 3`` () =
     let p2 = SaveData.playerOf back
     Assert.Equal(1, p2.Pc.Boxes.[2].Mons.Length)
     Assert.Equal(155, p2.Pc.Boxes.[2].Mons.[0].SpeciesId)
+    Assert.Equal(mon.Id, p2.Pc.Boxes.[2].Mons.[0].Id)
     // Other boxes still empty.
     Assert.Equal(0, p2.Pc.Boxes.[0].Mons.Length)
+
+[<Fact>]
+let ``v6 Pokemon without identity migrate uniquely across persistent storage`` () =
+    let content = PokeGold.Game.Data.Content()
+    let ow = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Down
+    let partyMon = PartyMon.create 155 5
+    let boxMon = PartyMon.create 155 5
+    let dayCareMon = PartyMon.create 155 5
+    let pc =
+        { Storage.empty with
+            Boxes =
+                Storage.empty.Boxes
+                |> Array.mapi (fun i box -> if i = 0 then { box with Mons = [ boxMon ] } else box) }
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ partyMon ]
+            Pc = pc
+            DayCare = { Mon1 = Some dayCareMon; Mon2 = None; EggSteps = 0; HasEgg = false } }
+
+    let legacyJson =
+        SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
+        |> SaveFile.serialize
+        |> fun json -> System.Text.RegularExpressions.Regex.Replace(json, "\"Id\": \"[^\"]+\",\\s*", "")
+        |> fun json -> json.Replace("\"Version\": 7", "\"Version\": 6")
+    let migrated = legacyJson |> SaveFile.deserialize |> Option.get |> SaveData.playerOf
+    let ids =
+        [ migrated.Party.Head.Id
+          migrated.Pc.Boxes.[0].Mons.Head.Id
+          migrated.DayCare.Mon1.Value.Id ]
+
+    Assert.DoesNotContain(System.Guid.Empty, ids)
+    Assert.Equal(3, ids |> Set.ofList |> Set.count)
 
 [<Fact>]
 let ``a v3-style save with no Pc field loads with Storage.empty`` () =

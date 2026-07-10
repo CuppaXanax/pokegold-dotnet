@@ -7,7 +7,8 @@ open PokeGold.Game.Overworld.Script
 // M12.1 — pure heal transform + script wiring tests.
 
 let private makeMon hp maxHp status moves : PartyMon =
-    { SpeciesId = 1
+    { Id = System.Guid.NewGuid()
+      SpeciesId = 1
       Nickname = "TEST"
       Level = 10
       Exp = 0

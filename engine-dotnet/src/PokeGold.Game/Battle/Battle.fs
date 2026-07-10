@@ -833,18 +833,26 @@ module Battle =
         if m.Volatile.Charging.IsSome then m.Volatile.ChargingMove else None
 
     let private nextMon (state: BattleState) : BattleState * string list =
+        let moveHealthyToFront (team: BattleMon list) =
+            team
+            |> List.tryFindIndex (BattleMon.isFainted >> not)
+            |> Option.map (fun index ->
+                let mon = team.[index]
+                let reordered =
+                    mon
+                    :: (team
+                        |> List.indexed
+                        |> List.choose (fun (i, existing) -> if i = index then None else Some existing))
+                mon, reordered)
+
         if BattleMon.isFainted state.Enemy then
-            let next = state.EnemyTeam |> List.filter (fun m -> not (BattleMon.isFainted m)) |> List.tryHead
-            match next with
-            | Some mon ->
-                let team = mon :: (state.EnemyTeam |> List.filter (fun m -> m <> mon))
+            match moveHealthyToFront state.EnemyTeam with
+            | Some(mon, team) ->
                 ({ state with Enemy = mon; EnemyTeam = team }, [ sentOutEnemyText state.Kind mon ])
             | None -> (state, [])
         elif BattleMon.isFainted state.Player then
-            let next = state.PlayerTeam |> List.filter (fun m -> not (BattleMon.isFainted m)) |> List.tryHead
-            match next with
-            | Some mon ->
-                let team = mon :: (state.PlayerTeam |> List.filter (fun m -> m <> mon))
+            match moveHealthyToFront state.PlayerTeam with
+            | Some(mon, team) ->
                 ({ state with Player = mon; PlayerTeam = team }, [ $"Go, {mon.Species.Name}!" ])
             | None -> (state, [])
         else
@@ -1605,16 +1613,16 @@ module Battle =
     let switchMon (teamIndex: int) (s: BattleState) : BattleState =
         if isOver s then s
         elif teamIndex < 0 || teamIndex >= s.PlayerTeam.Length then s
+        elif teamIndex = 0 then s
         else
             let target = s.PlayerTeam.[teamIndex]
             if BattleMon.isFainted target then s
-            elif target = s.Player then s
             else
                 // Swap active mon with the target in the team list
                 let team =
                     s.PlayerTeam |> List.mapi (fun i m ->
                         if i = 0 then target
-                        elif m = target then s.Player
+                        elif i = teamIndex then s.Player
                         else m)
                 { s with
                     Player = target

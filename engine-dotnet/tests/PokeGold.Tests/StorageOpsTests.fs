@@ -117,13 +117,11 @@ let ``deposit then withdraw round-trips to equal PartyMon`` () =
     match BoxOps.deposit 1 p with
     | Ok p2 ->
         let boxMon = p2.Pc.Boxes.[0].Mons.[0]
+        Assert.Equal(mon.Id, boxMon.Id)
         match BoxOps.withdraw 0 0 p2 with
         | Ok p3 ->
             let withdrawn = List.last p3.Party
-            Assert.Equal(mon.SpeciesId, withdrawn.SpeciesId)
-            Assert.Equal(mon.Nickname, withdrawn.Nickname)
-            Assert.Equal(mon.Level, withdrawn.Level)
-            Assert.Equal(mon.Hp, withdrawn.Hp)
+            Assert.Equal(mon, withdrawn)
         | Error e -> Assert.Fail(e)
     | Error e -> Assert.Fail(e)
 
@@ -210,6 +208,7 @@ let ``deposit via BoxOps then save-reload round-trip persists mon in box`` () =
         Assert.Equal(1, back.Party.Length)
         Assert.Equal(1, back.Pc.Boxes.[0].Mons.Length)
         Assert.Equal(155, back.Pc.Boxes.[0].Mons.[0].SpeciesId)
+        Assert.Equal(mon.Id, back.Pc.Boxes.[0].Mons.[0].Id)
         Assert.Equal(mon.Nickname, back.Pc.Boxes.[0].Mons.[0].Nickname)
         Assert.Equal(mon.Level, back.Pc.Boxes.[0].Mons.[0].Level)
     | Error e -> Assert.Fail(sprintf "deposit failed: %s" e)

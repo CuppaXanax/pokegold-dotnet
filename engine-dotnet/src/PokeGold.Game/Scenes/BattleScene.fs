@@ -182,7 +182,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
             let target = state.PlayerTeam.[partyCursor]
             if BattleMon.isFainted target then
                 queue <- [ $"{target.Species.Name} has no energy left!" ]
-            elif partyCursor = 0 || target = state.Player then
+            elif partyCursor = 0 then
                 queue <- [ $"{target.Species.Name} is already in battle!" ]
             else
                 state <- Battle.switchMon partyCursor state

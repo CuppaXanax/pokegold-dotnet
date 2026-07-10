@@ -1,5 +1,6 @@
 namespace PokeGold.Game.Battle
 
+open System
 open PokeGold.Game.Data
 
 /// Non-volatile status condition (constants/pokemon_data_constants.asm).
@@ -158,7 +159,10 @@ module VolatileStatus =
 /// a move set, and per-stat stage modifiers (-6..+6). Everything is immutable;
 /// the turn loop produces new `BattleMon` values rather than mutating.
 type BattleMon =
-    { Species: BaseStats
+    { /// Stable identity when this battler came from persistent player storage.
+      /// Wild and trainer battlers have no persistent identity.
+      PersistentId: Guid option
+      Species: BaseStats
       Level: int
       /// Packed Attack/Defense/Speed/Special DVs from the persistent or wild mon.
       Dvs: int
@@ -315,7 +319,8 @@ module BattleMon =
     let ofSpecies (species: BaseStats) (level: int) (moves: MoveData list) : BattleMon =
         let maxHp = calcHp species.Hp level
 
-        { Species = species
+        { PersistentId = None
+          Species = species
           Level = level
           Dvs = 0
           MaxHp = maxHp

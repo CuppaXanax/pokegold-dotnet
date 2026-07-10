@@ -138,7 +138,8 @@ let ``PartyScene STATS pushes a child scene (transition is Push)`` () =
 [<Fact>]
 let ``PartyScene SWITCH swaps slots 0 and 2 in onChange PlayerState`` () =
     let mutable updated: PlayerState option = None
-    let scene = PartyScene(Content(), makePlayer (), fun p -> updated <- Some p)
+    let original = makePlayer ()
+    let scene = PartyScene(Content(), original, fun p -> updated <- Some p)
 
     openActionMenu scene           // action menu for slot 0; cursor at STATS(0)
     pressDown scene |> ignore      // action cursor → SWITCH (index 1)
@@ -155,6 +156,9 @@ let ``PartyScene SWITCH swaps slots 0 and 2 in onChange PlayerState`` () =
     Assert.Equal(158, newParty.[0].SpeciesId)
     Assert.Equal( 16, newParty.[1].SpeciesId)
     Assert.Equal(155, newParty.[2].SpeciesId)
+    Assert.Equal(original.Party.[2].Id, newParty.[0].Id)
+    Assert.Equal(original.Party.[1].Id, newParty.[1].Id)
+    Assert.Equal(original.Party.[0].Id, newParty.[2].Id)
 
 [<Fact>]
 let ``PartyScene SWITCH same slot does not call onChange`` () =

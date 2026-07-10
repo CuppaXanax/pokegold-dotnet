@@ -178,7 +178,8 @@ let ``Azalea nurse heal restores a fainted party`` () =
     Assert.Equal(Some HealParty, reached)
 
     let party =
-        [ { SpeciesId = 1
+        [ { Id = System.Guid.NewGuid()
+            SpeciesId = 1
             Nickname = "A"
             Level = 10
             Exp = 0

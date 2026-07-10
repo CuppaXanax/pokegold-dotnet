@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,302 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,304 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -159,13 +159,14 @@ Runtime trainer and wild construction uses source moves, held-item data, and pre
 
 **Status: 🟡 PARTIAL**
 
-HP and some battle state synchronize, but party members are matched by species and level, which is ambiguous.
+Stable GUID identity now synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Complete persistent stat modeling and battle-state round-tripping remain.
 
 ### Work items
 
-- ⬜ **BAT-005 — Introduce stable party identity.**
+- ✅ **BAT-005 — Introduce stable party identity.**
   - Each persistent Pokémon receives a stable identifier that survives party reordering, boxing, saving, and battle conversion.
   - Acceptance: two same-species, same-level party members leave battle with the correct individual HP, PP, status, held item, EXP, and moves.
+  - Proved by `BAT-005 duplicate party members keep individual battle state`, the conversion/reorder/boxing assertions, and `v6 Pokemon without identity migrate uniquely across persistent storage`.
 
 - ⬜ **BAT-006 — Model all persistent battle stats correctly.**
   - Replace DV-zero/stat-exp-zero derivation with Gen 2 per-stat calculations.

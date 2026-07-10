@@ -133,7 +133,8 @@ let private species name t1 t2 : BaseStats =
 /// A battler with explicit stats (physical == special so the class never changes
 /// the numbers) and neutral stages, for deterministic damage tests.
 let private mon name t1 t2 level hp atk def spd : BattleMon =
-    { Species = species name t1 t2
+    { PersistentId = None
+      Species = species name t1 t2
       Level = level
       Dvs = 0
       MaxHp = hp
@@ -220,10 +221,17 @@ let ``AI avoids immune moves`` () =
     Assert.True(BattleAI.scoreMove user target tackle < 0)
 
 [<Fact>]
-let ``PartyMon conversion preserves held item for battle`` () =
-    let partyMon = { PokeGold.Game.Player.PartyMon.create 155 10 with HeldItem = Some "LEFTOVERS" }
+let ``PartyMon conversion preserves identity PP status and held item for battle`` () =
+    let partyMon =
+        { PokeGold.Game.Player.PartyMon.create 155 10 with
+            Moves = [ 33, 4 ]
+            Status = "PAR"
+            HeldItem = Some "LEFTOVERS" }
     let battleMon = PokeGold.Game.Player.PartyMon.toBattleMon partyMon
 
+    Assert.Equal(Some partyMon.Id, battleMon.PersistentId)
+    Assert.Equal<int list>([ 4 ], battleMon.Pp)
+    Assert.Equal(Paralysis, battleMon.Status)
     Assert.Equal(Some "LEFTOVERS", battleMon.HeldItem)
 
 [<Fact>]
