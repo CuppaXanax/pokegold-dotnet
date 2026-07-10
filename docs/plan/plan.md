@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The latest documentation records **1,288 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,293 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -28,7 +28,7 @@ The following foundations are real and worth preserving:
 
 The main blockers are integration failures:
 
-1. Runtime trainer and wild Pokémon are constructed with Tackle instead of their real moves.
+1. Normal trainer and wild Pokémon are still constructed with Tackle instead of source-derived moves; explicit trainer moves are now preserved and used.
 2. Battle results are not propagated faithfully into persistent party state.
 3. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
 4. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
@@ -96,10 +96,9 @@ Maps, scripts, species, moves, encounters, trainers, items, marts, audio metadat
   - All generated map scripts continue to parse without generic `Unsupported` commands.
   - Command-count pins are updated only with an explanation tied to parser changes.
 
-- 🟡 **FND-004 — Expand schemas that discard gameplay data.**
-  - Current trainer generation retains only species and level, discarding trainer type, held item, DVs, and explicit moves.
-  - Completion criterion: generated trainer records preserve every `TRAINERTYPE_*` field used by `data/trainers/parties.asm`.
-  - Blocks Epic 1.
+- ✅ **FND-004 — Expand schemas that discard gameplay data.**
+  - Generated trainer records preserve party type, held item, all four explicit move slots, and class DVs from source.
+  - Proved by `all source trainer records preserve their declared layout`.
 
 ## Story 0.3 — Core rendering, audio, input, and save infrastructure exists
 
@@ -132,14 +131,15 @@ This epic is the first critical-path blocker. Route extension beyond early Johto
 
 **Status: ⬜ TODO**
 
-Current runtime construction gives every generated trainer Pokémon and wild Pokémon Tackle only.
+Runtime construction now uses source moves and held items for explicit trainer records. Normal/item-only trainer moves and wild Pokémon still use the temporary Tackle path.
 
 ### Work items
 
-- ⬜ **BAT-001 — Preserve complete trainer party data.**
+- ✅ **BAT-001 — Preserve complete trainer party data.**
   - Extend generator and runtime schemas with trainer type, moves, held items, and DVs where supplied.
   - Read `data/trainers/parties.asm` and corresponding trainer-loading assembly first.
   - Acceptance: Falkner, Whitney, Lance, and Red runtime parties exactly match source species, levels, items, and explicit moves.
+  - Proved by `BAT-001 runtime trainer parties match source moves and held items` and `BAT-001 runtime item trainer preserves held item`.
 
 - ⬜ **BAT-002 — Derive moves for normal trainer parties.**
   - For `TRAINERTYPE_NORMAL` and item-only records, derive the correct level-up moveset from generated evolution/learnset data.

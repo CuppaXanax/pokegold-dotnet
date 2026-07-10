@@ -94,15 +94,29 @@ type WildEncounterTable =
       WaterRate: int
       Water: WildSlot list }
 
-/// A single Pokémon in a trainer's party.
+/// Source layout selected by the TRAINERTYPE_* byte in trainer party data.
+[<RequireQualifiedAccess>]
+type TrainerPartyType =
+    | Normal
+    | Moves
+    | Item
+    | ItemMoves
+
+/// A single Pokémon in a trainer's party. ExplicitMoves preserves all four
+/// source slots for TRAINERTYPE_MOVES/ITEM_MOVES, including NO_MOVE entries.
 type TrainerMon =
     { Species: string
-      Level: int }
+      Level: int
+      HeldItem: string option
+      ExplicitMoves: string list }
 
 /// A trainer's full data.
 type TrainerData =
     { Group: string
       Id: int
       Name: string
+      PartyType: TrainerPartyType
       Party: TrainerMon list
-      BaseReward: int }
+      BaseReward: int
+      /// Packed Attack/Defense/Speed/Special DVs shared by this trainer class.
+      Dvs: int }

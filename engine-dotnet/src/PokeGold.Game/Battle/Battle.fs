@@ -546,7 +546,7 @@ module Battle =
             | Some itemId ->
                 match Items.byId |> Map.tryFind itemId with
                 | Some item ->
-                    let consumeWith updated =
+                    let consumeWith (updated: BattleMon) =
                         { updated with HeldItem = None }, [ $"{m.Species.Name} ate {item.Name}!" ]
 
                     match item.HeldEffect, m.Status, m.Volatile.Confusion with

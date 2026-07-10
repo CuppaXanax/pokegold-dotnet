@@ -1,5 +1,8 @@
 # Victory Plan — from "all milestones landed" to a playable all-badges run
 
+> Historical route-focused handoff. `plan.md` is the current completion plan and
+> source of truth for status and execution order.
+
 This is the **handoff document** for finishing the port. It assumes the milestone plan
 (`plan.md`, M0–M25) is complete — it is — and describes only what remains between today's
 state and **victory**: a fresh save that can be played, glitchlessly, through **all 16
@@ -10,12 +13,14 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-06-28:** 1288/1288 tests green. The script-VM golden path is verified
+**State as of 2026-07-09:** 1293/1293 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
-251 Pokédex species. The remaining risk is concentrated in extending Workstream A into the
-full Red route.
+251 Pokédex species as a static source inventory, not as a runtime completion proof. Explicit
+trainer moves and held items now reach runtime battles; the remaining critical path starts
+with normal/wild party construction and persistent battle progression before extending the
+continuous Red route.
 
 ---
 

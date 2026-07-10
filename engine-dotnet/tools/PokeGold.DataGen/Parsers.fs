@@ -448,12 +448,15 @@ module Parsers =
 
     type TrainerMon =
         { Species: string
-          Level: int }
+          Level: int
+          HeldItem: string option
+          ExplicitMoves: string list }
 
     type TrainerEntry =
         { Group: string
           Id: int
           Name: string
+          PartyType: string
           Party: TrainerMon list
           BaseReward: int }
 
@@ -476,12 +479,34 @@ module Parsers =
                 |> Array.map (fun t -> t.Trim())
                 |> Array.filter (fun t -> t <> "")
 
-            if tokens.Length < 2 then
-                None
-            else
-                Some
-                    { Species = tokens.[1]
-                      Level = int tokens.[0] }
+            let expectedFields, hasItem, hasMoves =
+                match trainerType with
+                | "TRAINERTYPE_NORMAL" -> 2, false, false
+                | "TRAINERTYPE_MOVES" -> 6, false, true
+                | "TRAINERTYPE_ITEM" -> 3, true, false
+                | "TRAINERTYPE_ITEM_MOVES" -> 7, true, true
+                | other -> failwithf "Unknown trainer party type '%s' in line: %s" other raw
+
+            if tokens.Length <> expectedFields then
+                failwithf
+                    "Trainer party row for %s has %d fields; expected %d: %s"
+                    trainerType
+                    tokens.Length
+                    expectedFields
+                    raw
+
+            let itemIndex = 2
+            let movesIndex = if hasItem then 3 else 2
+
+            Some
+                { Species = tokens.[1]
+                  Level = int tokens.[0]
+                  HeldItem = if hasItem then Some tokens.[itemIndex] else None
+                  ExplicitMoves =
+                    if hasMoves then
+                        tokens.[movesIndex .. movesIndex + 3] |> Array.toList
+                    else
+                        [] }
 
     let trainers : TrainerEntry list =
         let lines = Repo.readText("data/trainers/parties.asm").Split('\n')
@@ -498,6 +523,7 @@ module Parsers =
                     { Group = currentGroupClass
                       Id = currentId
                       Name = currentTrainerName
+                      PartyType = currentTrainerType
                       Party = List.ofSeq party
                       BaseReward = 0 }
 
@@ -589,6 +615,23 @@ module Parsers =
 
         flush ()
         Map.ofList (List.ofSeq result)
+
+    let trainerDvs : Map<string, int> =
+        let dvRx =
+            Regex(@"^\s*dn\s+(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*;\s*([A-Za-z0-9_]+)\s*$")
+
+        [ for raw in Repo.readText("data/trainers/dvs.asm").Split('\n') do
+              let m = dvRx.Match raw
+
+              if m.Success then
+                  let attack = int m.Groups.[1].Value
+                  let defense = int m.Groups.[2].Value
+                  let speed = int m.Groups.[3].Value
+                  let special = int m.Groups.[4].Value
+                  let trainerClass = normalizeTrainerClass m.Groups.[5].Value
+                  let packed = (attack <<< 12) ||| (defense <<< 8) ||| (speed <<< 4) ||| special
+                  yield trainerClass, packed ]
+        |> Map.ofList
 
     // --- Wild encounters ------------------------------------------------------
 

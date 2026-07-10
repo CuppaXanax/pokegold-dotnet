@@ -1049,7 +1049,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     trainer.Party
                     |> List.map (fun tm ->
                         match Map.tryFind tm.Species Species.all with
-                        | Some stats -> BattleMon.ofSpecies stats tm.Level [ Moves.byName "TACKLE" ]
+                        | Some stats ->
+                            let moves =
+                                match tm.ExplicitMoves with
+                                | [] -> [ Moves.byName "TACKLE" ]
+                                | explicitMoves ->
+                                    explicitMoves
+                                    |> List.filter (fun move -> move <> "NO_MOVE")
+                                    |> List.map Moves.byName
+
+                            { BattleMon.ofSpecies stats tm.Level moves with
+                                HeldItem = tm.HeldItem }
                         | None -> BattleMon.ofSpecies (Species.byName "PIDGEY") tm.Level [ Moves.byName "TACKLE" ])
                 | None -> [ BattleMon.ofSpecies (Species.byName "PIDGEY") 5 [ Moves.byName "TACKLE" ] ]
             | None ->

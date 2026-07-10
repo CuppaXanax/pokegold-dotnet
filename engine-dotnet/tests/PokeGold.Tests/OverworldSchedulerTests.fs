@@ -386,6 +386,89 @@ let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
     Assert.True(scene.DebugPlayer.Money > 1000, "trainer battle should award prize money")
 
 [<Fact>]
+let ``BAT-001 runtime trainer parties match source moves and held items`` () =
+    let expectedParties =
+        [ "FALKNER",
+          [ "PIDGEY", 7, None, [ "TACKLE"; "MUD_SLAP" ]
+            "PIDGEOTTO", 9, None, [ "TACKLE"; "MUD_SLAP"; "GUST" ] ]
+          "WHITNEY",
+          [ "CLEFAIRY", 18, None, [ "DOUBLESLAP"; "MIMIC"; "ENCORE"; "METRONOME" ]
+            "MILTANK", 20, None, [ "ROLLOUT"; "ATTRACT"; "STOMP"; "MILK_DRINK" ] ]
+          "CHAMPION",
+          [ "GYARADOS", 44, None, [ "FLAIL"; "RAIN_DANCE"; "SURF"; "HYPER_BEAM" ]
+            "DRAGONITE", 47, None, [ "THUNDER_WAVE"; "TWISTER"; "THUNDER"; "HYPER_BEAM" ]
+            "DRAGONITE", 47, None, [ "THUNDER_WAVE"; "TWISTER"; "BLIZZARD"; "HYPER_BEAM" ]
+            "AERODACTYL", 46, None, [ "WING_ATTACK"; "ANCIENTPOWER"; "ROCK_SLIDE"; "HYPER_BEAM" ]
+            "CHARIZARD", 46, None, [ "FLAMETHROWER"; "WING_ATTACK"; "SLASH"; "HYPER_BEAM" ]
+            "DRAGONITE", 50, None, [ "FIRE_BLAST"; "SAFEGUARD"; "OUTRAGE"; "HYPER_BEAM" ] ]
+          "RED",
+          [ "PIKACHU", 81, None, [ "CHARM"; "QUICK_ATTACK"; "THUNDERBOLT"; "THUNDER" ]
+            "ESPEON", 73, None, [ "MUD_SLAP"; "REFLECT"; "SWIFT"; "PSYCHIC_M" ]
+            "SNORLAX", 75, None, [ "AMNESIA"; "SNORE"; "REST"; "BODY_SLAM" ]
+            "VENUSAUR", 77, None, [ "SUNNY_DAY"; "GIGA_DRAIN"; "SYNTHESIS"; "SOLARBEAM" ]
+            "CHARIZARD", 77, None, [ "FLAMETHROWER"; "WING_ATTACK"; "SLASH"; "FIRE_SPIN" ]
+            "BLASTOISE", 77, None, [ "RAIN_DANCE"; "SURF"; "BLIZZARD"; "WHIRLPOOL" ] ] ]
+
+    let content = Content()
+    let tackle = Moves.byName "TACKLE"
+    let playerMon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 50 with
+            Moves = [ moveId "TACKLE", tackle.Pp ] }
+
+    for group, expected in expectedParties do
+        let state =
+            scriptedScene
+                content
+                "NewBarkTown"
+                5
+                5
+                Down
+                $"{group}BattleScene"
+                [| Loadtrainer(group, "1"); Startbattle; End |]
+        let scene = OverworldScene(content, SilentSound(), state)
+        scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ playerMon ] })
+
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? BattleScene as battle) ->
+            let actual =
+                battle.CurrentState.EnemyTeam
+                |> List.map (fun mon ->
+                    mon.Species.Name,
+                    mon.Level,
+                    mon.HeldItem,
+                    (mon.Moves |> List.map (fun move -> move.Name)))
+
+            Assert.Equal<(string * int * string option * string list) list>(expected, actual)
+        | transition -> failwithf "expected %s battle scene, got %A" group transition
+
+[<Fact>]
+let ``BAT-001 runtime item trainer preserves held item`` () =
+    let content = Content()
+    let tackle = Moves.byName "TACKLE"
+    let playerMon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 50 with
+            Moves = [ moveId "TACKLE", tackle.Pp ] }
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ItemTrainerBattleScene"
+            [| Loadtrainer("POKEFANM", "1"); Startbattle; End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ playerMon ] })
+
+    match (scene :> Scene).Update Buttons.none with
+    | Push (:? BattleScene as battle) ->
+        let raichu = Assert.Single(battle.CurrentState.EnemyTeam)
+        Assert.Equal("RAICHU", raichu.Species.Name)
+        Assert.Equal(14, raichu.Level)
+        Assert.Equal(Some "BERRY", raichu.HeldItem)
+    | transition -> failwithf "expected item trainer battle scene, got %A" transition
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =

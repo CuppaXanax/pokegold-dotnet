@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-06-28.
+Last updated: 2026-07-09.
 
 ## Current goal
 
@@ -12,9 +12,7 @@ invariants, without shortcut flag setup.
 
 ## Current known-good systems
 
-The existing plan docs state that the core milestone work has landed and that
-`docs\plan\victory-plan.md` recorded 993/993 tests green as of 2026-06-11.
-Known-good areas documented there include:
+The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 - F# platform-free game library plus MonoGame DesktopGL host.
 - Direct repository source-asset/data pipeline with build-time generated F#
@@ -28,21 +26,27 @@ Known-good areas documented there include:
   acquisition, and asserts `RuntimeInvariants.assertHold` across the trace.
 - Build-time map script generation expands Goldenrod Underground `ugdoor_def` /
   `changeugdoor` macros without generic `Unsupported` script commands.
+- Generated trainer data preserves all 495 source party layouts, held items,
+  explicit move slots, and class DVs. Runtime Falkner, Whitney, Lance, and Red
+  parties use their source species, levels, and explicit moves.
 - Battle, party, bag, storage, save/load, audio, menu, field-move, encounter,
   evolution, trading, breeding, Pokedex, and conformance-ledger tests.
-- Pokédex obtainability has an automated all-251 proof over generated
-  encounters/scripts, evolutions, breeding, roamers, fishing, headbutt, bug
-  contest, swarms, the documented offline trade terminal, and built-in event
-  unlocks.
-- Current validation: `dotnet build .\src\PokeGold.Game`, `dotnet test
-  .\tests\PokeGold.Tests` (1288/1288), and `dotnet build
-  .\src\PokeGold.Host` are green from `engine-dotnet`.
+- Pokédex obtainability has a static 251-species source inventory. This is data
+  coverage, not yet a player-facing runtime acquisition proof.
+- Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
+  .\tests\PokeGold.Tests` (1293/1293) are green from `engine-dotnet`.
+- `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
+  its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
 ## Current known gaps
 
 - The public engineering gate is still the full fresh-save route proof through
   the real runtime; the no-shortcuts test currently proves only the opening
   route prefix through Elm's starter gift.
+- Normal/item-only trainer moves, wild moves and attributes, persistent party
+  identity, progression, and blackout semantics remain battle critical-path work.
+- One persistent runtime save has not yet acquired all 251 species through
+  playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
   target, and unusual menuing, losses, alternate starters, and detours may expose
   more issues.
@@ -55,11 +59,10 @@ Known-good areas documented there include:
 
 ## Next high-value tasks
 
-1. Extend the no-shortcuts victory test from the Elm starter prefix toward
-   Cherrygrove, Violet, and the rest of the Red route with
-   `RuntimeInvariants.assertHold` on every frame.
-2. Fix runtime failures found by that route in movement, collision, warps,
-   connections, coord triggers, NPC triggers, battle transitions, and save/load.
+1. Complete BAT-002 through BAT-019: source-derived opponent moves, wild
+   construction, stable party identity, progression, evolution, and blackout.
+2. Complete route-required overworld and script semantics, then extend the
+   no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
    source.
 4. After the route gate is proven, update public docs with the exact command,

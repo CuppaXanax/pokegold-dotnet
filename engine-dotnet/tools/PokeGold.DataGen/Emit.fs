@@ -275,15 +275,43 @@ module Emit =
         sb.AppendLine("        Map.ofList [") |> ignore
 
         for trainer in Parsers.trainers do
-            let reward = Parsers.trainerRewards |> Map.tryFind trainer.Group |> Option.defaultValue 0
+            let reward =
+                Parsers.trainerRewards
+                |> Map.tryFind trainer.Group
+                |> Option.defaultWith (fun () -> failwithf "Missing trainer attributes for %s" trainer.Group)
+            let dvs =
+                Parsers.trainerDvs
+                |> Map.tryFind trainer.Group
+                |> Option.defaultWith (fun () -> failwithf "Missing trainer DVs for %s" trainer.Group)
+            let partyType =
+                match trainer.PartyType with
+                | "TRAINERTYPE_NORMAL" -> "TrainerPartyType.Normal"
+                | "TRAINERTYPE_MOVES" -> "TrainerPartyType.Moves"
+                | "TRAINERTYPE_ITEM" -> "TrainerPartyType.Item"
+                | "TRAINERTYPE_ITEM_MOVES" -> "TrainerPartyType.ItemMoves"
+                | other -> failwithf "Unknown trainer party type '%s'" other
             let party =
                 trainer.Party
-                |> List.map (fun mon -> sprintf "            { Species = \"%s\"; Level = %d }" mon.Species mon.Level)
+                |> List.map (fun mon ->
+                    let heldItem =
+                        mon.HeldItem
+                        |> Option.map (sprintf "Some \"%s\"")
+                        |> Option.defaultValue "None"
+                    let moves =
+                        mon.ExplicitMoves
+                        |> List.map (sprintf "\"%s\"")
+                        |> String.concat "; "
+                    sprintf
+                        "            { Species = \"%s\"; Level = %d; HeldItem = %s; ExplicitMoves = [ %s ] }"
+                        mon.Species
+                        mon.Level
+                        heldItem
+                        moves)
                 |> String.concat ";\n"
 
-            sb.AppendLine(sprintf "            ((\"%s\", %d), { Group = \"%s\"; Id = %d; Name = \"%s\"; Party = [" trainer.Group trainer.Id trainer.Group trainer.Id trainer.Name) |> ignore
+            sb.AppendLine(sprintf "            ((\"%s\", %d), { Group = \"%s\"; Id = %d; Name = \"%s\"; PartyType = %s; Party = [" trainer.Group trainer.Id trainer.Group trainer.Id trainer.Name partyType) |> ignore
             sb.AppendLine(party) |> ignore
-            sb.AppendLine(sprintf "            ]; BaseReward = %d })" reward) |> ignore
+            sb.AppendLine(sprintf "            ]; BaseReward = %d; Dvs = 0x%04X })" reward dvs) |> ignore
 
         sb.AppendLine("        ]") |> ignore
         sb.AppendLine() |> ignore

@@ -251,6 +251,7 @@
     <GameDataInput Include="$(RepoRoot)data\wild\kanto_water.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\parties.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\attributes.asm" />
+    <GameDataInput Include="$(RepoRoot)data\trainers\dvs.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
