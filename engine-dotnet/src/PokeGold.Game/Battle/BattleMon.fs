@@ -45,6 +45,15 @@ type CalculatedStats =
       SpAttack: int
       SpDefense: int }
 
+/// Canonical player-party state carried beside mutable/temporary battle form.
+type PersistentBattleData =
+    { Species: BaseStats
+      Stats: CalculatedStats
+      Moves: (MoveData * int) list
+      Exp: int
+      StatExp: StatExperience
+      Friendship: int }
+
 /// Per-battle volatile status flags that reset on switch-out.
 /// M13.0 defined the data shape; M13.4 added Mist/CantEscape and implements
 /// confusion, flinch, leech seed, trap/wrap, substitute, focus energy, mist,
@@ -183,6 +192,8 @@ type BattleMon =
     { /// Stable identity when this battler came from persistent player storage.
       /// Wild and trainer battlers have no persistent identity.
       PersistentId: Guid option
+      Persistent: PersistentBattleData option
+      MovesAreTransformed: bool
       Species: BaseStats
       Level: int
       /// Packed Attack/Defense/Speed/Special DVs from the persistent or wild mon.
@@ -319,7 +330,66 @@ module BattleMon =
         if index < 0 || index >= m.Pp.Length then m
         else
             let pp' = m.Pp |> List.mapi (fun i pp -> if i = index then max 0 (pp - 1) else pp)
-            { m with Pp = pp' }
+            let persistent =
+                m.Persistent
+                |> Option.map (fun p ->
+                    let moves =
+                        p.Moves
+                        |> List.mapi (fun i (move, pp) ->
+                            if i = index
+                               && not m.MovesAreTransformed
+                               && i < m.Moves.Length
+                               && m.Moves.[i].Name = move.Name then
+                                move, max 0 (pp - 1)
+                            else
+                                move, pp)
+                    { p with Moves = moves })
+            { m with Pp = pp'; Persistent = persistent }
+
+    let persistentMoveSlots (m: BattleMon) : (MoveData * int) list =
+        match m.Persistent with
+        | None -> List.zip m.Moves m.Pp
+        | Some persistent when m.MovesAreTransformed -> persistent.Moves
+        | Some persistent ->
+            persistent.Moves
+            |> List.mapi (fun i (move, pp) ->
+                if i < m.Moves.Length && i < m.Pp.Length && m.Moves.[i].Name = move.Name then
+                    move, m.Pp.[i]
+                else
+                    move, pp)
+
+    let persistMoveReplacement index move pp (m: BattleMon) : BattleMon =
+        let persistent =
+            m.Persistent
+            |> Option.map (fun p ->
+                { p with
+                    Moves =
+                        p.Moves
+                        |> List.mapi (fun i slot -> if i = index then move, pp else slot) })
+        { m with Persistent = persistent }
+
+    let friendship (m: BattleMon) =
+        m.Persistent |> Option.map (fun p -> p.Friendship) |> Option.defaultValue 0
+
+    /// Switching reloads the party record, discarding Transform/Mimic battle form.
+    let restorePersistentForm (m: BattleMon) : BattleMon =
+        match m.Persistent with
+        | None -> m
+        | Some persistent ->
+            let slots = persistentMoveSlots m
+            let persistent = { persistent with Moves = slots }
+            { m with
+                Persistent = Some persistent
+                MovesAreTransformed = false
+                Species = persistent.Species
+                MaxHp = persistent.Stats.MaxHp
+                Attack = persistent.Stats.Attack
+                Defense = persistent.Stats.Defense
+                Speed = persistent.Stats.Speed
+                SpAttack = persistent.Stats.SpAttack
+                SpDefense = persistent.Stats.SpDefense
+                Moves = slots |> List.map fst
+                Pp = slots |> List.map snd }
 
     let attackDv dvs = (dvs >>> 12) &&& 0xf
     let defenseDv dvs = (dvs >>> 8) &&& 0xf
@@ -375,6 +445,8 @@ module BattleMon =
         let stats = calculateStats species level dvs statExp
 
         { PersistentId = None
+          Persistent = None
+          MovesAreTransformed = false
           Species = species
           Level = level
           Dvs = dvs

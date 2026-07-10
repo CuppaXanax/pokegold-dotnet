@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,306 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,309 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -101,7 +101,7 @@ Maps, scripts, species, moves, encounters, trainers, items, marts, audio metadat
 
 ## Story 0.3 — Core rendering, audio, input, and save infrastructure exists
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 The systems work, but full-game breadth and exact restoration are not yet proven.
 
@@ -159,7 +159,7 @@ Runtime trainer and wild construction uses source moves, held-item data, and pre
 
 **Status: 🟡 PARTIAL**
 
-Stable GUID identity synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Packed DVs and five-field stat experience now calculate all six stats exactly; complete battle-state round-tripping remains.
+Stable GUID identity synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Packed DVs and five-field stat experience calculate all six stats exactly. Canonical moves/PP, items, status including sleep count, EXP/stat-EXP carriers, level, and friendship now round-trip by identity while Transform/Mimic state is discarded and Sketch persists.
 
 ### Work items
 
@@ -175,9 +175,10 @@ Stable GUID identity synchronizes duplicate species/level party members exactly 
   - Acceptance: worked source-based examples cover all six stats and level-up stat changes.
   - Proved by `BAT-006 packed DVs and five stat experience words determine all six stats`, stat-exp rounding boundaries, save round-trip coverage, and v7 scalar migration.
 
-- ⬜ **BAT-007 — Round-trip complete battle state.**
+- ✅ **BAT-007 — Round-trip complete battle state.**
   - Synchronize current HP, status, PP, held-item changes, transformed/copied move cleanup, EXP, level, stats, and friendship as applicable.
   - Acceptance: switching and fainting multiple same-species party members cannot corrupt another member.
+  - Proved by `BAT-007 switching and fainting identical members round-trips by identity`, `BAT-007 temporary copied moves clean up while Sketch persists`, and the persistent sleep/friendship conversion test. Per-defeat award policy remains correctly scoped to BAT-008–BAT-010.
 
 ## Story 1.3 — Multi-Pokémon trainer battles award correct progression
 

@@ -989,6 +989,7 @@ module Effects =
             else
                 let transformed =
                     { user with
+                        MovesAreTransformed = true
                         Species = ctx.Foe.Species
                         Attack = ctx.Foe.Attack
                         Defense = ctx.Foe.Defense
@@ -1105,6 +1106,7 @@ module Effects =
                             Moves = ctx.User.Moves |> List.mapi (fun i move -> if i = index then copied else move)
                             Pp = ctx.User.Pp |> List.mapi (fun i pp -> if i = index then copied.Pp else pp)
                             Volatile = { ctx.User.Volatile with LastMove = None; LastCounterMove = None } }
+                        |> BattleMon.persistMoveReplacement index copied copied.Pp
 
                 { ctx with User = user; Messages = ctx.Messages @ [ $"{ctx.User.Species.Name} sketched {copied.Name}!" ] }
 

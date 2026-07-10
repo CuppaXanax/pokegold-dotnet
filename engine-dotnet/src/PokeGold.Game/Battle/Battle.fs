@@ -391,7 +391,7 @@ module Battle =
                   FuryCutterCount = 0
                   RolloutCount = 0
                   DefenseCurlUsed = user.Volatile.Curled
-                  Friendship = 0
+                  Friendship = BattleMon.friendship user
                   UserIsPlayer = userIsPlayer
                   PlayerSide = battle.PlayerSide
                   EnemySide = battle.EnemySide
@@ -837,7 +837,7 @@ module Battle =
             team
             |> List.tryFindIndex (BattleMon.isFainted >> not)
             |> Option.map (fun index ->
-                let mon = team.[index]
+                let mon = BattleMon.restorePersistentForm team.[index]
                 let reordered =
                     mon
                     :: (team
@@ -880,9 +880,10 @@ module Battle =
                 { m with Pp = pp'; HeldItem = None }, [ $"{m.Species.Name}'s held item restored PP!" ]
 
     let private clearSwitchVolatile (m: BattleMon) =
-        { m with Volatile = VolatileStatus.empty }
+        { BattleMon.restorePersistentForm m with Volatile = VolatileStatus.empty }
 
     let private batonPassTo (source: BattleMon) (target: BattleMon) =
+        let target = BattleMon.restorePersistentForm target
         let nightmare =
             match target.Status with
             | Sleep _ -> source.Volatile.Nightmare
@@ -1202,6 +1203,7 @@ module Battle =
                                             { cleared with
                                                 Moves = user.Moves |> List.mapi (fun i move -> if i = index then copied else move)
                                                 Pp = user.Pp |> List.mapi (fun i pp -> if i = index then copied.Pp else pp) }
+                                            |> BattleMon.persistMoveReplacement index copied copied.Pp
                                         user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; $"{user.Species.Name} sketched {copied.Name}!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, true
                                     | None ->
                                         clearLast user, foe, [ $"{user.Species.Name} used {moveToUse.Name}!"; "It didn't affect the target!" ], rng, playerSide, enemySide, weatherTimer, weatherType, 0, false
@@ -1618,13 +1620,15 @@ module Battle =
             let target = s.PlayerTeam.[teamIndex]
             if BattleMon.isFainted target then s
             else
+                let incoming = clearSwitchVolatile target
+                let outgoing = clearSwitchVolatile s.Player
                 // Swap active mon with the target in the team list
                 let team =
                     s.PlayerTeam |> List.mapi (fun i m ->
-                        if i = 0 then target
-                        elif i = teamIndex then s.Player
+                        if i = 0 then incoming
+                        elif i = teamIndex then outgoing
                         else m)
                 { s with
-                    Player = target
+                    Player = incoming
                     PlayerTeam = team
-                    Messages = [ $"Come back, {s.Player.Species.Name}!"; $"Go, {target.Species.Name}!" ] }
+                    Messages = [ $"Come back, {s.Player.Species.Name}!"; $"Go, {incoming.Species.Name}!" ] }

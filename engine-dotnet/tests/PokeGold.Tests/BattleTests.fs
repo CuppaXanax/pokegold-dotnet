@@ -134,6 +134,8 @@ let private species name t1 t2 : BaseStats =
 /// the numbers) and neutral stages, for deterministic damage tests.
 let private mon name t1 t2 level hp atk def spd : BattleMon =
     { PersistentId = None
+      Persistent = None
+      MovesAreTransformed = false
       Species = species name t1 t2
       Level = level
       Dvs = 0
@@ -266,6 +268,59 @@ let ``BAT-006 packed DVs and five stat experience words determine all six stats`
     Assert.Equal(0, BattleMon.statExpBonus 9)
     Assert.Equal(1, BattleMon.statExpBonus 10)
     Assert.Equal(63, BattleMon.statExpBonus 65535)
+
+[<Fact>]
+let ``BAT-007 temporary copied moves clean up while Sketch persists`` () =
+    let ditto =
+        { PartyMon.create (Species.byName "DITTO").Dex 20 with
+            Moves = [ 144, 10 ] }
+        |> PartyMon.toBattleMon
+        |> BattleMon.deductPp 0
+    let transformed =
+        { ditto with
+            MovesAreTransformed = true
+            Species = Species.byName "SMEARGLE"
+            Moves = [ Moves.byName "SKETCH" ]
+            Pp = [ 1 ] }
+        |> BattleMon.restorePersistentForm
+    Assert.Equal("DITTO", transformed.Species.Name)
+    Assert.Equal<string list>([ "TRANSFORM" ], transformed.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ 9 ], transformed.Pp)
+
+    let mimicUser =
+        { PartyMon.create (Species.byName "MR__MIME").Dex 20 with
+            Moves = [ 102, 10 ] }
+        |> PartyMon.toBattleMon
+        |> BattleMon.deductPp 0
+    let mimicked =
+        { mimicUser with Moves = [ Moves.byName "EMBER" ]; Pp = [ 4 ] }
+        |> BattleMon.restorePersistentForm
+    Assert.Equal<string list>([ "MIMIC" ], mimicked.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ 9 ], mimicked.Pp)
+
+    let sketchUser =
+        { PartyMon.create (Species.byName "SMEARGLE").Dex 20 with
+            Moves = [ 166, 1 ] }
+        |> PartyMon.toBattleMon
+        |> BattleMon.deductPp 0
+    let ember = Moves.byName "EMBER"
+    let sketched =
+        { sketchUser with Moves = [ ember ]; Pp = [ ember.Pp ] }
+        |> BattleMon.persistMoveReplacement 0 ember ember.Pp
+        |> BattleMon.restorePersistentForm
+    Assert.Equal<string list>([ "EMBER" ], sketched.Moves |> List.map (fun move -> move.Name))
+    Assert.Equal<int list>([ ember.Pp ], sketched.Pp)
+
+[<Fact>]
+let ``BAT-007 persistent sleep counter and friendship enter battle exactly`` () =
+    let mon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Status = "SLP:4"
+            Friendship = 173 }
+        |> PartyMon.toBattleMon
+
+    Assert.Equal(Sleep 4, mon.Status)
+    Assert.Equal(173, BattleMon.friendship mon)
 
 [<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =

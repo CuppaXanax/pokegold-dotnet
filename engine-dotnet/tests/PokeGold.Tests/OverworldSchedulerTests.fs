@@ -669,6 +669,85 @@ let ``BAT-005 duplicate party members keep individual battle state`` () =
     Assert.Equal(second.Exp, actualSecond.Exp)
 
 [<Fact>]
+let ``BAT-007 switching and fainting identical members round-trips by identity`` () =
+    let content = Content()
+    let state =
+        scriptedScene content "NewBarkTown" 5 5 Down "RoundTripBattle"
+            [| Loadwildmon("TEDDIURSA", 5); Startbattle; End |]
+    let stats = Species.byName "CYNDAQUIL"
+    let firstStatExp = { Hp = 16; Attack = 25; Defense = 36; Speed = 49; Special = 64 }
+    let secondStatExp = { Hp = 81; Attack = 100; Defense = 121; Speed = 144; Special = 169 }
+    let firstBase =
+        { PartyMon.createWithDvs stats.Dex 20 0x1234 with StatExp = firstStatExp }
+        |> PartyMon.withLevel 20
+    let secondBase =
+        { PartyMon.createWithDvs stats.Dex 20 0xABCD with StatExp = secondStatExp }
+        |> PartyMon.withLevel 20
+    let first =
+        { firstBase with
+            Nickname = "FAINTS"
+            Hp = 1
+            Status = "PSN"
+            Moves = [ moveId "SPLASH", 5 ]
+            HeldItem = Some "ANTIDOTE"
+            Exp = 111
+            Friendship = 80 }
+    let second =
+        { secondBase with
+            Nickname = "FINISHES"
+            Moves = [ moveId "DRAGON_RAGE", 10 ]
+            HeldItem = Some "AWAKENING"
+            Exp = 222
+            Friendship = 120 }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ first; second ] })
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable finalBattle: BattleState option = None
+    while frame < 1500 && stack.Count > 1 do
+        frame <- frame + 1
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        if battle.CurrentState.Outcome.IsSome then finalBattle <- Some battle.CurrentState
+        let snap = battle.RuntimeSnapshot
+        let buttons =
+            if frame % 2 <> 0 then Buttons.none
+            elif snap.MessageActive || not snap.PendingMessages.IsEmpty then { Buttons.none with A = true }
+            elif snap.Mode = "ForcedSwitch" && battle.PartyCursor = 0 then { Buttons.none with Down = true }
+            elif snap.Mode = "ForcedSwitch" then { Buttons.none with A = true }
+            elif snap.Mode = "CommandMenu" then { Buttons.none with A = true }
+            elif snap.Mode = "MoveMenu" then { Buttons.none with A = true }
+            else Buttons.none
+        applyTransition stack ((battle :> Scene).Update buttons)
+
+    Assert.Equal(1, stack.Count)
+    (scene :> Scene).Update Buttons.none |> ignore
+    let battle = finalBattle |> Option.defaultWith (fun () -> failwith "battle never resolved")
+    let finalSecond = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some second.Id)
+    let actualFirst, actualSecond = scene.DebugPlayer.Party.[0], scene.DebugPlayer.Party.[1]
+
+    Assert.Equal(first.Id, actualFirst.Id)
+    Assert.Equal(0, actualFirst.Hp)
+    Assert.Equal("", actualFirst.Status)
+    Assert.Equal<(int * int) list>([ moveId "SPLASH", 4 ], actualFirst.Moves)
+    Assert.Equal(first.HeldItem, actualFirst.HeldItem)
+    Assert.Equal(first.Exp, actualFirst.Exp)
+    Assert.Equal(first.Dvs, actualFirst.Dvs)
+    Assert.Equal(first.StatExp, actualFirst.StatExp)
+    Assert.Equal(first.Friendship, actualFirst.Friendship)
+
+    Assert.Equal(second.Id, actualSecond.Id)
+    Assert.Equal(finalSecond.Hp, actualSecond.Hp)
+    Assert.Equal<(int * int) list>([ moveId "DRAGON_RAGE", 9 ], actualSecond.Moves)
+    Assert.Equal(second.HeldItem, actualSecond.HeldItem)
+    Assert.Equal(second.Exp, actualSecond.Exp)
+    Assert.Equal(second.Dvs, actualSecond.Dvs)
+    Assert.Equal(second.StatExp, actualSecond.StatExp)
+    Assert.Equal(second.Friendship, actualSecond.Friendship)
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =

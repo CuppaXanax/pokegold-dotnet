@@ -14,7 +14,7 @@ type PartyMon =
       Exp: int
       Hp: int                   // current HP (may be < MaxHp or 0 if fainted)
       MaxHp: int
-      Status: string            // "" = none, "PSN", "BRN", "FRZ", "PAR", "SLP"
+      Status: string            // ""/PSN/BRN/FRZ/PAR or SLP:n (legacy SLP accepted)
       Moves: (int * int) list   // (moveId, currentPP) pairs, up to 4
       Dvs: int                  // packed Attack/Defense/Speed/Special nibbles
       StatExp: StatExperience   // five 16-bit HP/Atk/Def/Speed/Special words
@@ -92,6 +92,10 @@ module PartyMon =
             |> List.truncate 4
         let status =
             match mon.Status with
+            | status when status.StartsWith("SLP:") ->
+                match Int32.TryParse(status.Substring(4)) with
+                | true, turns -> Sleep(max 1 (min 7 turns))
+                | _ -> Sleep 1
             | "SLP" -> Sleep 1
             | "PSN" -> Poison
             | "BRN" -> Burn
@@ -101,6 +105,14 @@ module PartyMon =
         let bm = BattleMon.ofSpeciesWithStats species mon.Level (moveSlots |> List.map fst) mon.Dvs mon.StatExp
         { bm with
             PersistentId = Some mon.Id
+            Persistent =
+                Some
+                    { Species = species
+                      Stats = BattleMon.calculateStats species mon.Level mon.Dvs mon.StatExp
+                      Moves = moveSlots
+                      Exp = mon.Exp
+                      StatExp = mon.StatExp
+                      Friendship = mon.Friendship }
             Hp = min mon.Hp bm.MaxHp
             Pp = moveSlots |> List.map snd
             HeldItem = mon.HeldItem

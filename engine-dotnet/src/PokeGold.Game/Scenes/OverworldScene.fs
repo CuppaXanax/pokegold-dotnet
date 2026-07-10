@@ -961,7 +961,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         let statusCode (status: StatusCondition) : string =
             match status with
             | Healthy -> ""
-            | Sleep _ -> "SLP"
+            | Sleep turns -> $"SLP:{max 1 (min 7 turns)}"
             | Poison -> "PSN"
             | BadPoison _ -> "PSN"
             | Burn -> "BRN"
@@ -969,16 +969,27 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | Paralysis -> "PAR"
 
         let syncPartyMon (partyMon: PartyMon) (battleMon: BattleMon) : PartyMon =
+            let exp, statExp, friendship =
+                match battleMon.Persistent with
+                | Some persistent -> persistent.Exp, persistent.StatExp, persistent.Friendship
+                | None -> partyMon.Exp, partyMon.StatExp, partyMon.Friendship
+            let maxHp = PartyMon.deriveMaxHpWith partyMon.SpeciesId battleMon.Level partyMon.Dvs statExp
+            let moves =
+                BattleMon.persistentMoveSlots battleMon
+                |> List.choose (fun (move, pp) ->
+                    MovesData.byIndex
+                    |> Array.tryFindIndex (fun candidate -> candidate.Name = move.Name)
+                    |> Option.map (fun moveId -> moveId, pp))
             { partyMon with
                 Hp = max 0 battleMon.Hp
-                MaxHp = battleMon.MaxHp
-                Status = statusCode battleMon.Status
+                MaxHp = maxHp
+                Status = if battleMon.Hp <= 0 then "" else statusCode battleMon.Status
                 HeldItem = battleMon.HeldItem
-                Moves =
-                    partyMon.Moves
-                    |> List.mapi (fun i (moveId, oldPp) ->
-                        let pp = battleMon.Pp |> List.tryItem i |> Option.defaultValue oldPp
-                        moveId, pp) }
+                Moves = moves
+                Level = battleMon.Level
+                Exp = exp
+                StatExp = statExp
+                Friendship = friendship }
 
         let syncedParty =
             player.Party
@@ -996,7 +1007,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         let statusCode (status: StatusCondition) : string =
             match status with
             | Healthy -> ""
-            | Sleep _ -> "SLP"
+            | Sleep turns -> $"SLP:{max 1 (min 7 turns)}"
             | Poison -> "PSN"
             | BadPoison _ -> "PSN"
             | Burn -> "BRN"
