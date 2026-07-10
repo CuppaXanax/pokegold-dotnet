@@ -24,6 +24,27 @@ type Gender =
     | Genderless
     | Unknown
 
+/// The five 16-bit stat-experience words in a Gen 2 Pokémon record. Special is
+/// shared by Special Attack and Special Defense.
+type StatExperience =
+    { Hp: int
+      Attack: int
+      Defense: int
+      Speed: int
+      Special: int }
+
+module StatExperience =
+    let zero = { Hp = 0; Attack = 0; Defense = 0; Speed = 0; Special = 0 }
+    let uniform value = { Hp = value; Attack = value; Defense = value; Speed = value; Special = value }
+
+type CalculatedStats =
+    { MaxHp: int
+      Attack: int
+      Defense: int
+      Speed: int
+      SpAttack: int
+      SpDefense: int }
+
 /// Per-battle volatile status flags that reset on switch-out.
 /// M13.0 defined the data shape; M13.4 added Mist/CantEscape and implements
 /// confusion, flinch, leech seed, trap/wrap, substitute, focus energy, mist,
@@ -300,11 +321,45 @@ module BattleMon =
             let pp' = m.Pp |> List.mapi (fun i pp -> if i = index then max 0 (pp - 1) else pp)
             { m with Pp = pp' }
 
-    // The Gen-2 stat formula with DV = 0 and stat experience = 0 (see
-    // engine/pokemon/move_mon.asm CalcMonStatC): the (2*Base*Level/100) core
-    // plus Level + 10 for HP, or + 5 for every other stat.
-    
-    /// Gen-2 stat formula core (DV=0, stat exp=0).
+    let attackDv dvs = (dvs >>> 12) &&& 0xf
+    let defenseDv dvs = (dvs >>> 8) &&& 0xf
+    let speedDv dvs = (dvs >>> 4) &&& 0xf
+    let specialDv dvs = dvs &&& 0xf
+
+    let hpDv dvs =
+        ((attackDv dvs &&& 1) <<< 3)
+        ||| ((defenseDv dvs &&& 1) <<< 2)
+        ||| ((speedDv dvs &&& 1) <<< 1)
+        ||| (specialDv dvs &&& 1)
+
+    /// CalcMonStatC increments until root² >= stat exp, caps at 255, then /4.
+    let statExpBonus statExp =
+        let value = max 0 (min 65535 statExp)
+        let mutable root = 0
+        while root < 255 && root * root < value do
+            root <- root + 1
+        root / 4
+
+    let private calculatedStat baseStat level dv statExp minimum =
+        let pre = 2 * (baseStat + dv) + statExpBonus statExp
+        min 999 (pre * level / 100 + minimum)
+
+    let calcHpWith baseStat level dv statExp =
+        calculatedStat baseStat level dv statExp (level + 10)
+
+    let calcStatWith baseStat level dv statExp =
+        calculatedStat baseStat level dv statExp 5
+
+    let calculateStats (species: BaseStats) level dvs (statExp: StatExperience) : CalculatedStats =
+        let special = specialDv dvs
+        { MaxHp = calcHpWith species.Hp level (hpDv dvs) statExp.Hp
+          Attack = calcStatWith species.Attack level (attackDv dvs) statExp.Attack
+          Defense = calcStatWith species.Defense level (defenseDv dvs) statExp.Defense
+          Speed = calcStatWith species.Speed level (speedDv dvs) statExp.Speed
+          SpAttack = calcStatWith species.SpAttack level special statExp.Special
+          SpDefense = calcStatWith species.SpDefense level special statExp.Special }
+
+    /// Gen-2 stat formula core (DV=0, stat exp=0), retained for transient fixtures.
     let statCore baseStat level = 2 * baseStat * level / 100
 
     /// HP stat formula: core + level + 10.
@@ -316,20 +371,20 @@ module BattleMon =
     /// Build a battler from species data at a level with the given moves,
     /// starting at full HP with neutral stat stages, healthy status, full PP,
     /// and empty volatile flags.
-    let ofSpecies (species: BaseStats) (level: int) (moves: MoveData list) : BattleMon =
-        let maxHp = calcHp species.Hp level
+    let ofSpeciesWithStats (species: BaseStats) (level: int) (moves: MoveData list) dvs statExp : BattleMon =
+        let stats = calculateStats species level dvs statExp
 
         { PersistentId = None
           Species = species
           Level = level
-          Dvs = 0
-          MaxHp = maxHp
-          Hp = maxHp
-          Attack = calcStat species.Attack level
-          Defense = calcStat species.Defense level
-          Speed = calcStat species.Speed level
-          SpAttack = calcStat species.SpAttack level
-          SpDefense = calcStat species.SpDefense level
+          Dvs = dvs
+          MaxHp = stats.MaxHp
+          Hp = stats.MaxHp
+          Attack = stats.Attack
+          Defense = stats.Defense
+          Speed = stats.Speed
+          SpAttack = stats.SpAttack
+          SpDefense = stats.SpDefense
           Moves = moves
           Pp = moves |> List.map (fun m -> m.Pp)
           HeldItem = None
@@ -343,3 +398,6 @@ module BattleMon =
           EvaStage = 0
           Gender = Unknown
           Volatile = VolatileStatus.empty }
+
+    let ofSpecies (species: BaseStats) (level: int) (moves: MoveData list) : BattleMon =
+        ofSpeciesWithStats species level moves 0 StatExperience.zero

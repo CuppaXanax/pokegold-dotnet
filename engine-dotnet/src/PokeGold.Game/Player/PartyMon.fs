@@ -16,8 +16,8 @@ type PartyMon =
       MaxHp: int
       Status: string            // "" = none, "PSN", "BRN", "FRZ", "PAR", "SLP"
       Moves: (int * int) list   // (moveId, currentPP) pairs, up to 4
-      Dvs: int                  // packed DV byte (0..15 each, simplified)
-      StatExp: int              // simplified stat exp (0 for debug)
+      Dvs: int                  // packed Attack/Defense/Speed/Special nibbles
+      StatExp: StatExperience   // five 16-bit HP/Atk/Def/Speed/Special words
       HeldItem: string option   // item constant or None
       OtName: string
       OtId: int
@@ -37,9 +37,14 @@ module PartyMon =
         | Some s -> BattleMon.calcHp s.Hp level
         | None -> 1
 
+    let deriveMaxHpWith (speciesId: int) (level: int) (dvs: int) (statExp: StatExperience) : int =
+        match speciesOf speciesId with
+        | Some s -> (BattleMon.calculateStats s level dvs statExp).MaxHp
+        | None -> 1
+
     /// Build a fresh PartyMon at full HP for the given species and level.
     let createWithDvs (speciesId: int) (level: int) (dvs: int) : PartyMon =
-        let maxHp = deriveMaxHp speciesId level
+        let maxHp = deriveMaxHpWith speciesId level dvs StatExperience.zero
         let name =
             Species.all
             |> Map.tryPick (fun k s -> if s.Dex = speciesId then Some k else None)
@@ -54,7 +59,7 @@ module PartyMon =
           Status = ""
           Moves = []
           Dvs = dvs
-          StatExp = 0
+          StatExp = StatExperience.zero
           HeldItem = None
           OtName = "PLAYER"
           OtId = 0
@@ -62,6 +67,12 @@ module PartyMon =
 
     let create (speciesId: int) (level: int) : PartyMon =
         createWithDvs speciesId level 0
+
+    /// Recalculate level-dependent HP while preserving the current damage deficit.
+    let withLevel (level: int) (mon: PartyMon) : PartyMon =
+        let newMaxHp = deriveMaxHpWith mon.SpeciesId level mon.Dvs mon.StatExp
+        let hpGain = newMaxHp - mon.MaxHp
+        { mon with Level = level; MaxHp = newMaxHp; Hp = max 0 (mon.Hp + hpGain) }
 
     /// Convert a PartyMon to a BattleMon for use in battle (seam for M13/M14).
     /// Move lookup is approximate until M13 wires the full move set.
@@ -87,7 +98,7 @@ module PartyMon =
             | "FRZ" -> Freeze
             | "PAR" -> Paralysis
             | _ -> Healthy
-        let bm = BattleMon.ofSpecies species mon.Level (moveSlots |> List.map fst)
+        let bm = BattleMon.ofSpeciesWithStats species mon.Level (moveSlots |> List.map fst) mon.Dvs mon.StatExp
         { bm with
             PersistentId = Some mon.Id
             Hp = min mon.Hp bm.MaxHp

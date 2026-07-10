@@ -1010,7 +1010,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 idx |> Option.map (fun i -> i, pp))
 
         let captured =
-            { PartyMon.create mon.Species.Dex mon.Level with
+            { PartyMon.createWithDvs mon.Species.Dex mon.Level mon.Dvs with
                 Hp = max 1 mon.Hp
                 MaxHp = mon.MaxHp
                 Status = statusCode mon.Status
@@ -1074,7 +1074,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 MoveLearn.trainerMoveNames tm
                                 |> List.map Moves.byName
 
-                            { BattleMon.ofSpecies stats tm.Level moves with
+                            { BattleMon.ofSpeciesWithStats stats tm.Level moves trainer.Dvs StatExperience.zero with
                                 HeldItem = tm.HeldItem
                                 Dvs = trainer.Dvs
                                 Gender = BattleMon.genderFromDvs stats trainer.Dvs }
@@ -2005,14 +2005,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                         |> Map.tryPick (fun _ stats -> if stats.Dex = lead.SpeciesId then Some stats.GrowthRate else None)
                                         |> Option.defaultValue 0
                                     let newLevel, newExp = Experience.levelAfterExp growthRate lead.Level lead.Exp exp
-                                    let newMaxHp = PartyMon.deriveMaxHp lead.SpeciesId newLevel
-                                    let hpGain = newMaxHp - lead.MaxHp
                                     let updatedLead =
-                                        { lead with
-                                            Level = newLevel
-                                            Exp = newExp
-                                            MaxHp = newMaxHp
-                                            Hp = lead.Hp + hpGain }
+                                        { PartyMon.withLevel newLevel lead with Exp = newExp }
 
                                     let evolvedLead =
                                         if newLevel > lead.Level then

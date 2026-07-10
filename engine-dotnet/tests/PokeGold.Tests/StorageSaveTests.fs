@@ -27,7 +27,9 @@ let ``Storage.empty has no PC items or mail`` () =
 let ``save round-trip preserves a deposited mon in box 3`` () =
     let content = PokeGold.Game.Data.Content()
     let ow = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Down
-    let mon = PartyMon.create 155 5
+    let mon =
+        { PartyMon.create 155 5 with
+            StatExp = { Hp = 1; Attack = 2; Defense = 3; Speed = 4; Special = 5 } }
     let pc =
         { Storage.empty with
             Boxes =
@@ -42,6 +44,7 @@ let ``save round-trip preserves a deposited mon in box 3`` () =
     Assert.Equal(1, p2.Pc.Boxes.[2].Mons.Length)
     Assert.Equal(155, p2.Pc.Boxes.[2].Mons.[0].SpeciesId)
     Assert.Equal(mon.Id, p2.Pc.Boxes.[2].Mons.[0].Id)
+    Assert.Equal(mon.StatExp, p2.Pc.Boxes.[2].Mons.[0].StatExp)
     // Other boxes still empty.
     Assert.Equal(0, p2.Pc.Boxes.[0].Mons.Length)
 
@@ -67,7 +70,7 @@ let ``v6 Pokemon without identity migrate uniquely across persistent storage`` (
         SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
         |> SaveFile.serialize
         |> fun json -> System.Text.RegularExpressions.Regex.Replace(json, "\"Id\": \"[^\"]+\",\\s*", "")
-        |> fun json -> json.Replace("\"Version\": 7", "\"Version\": 6")
+        |> fun json -> json.Replace("\"Version\": 8", "\"Version\": 6")
     let migrated = legacyJson |> SaveFile.deserialize |> Option.get |> SaveData.playerOf
     let ids =
         [ migrated.Party.Head.Id
@@ -76,6 +79,15 @@ let ``v6 Pokemon without identity migrate uniquely across persistent storage`` (
 
     Assert.DoesNotContain(System.Guid.Empty, ids)
     Assert.Equal(3, ids |> Set.ofList |> Set.count)
+
+[<Fact>]
+let ``v7 scalar stat experience migrates into all five source fields`` () =
+    let json =
+        """{"Version":7,"Overworld":{"MapId":"AzaleaTown","CellX":9,"CellY":12,"Facing":"Down"},"Player":{"Party":[{"SpeciesId":155,"Nickname":"CYNDAQUIL","Level":5,"Hp":20,"MaxHp":20,"StatExp":256}],"PocketedBag":{"Items":[],"Balls":[],"KeyItems":[],"TmHm":[]}}}"""
+    let player = json |> SaveFile.deserialize |> Option.get |> SaveData.playerOf
+    let expected = PokeGold.Game.Battle.StatExperience.uniform 256
+
+    Assert.Equal(expected, player.Party.Head.StatExp)
 
 [<Fact>]
 let ``a v3-style save with no Pc field loads with Storage.empty`` () =

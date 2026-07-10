@@ -40,7 +40,7 @@ module Evolution =
             let nickname =
                 if mon.Nickname = oldName then targetSpecies
                 else mon.Nickname
-            let newMaxHp = PartyMon.deriveMaxHp stats.Dex mon.Level
+            let newMaxHp = PartyMon.deriveMaxHpWith stats.Dex mon.Level mon.Dvs mon.StatExp
             let hpGain = newMaxHp - mon.MaxHp
             { mon with
                 SpeciesId = stats.Dex

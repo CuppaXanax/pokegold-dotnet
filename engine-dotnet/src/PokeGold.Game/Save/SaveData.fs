@@ -2,6 +2,7 @@ namespace PokeGold.Game.Save
 
 open System
 open PokeGold.Game.Core
+open PokeGold.Game.Battle
 open PokeGold.Game.Data
 open PokeGold.Game.Overworld
 open PokeGold.Game.Overworld.Script
@@ -44,11 +45,21 @@ type WorldSave =
 type MovesSave = { MoveId: int; Pp: int }
 
 [<CLIMutable>]
+type StatExperienceSave =
+    { Hp: int
+      Attack: int
+      Defense: int
+      Speed: int
+      Special: int }
+
+[<CLIMutable>]
 type PartyMonSave =
     { Id: Guid
       SpeciesId: int; Nickname: string; Level: int; Exp: int
       Hp: int; MaxHp: int; Status: string
-      Moves: MovesSave[]; Dvs: int; StatExp: int
+      Moves: MovesSave[]; Dvs: int
+      StatExp: int // v1-v7 scalar compatibility
+      StatExperience: StatExperienceSave
       HeldItem: string; OtName: string; OtId: int; Friendship: int }
 
 [<CLIMutable>]
@@ -101,7 +112,7 @@ type PlayerSave =
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
 /// v3 saves have a full Player block; v2 saves only have a flat Bag array.
-/// v7 adds native stable identities to persistent Pokemon records.
+/// v7 adds native stable identities; v8 adds five-field stat experience.
 /// The `Version` lets `SaveFile` reject or migrate older shapes.
 [<CLIMutable>]
 type SaveData =
@@ -115,7 +126,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 7
+    let CurrentVersion = 8
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -187,12 +198,19 @@ module SaveData =
         lst |> List.map (fun (i, q) -> { Item = i; Qty = q }) |> List.toArray
 
     // PartyMon conversions
+    let private statExperienceToSave (exp: StatExperience) : StatExperienceSave =
+        { Hp = exp.Hp; Attack = exp.Attack; Defense = exp.Defense; Speed = exp.Speed; Special = exp.Special }
+
+    let private statExperienceOfSave legacy (exp: StatExperienceSave) : StatExperience =
+        if box exp = null then StatExperience.uniform legacy
+        else { Hp = exp.Hp; Attack = exp.Attack; Defense = exp.Defense; Speed = exp.Speed; Special = exp.Special }
+
     let private partyMonToSave (pm: PartyMon) : PartyMonSave =
         { Id = pm.Id
           SpeciesId = pm.SpeciesId; Nickname = pm.Nickname; Level = pm.Level; Exp = pm.Exp
           Hp = pm.Hp; MaxHp = pm.MaxHp; Status = pm.Status
           Moves = pm.Moves |> List.map (fun (mid, pp) -> { MoveId = mid; Pp = pp }) |> List.toArray
-          Dvs = pm.Dvs; StatExp = pm.StatExp
+          Dvs = pm.Dvs; StatExp = 0; StatExperience = statExperienceToSave pm.StatExp
           HeldItem = pm.HeldItem |> Option.defaultValue ""
           OtName = pm.OtName; OtId = pm.OtId; Friendship = pm.Friendship }
 
@@ -202,7 +220,7 @@ module SaveData =
           Level = s.Level; Exp = s.Exp; Hp = s.Hp; MaxHp = s.MaxHp
           Status = nullToEmptyStr s.Status
           Moves = nullToEmpty s.Moves |> Array.map (fun m -> m.MoveId, m.Pp) |> Array.toList
-          Dvs = s.Dvs; StatExp = s.StatExp
+          Dvs = s.Dvs; StatExp = statExperienceOfSave s.StatExp s.StatExperience
           HeldItem = nullToNone s.HeldItem
           OtName = nullToEmptyStr s.OtName; OtId = s.OtId; Friendship = s.Friendship }
 

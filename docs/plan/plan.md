@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,304 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,306 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -159,7 +159,7 @@ Runtime trainer and wild construction uses source moves, held-item data, and pre
 
 **Status: 🟡 PARTIAL**
 
-Stable GUID identity now synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Complete persistent stat modeling and battle-state round-tripping remain.
+Stable GUID identity synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Packed DVs and five-field stat experience now calculate all six stats exactly; complete battle-state round-tripping remains.
 
 ### Work items
 
@@ -168,11 +168,12 @@ Stable GUID identity now synchronizes duplicate species/level party members exac
   - Acceptance: two same-species, same-level party members leave battle with the correct individual HP, PP, status, held item, EXP, and moves.
   - Proved by `BAT-005 duplicate party members keep individual battle state`, the conversion/reorder/boxing assertions, and `v6 Pokemon without identity migrate uniquely across persistent storage`.
 
-- ⬜ **BAT-006 — Model all persistent battle stats correctly.**
+- ✅ **BAT-006 — Model all persistent battle stats correctly.**
   - Replace DV-zero/stat-exp-zero derivation with Gen 2 per-stat calculations.
   - Replace scalar `StatExp` if necessary with the actual per-stat representation.
   - Preserve Attack, Defense, Speed, and Special DVs and HP DV derivation.
   - Acceptance: worked source-based examples cover all six stats and level-up stat changes.
+  - Proved by `BAT-006 packed DVs and five stat experience words determine all six stats`, stat-exp rounding boundaries, save round-trip coverage, and v7 scalar migration.
 
 - ⬜ **BAT-007 — Round-trip complete battle state.**
   - Synchronize current HP, status, PP, held-item changes, transformed/copied move cleanup, EXP, level, stats, and friendship as applicable.

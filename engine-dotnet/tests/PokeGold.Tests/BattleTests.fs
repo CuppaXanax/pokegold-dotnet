@@ -235,6 +235,39 @@ let ``PartyMon conversion preserves identity PP status and held item for battle`
     Assert.Equal(Some "LEFTOVERS", battleMon.HeldItem)
 
 [<Fact>]
+let ``BAT-006 packed DVs and five stat experience words determine all six stats`` () =
+    // CalcMonStatC with Cyndaquil's source base stats, Falkner's packed DVs
+    // dn 9,10,7,7 and independent HP/Atk/Def/Speed/Special experience.
+    let statExp = { Hp = 0; Attack = 16; Defense = 64; Speed = 144; Special = 256 }
+    let partyMon =
+        { PartyMon.createWithDvs (Species.byName "CYNDAQUIL").Dex 20 0x9A77 with
+            Hp = 37
+            StatExp = statExp }
+    let battleMon = PartyMon.toBattleMon partyMon
+
+    Assert.Equal(0x9A77, battleMon.Dvs)
+    Assert.Equal(50, battleMon.MaxHp) // derived HP DV = 11
+    Assert.Equal(29, battleMon.Attack)
+    Assert.Equal(26, battleMon.Defense)
+    Assert.Equal(34, battleMon.Speed)
+    Assert.Equal(32, battleMon.SpAttack)
+    Assert.Equal(28, battleMon.SpDefense)
+
+    let leveled = PartyMon.withLevel 21 partyMon
+    let level21 = PartyMon.toBattleMon leveled
+    Assert.Equal(39, leveled.Hp) // source preserves damage by adding MaxHP delta
+    Assert.Equal(52, level21.MaxHp)
+    Assert.Equal(30, level21.Attack)
+    Assert.Equal(27, level21.Defense)
+    Assert.Equal(35, level21.Speed)
+    Assert.Equal(33, level21.SpAttack)
+    Assert.Equal(29, level21.SpDefense)
+
+    Assert.Equal(0, BattleMon.statExpBonus 9)
+    Assert.Equal(1, BattleMon.statExpBonus 10)
+    Assert.Equal(63, BattleMon.statExpBonus 65535)
+
+[<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =
     let splash = Moves.byName "SPLASH"
     let player =

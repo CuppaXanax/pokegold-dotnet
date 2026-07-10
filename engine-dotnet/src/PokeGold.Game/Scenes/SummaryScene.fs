@@ -7,7 +7,7 @@ open PokeGold.Game.Player
 open PokeGold.Game.Render
 open PokeGold.Game.Ui
 
-/// Derived base stats for a PartyMon (DV=0, SE=0) — exposed for unit testing.
+/// Derived stats for a persistent PartyMon — exposed for unit testing.
 type SummaryStats =
     { Atk: int
       Def: int
@@ -22,16 +22,17 @@ module Summary =
     let private speciesOf (speciesId: int) =
         Species.all |> Map.tryPick (fun _ s -> if s.Dex = speciesId then Some s else None)
 
-    /// Derive base stats for a PartyMon at its current level (DV=0, SE=0).
+    /// Derive all stats from base stats, packed DVs, and five stat-exp words.
     let statsOf (mon: PartyMon) : SummaryStats =
         match speciesOf mon.SpeciesId with
         | Some s ->
-            { Atk  = BattleMon.calcStat s.Attack    mon.Level
-              Def  = BattleMon.calcStat s.Defense   mon.Level
-              Spd  = BattleMon.calcStat s.Speed     mon.Level
-              SpA  = BattleMon.calcStat s.SpAttack  mon.Level
-              SpD  = BattleMon.calcStat s.SpDefense mon.Level
-              MaxHp = BattleMon.calcHp  s.Hp        mon.Level }
+            let stats = BattleMon.calculateStats s mon.Level mon.Dvs mon.StatExp
+            { Atk = stats.Attack
+              Def = stats.Defense
+              Spd = stats.Speed
+              SpA = stats.SpAttack
+              SpD = stats.SpDefense
+              MaxHp = stats.MaxHp }
         | None ->
             { Atk = 5; Def = 5; Spd = 5; SpA = 5; SpD = 5; MaxHp = 1 }
 

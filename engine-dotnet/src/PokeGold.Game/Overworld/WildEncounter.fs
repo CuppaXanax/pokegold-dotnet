@@ -112,9 +112,8 @@ module WildOpponent =
             MoveLearn.startingMoveNames species.Name level
             |> List.map Moves.byName
 
-        { BattleMon.ofSpecies species level moves with
+        { BattleMon.ofSpeciesWithStats species level moves dvs StatExperience.zero with
             HeldItem = heldItem
-            Dvs = dvs
             Gender = genderFromDvs species dvs }
 
 /// Wild encounter trigger logic.
