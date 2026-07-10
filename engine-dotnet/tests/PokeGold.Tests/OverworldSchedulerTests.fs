@@ -469,6 +469,46 @@ let ``BAT-001 runtime item trainer preserves held item`` () =
     | transition -> failwithf "expected item trainer battle scene, got %A" transition
 
 [<Fact>]
+let ``BAT-002 runtime derives normal and item moves while preserving explicit moves`` () =
+    let cases =
+        [ "BUG_CATCHER",
+          [ [ "TACKLE"; "STRING_SHOT" ]
+            [ "TACKLE"; "STRING_SHOT" ] ]
+          "FALKNER",
+          [ [ "TACKLE"; "MUD_SLAP" ]
+            [ "TACKLE"; "MUD_SLAP"; "GUST" ] ]
+          "POKEFANM",
+          [ [ "THUNDERSHOCK"; "TAIL_WHIP"; "QUICK_ATTACK"; "THUNDERBOLT" ] ] ]
+
+    let content = Content()
+    let tackle = Moves.byName "TACKLE"
+    let playerMon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 50 with
+            Moves = [ moveId "TACKLE", tackle.Pp ] }
+
+    for group, expectedMoves in cases do
+        let state =
+            scriptedScene
+                content
+                "NewBarkTown"
+                5
+                5
+                Down
+                $"{group}MovesBattleScene"
+                [| Loadtrainer(group, "1"); Startbattle; End |]
+        let scene = OverworldScene(content, SilentSound(), state)
+        scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ playerMon ] })
+
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? BattleScene as battle) ->
+            let actualMoves =
+                battle.CurrentState.EnemyTeam
+                |> List.map (fun mon -> mon.Moves |> List.map (fun move -> move.Name))
+
+            Assert.Equal<string list list>(expectedMoves, actualMoves)
+        | transition -> failwithf "expected %s battle scene, got %A" group transition
+
+[<Fact>]
 let ``wild battle runtime catches Pokemon with Master Ball`` () =
     let content = Content()
     let state =

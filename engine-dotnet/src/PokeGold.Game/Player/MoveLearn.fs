@@ -5,6 +5,33 @@ open PokeGold.Game.Data
 /// Move learning on level-up.
 module MoveLearn =
 
+    /// Reproduce engine/pokemon/evolve.asm::FillMoves for a newly generated mon.
+    /// Learnset entries are consumed in source order through the current level;
+    /// duplicates already in the four slots are skipped and overflow forgets
+    /// the oldest move.
+    let startingMoveNames (speciesName: string) (level: int) : string list =
+        let data =
+            EvosAttacksAccess.forSpecies speciesName
+            |> Option.defaultWith (fun () -> invalidArg (nameof speciesName) $"Unknown species learnset: {speciesName}")
+
+        data.Learnset
+        |> List.takeWhile (fun entry -> entry.Level <= level)
+        |> List.fold (fun moves entry ->
+            if List.contains entry.Move moves then
+                moves
+            elif moves.Length < 4 then
+                moves @ [ entry.Move ]
+            else
+                List.tail moves @ [ entry.Move ]) []
+
+    /// Resolve a generated trainer party row to its meaningful move names.
+    /// Explicit TRAINERTYPE_MOVES/ITEM_MOVES slots override FillMoves and retain
+    /// source order; NO_MOVE slots do not become battle commands.
+    let trainerMoveNames (mon: TrainerMon) : string list =
+        match mon.ExplicitMoves with
+        | [] -> startingMoveNames mon.Species mon.Level
+        | explicitMoves -> explicitMoves |> List.filter (fun move -> move <> "NO_MOVE")
+
     /// Get moves a species learns at a specific level.
     let movesAtLevel (speciesName: string) (level: int) : string list =
         match EvosAttacksAccess.forSpecies speciesName with
@@ -50,24 +77,15 @@ module MoveLearn =
         let speciesName =
             Species.all
             |> Map.tryPick (fun name stats -> if stats.Dex = mon.SpeciesId then Some name else None)
-            |> Option.defaultValue ""
 
-        match EvosAttacksAccess.forSpecies speciesName with
+        match speciesName with
         | None -> mon
-        | Some data ->
-            let eligible =
-                data.Learnset
-                |> List.filter (fun entry -> entry.Level <= mon.Level)
-                |> List.rev
-                |> List.truncate 4
-                |> List.rev
-
+        | Some name ->
             let moves =
-                eligible
-                |> List.choose (fun entry ->
-                    MovesData.byIndex
-                    |> Array.tryFindIndex (fun move -> move.Name = entry.Move)
-                    |> Option.map (fun idx -> idx, MovesData.byIndex.[idx].Pp))
+                startingMoveNames name mon.Level
+                |> List.map (fun moveName ->
+                    let idx = MovesData.byIndex |> Array.findIndex (fun move -> move.Name = moveName)
+                    idx, MovesData.byIndex.[idx].Pp)
 
             { mon with Moves = moves }
 

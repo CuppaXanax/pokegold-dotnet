@@ -37,3 +37,30 @@ let ``seedStartingMoves gives Cyndaquil TACKLE and LEER at level 5`` () =
     Assert.True(seeded.Moves.Length > 0, "should have starting moves")
     Assert.True(hasMove "TACKLE", "should include TACKLE")
     Assert.True(hasMove "LEER", "should include LEER")
+
+[<Fact>]
+let ``BAT-002 source starting moves skip duplicates and retain the latest four`` () =
+    Assert.Equal<string list>(
+        [ "QUICK_ATTACK"; "HYPER_FANG"; "FOCUS_ENERGY"; "PURSUIT" ],
+        MoveLearn.startingMoveNames "RATTATA" 27)
+
+    Assert.Equal<string list>([ "HARDEN" ], MoveLearn.startingMoveNames "METAPOD" 7)
+
+[<Fact>]
+let ``BAT-002 synthetic item plus moves trainer keeps explicit source slots`` () =
+    let trainer : TrainerData =
+        { Group = "SYNTHETIC"
+          Id = 1
+          Name = "SYNTHETIC"
+          PartyType = TrainerPartyType.ItemMoves
+          Party =
+            [ { Species = "RAICHU"
+                Level = 14
+                HeldItem = Some "BERRY"
+                ExplicitMoves = [ "THUNDER_WAVE"; "QUICK_ATTACK"; "NO_MOVE"; "NO_MOVE" ] } ]
+          BaseReward = 1
+          Dvs = 0x8888 }
+
+    Assert.Equal<string list>(
+        [ "THUNDER_WAVE"; "QUICK_ATTACK" ],
+        MoveLearn.trainerMoveNames trainer.Party.Head)

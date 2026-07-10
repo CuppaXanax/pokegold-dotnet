@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,293 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,296 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -28,7 +28,7 @@ The following foundations are real and worth preserving:
 
 The main blockers are integration failures:
 
-1. Normal trainer and wild Pokémon are still constructed with Tackle instead of source-derived moves; explicit trainer moves are now preserved and used.
+1. Wild Pokémon are still constructed with Tackle instead of source-derived moves and attributes; trainer moves now follow their source party type.
 2. Battle results are not propagated faithfully into persistent party state.
 3. EXP, stat growth, move learning, evolution, and loss/blackout behavior are not route-ready.
 4. All A1–A21 route legs depend heavily on debug warps or direct state mutation.
@@ -131,7 +131,7 @@ This epic is the first critical-path blocker. Route extension beyond early Johto
 
 **Status: ⬜ TODO**
 
-Runtime construction now uses source moves and held items for explicit trainer records. Normal/item-only trainer moves and wild Pokémon still use the temporary Tackle path.
+Runtime trainer construction now uses explicit moves where supplied and source-derived current-species learnsets for normal/item-only records. Wild Pokémon still use the temporary Tackle path.
 
 ### Work items
 
@@ -141,9 +141,10 @@ Runtime construction now uses source moves and held items for explicit trainer r
   - Acceptance: Falkner, Whitney, Lance, and Red runtime parties exactly match source species, levels, items, and explicit moves.
   - Proved by `BAT-001 runtime trainer parties match source moves and held items` and `BAT-001 runtime item trainer preserves held item`.
 
-- ⬜ **BAT-002 — Derive moves for normal trainer parties.**
+- ✅ **BAT-002 — Derive moves for normal trainer parties.**
   - For `TRAINERTYPE_NORMAL` and item-only records, derive the correct level-up moveset from generated evolution/learnset data.
   - Acceptance: tests cover a normal trainer, a moves trainer, an item trainer, and an item-plus-moves trainer.
+  - Proved by `BAT-002 runtime derives normal and item moves while preserving explicit moves`, `BAT-002 source starting moves skip duplicates and retain the latest four`, and the synthetic `BAT-002 synthetic item plus moves trainer keeps explicit source slots` because Gold has no `TRAINERTYPE_ITEM_MOVES` record.
 
 - ⬜ **BAT-003 — Give wild Pokémon authentic moves and generated attributes.**
   - Wild Pokémon receive their source-appropriate level-up moves, DVs, held item chances, and encounter attributes.
