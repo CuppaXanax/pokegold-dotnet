@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1309/1309) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1310/1310) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -52,7 +52,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   survive battle/storage/save; and persistent stats now use packed DVs plus five
   source stat-exp words. Identity-safe battle round-tripping now preserves canonical
   moves/PP, items, sleep counters, progression carriers, and friendship while cleaning
-  up Transform/Mimic. Per-defeat progression and blackout remain critical-path work.
+  up Transform/Mimic. The battle engine now emits ordered per-defeat participant,
+  EXP Share, modifier, and stat-yield events; applying those awards and blackout
+  remain critical-path work.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -67,8 +69,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-008 through BAT-019: emit per-defeat progression, then finish
-   EXP/stat EXP, level processing, evolution, rewards, and blackout.
+1. Complete BAT-009 through BAT-019: apply per-defeat EXP/stat EXP, then finish
+   level processing, evolution, rewards, and blackout.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

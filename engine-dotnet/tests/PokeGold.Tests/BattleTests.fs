@@ -323,6 +323,67 @@ let ``BAT-007 persistent sleep counter and friendship enter battle exactly`` () 
     Assert.Equal(173, BattleMon.friendship mon)
 
 [<Fact>]
+let ``BAT-008 records exact ordered progression events for every enemy defeat`` () =
+    let id (n: int) = System.Guid.Parse("00000000-0000-0000-0000-" + n.ToString("000000000000"))
+    let dragonRage = Moves.byName "DRAGON_RAGE"
+    let splash = Moves.byName "SPLASH"
+    let player name persistentId item =
+        { mon name (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            PersistentId = Some persistentId
+            Moves = [ dragonRage ]
+            Pp = [ dragonRage.Pp ]
+            HeldItem = item }
+    let enemy name level =
+        { mon name (ty "NORMAL") (ty "NORMAL") level 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let p1Id, p2Id, shareId = id 1, id 2, id 3
+    let p1 = player "P1" p1Id None
+    let p2 = player "P2" p2Id (Some "EXP_SHARE")
+    let share = player "SHARE" shareId (Some "EXP_SHARE")
+    let e1, e2 = enemy "E1" 10, enemy "E2" 20
+    let trainer =
+        { Group = "TEST"
+          Id = "1"
+          Name = "EVENTS"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = Some 1 }
+
+    let first = Battle.createTrainer trainer [ p1; p2; share ] [ e1; e2 ] 0u |> Battle.switchMon 1 |> Battle.chooseMove 0
+    let p1Index = first.PlayerTeam |> List.findIndex (fun participant -> participant.PersistentId = Some p1Id)
+    let finished = first |> Battle.switchMon p1Index |> Battle.chooseMove 0
+
+    Assert.Equal(2, finished.DefeatEvents.Length)
+    let firstEvent, secondEvent = finished.DefeatEvents.[0], finished.DefeatEvents.[1]
+    Assert.Equal("E1", firstEvent.DefeatedSpecies.Name)
+    Assert.Equal(10, firstEvent.DefeatedLevel)
+    Assert.Equal<Set<System.Guid>>(Set.ofList [ p1Id; p2Id ], firstEvent.ParticipantIds)
+    Assert.Equal<Set<System.Guid>>(Set.ofList [ p2Id; shareId ], firstEvent.ExpShareHolderIds)
+    Assert.True(firstEvent.IsTrainer)
+    Assert.Equal(
+        { Hp = e1.Species.Hp
+          Attack = e1.Species.Attack
+          Defense = e1.Species.Defense
+          Speed = e1.Species.Speed
+          Special = e1.Species.SpAttack },
+        firstEvent.StatExpYield)
+
+    Assert.Equal("E2", secondEvent.DefeatedSpecies.Name)
+    Assert.Equal(20, secondEvent.DefeatedLevel)
+    Assert.Equal<Set<System.Guid>>(Set.ofList [ p1Id; p2Id ], secondEvent.ParticipantIds)
+    Assert.Equal<Set<System.Guid>>(Set.ofList [ p2Id; shareId ], secondEvent.ExpShareHolderIds)
+    Assert.True(secondEvent.IsTrainer)
+    Assert.Equal(Some Win, finished.Outcome)
+    Assert.Equal<DefeatProgressionEvent list>(finished.DefeatEvents, (Battle.chooseMove 0 finished).DefeatEvents)
+
+    let wild = Battle.createTeam [ p1 ] [ e1 ] 0u |> Battle.chooseMove 0
+    Assert.Single(wild.DefeatEvents) |> ignore
+    Assert.False(wild.DefeatEvents.Head.IsTrainer)
+
+[<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =
     let splash = Moves.byName "SPLASH"
     let player =

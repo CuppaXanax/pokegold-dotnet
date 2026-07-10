@@ -13,7 +13,7 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-10:** 1309/1309 tests green. The script-VM golden path is verified
+**State as of 2026-07-10:** 1310/1310 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
@@ -23,8 +23,9 @@ battles, while missing or invalid production staging fails visibly instead of cr
 substitute. Stable identities now carry each Pokémon through battle, reordering, boxing,
 and save migration. Persistent stats now use source packed DVs, derived HP DV, and five
 stat-experience words, and complete identity-safe battle state now round-trips while
-temporary copied forms are discarded. The remaining critical path starts with per-defeat
-progression events before extending the continuous Red route.
+temporary copied forms are discarded. Battles now emit immutable ordered per-defeat
+progression events with exact participants and reward inputs. The remaining critical path
+starts with applying those awards before extending the continuous Red route.
 
 ---
 

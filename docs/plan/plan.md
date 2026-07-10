@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,309 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,310 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -184,13 +184,14 @@ Stable GUID identity synchronizes duplicate species/level party members exactly 
 
 **Status: 🟡 PARTIAL**
 
-Multi-mon battles run, but overworld integration grants one EXP award based on one representative opponent and only updates the persistent lead.
+Multi-mon battles now emit ordered per-defeat events containing the exact defeated enemy, living participants, EXP Share/Lucky Egg holders, trainer modifier, and five-field stat yield. Overworld integration still grants one representative award to the persistent lead until BAT-009 consumes those events.
 
 ### Work items
 
-- ⬜ **BAT-008 — Emit per-defeat progression events from the battle engine.**
+- ✅ **BAT-008 — Emit per-defeat progression events from the battle engine.**
   - Record each defeated enemy, participants, EXP Share participation, trainer modifier, stat EXP, and relevant rewards.
   - Do not recompute the battle history from staged script data after the battle.
+  - Proved by `BAT-008 records exact ordered progression events for every enemy defeat`, including two trainer defeats across switches, independent overlapping EXP Share membership, exact stat yields, wild/trainer modifiers, event order, and terminal de-duplication.
 
 - ⬜ **BAT-009 — Award EXP and stat EXP per defeated enemy.**
   - Each eligible persistent party member receives the correct share.
