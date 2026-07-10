@@ -1,52 +1,47 @@
-# Kickoff prompt for iteration agents
+Complete the full plan in docs\plan\plan.md. The terminal goal: a 100%-completable Pokémon Gold — one continuous fresh-save run defeats Red, and one persistent save owns all 251 species. No debug warps, no state mutations, no Tackle-only trainers, no silent no-ops on required commands.
 
-Paste the block below as the opening prompt for any agent session working toward victory.
-It deliberately defers all detail to `victory-plan.md` so the prompt never goes stale.
+Execute epics in critical-path order:
+
+## Epic 1 — Battle and Progression Integrity (BAT-001 → BAT-024)
+
+Authentic trainer/wild parties from .asm source data. Stable party identity. Full Gen 2 stat calculations. Per-enemy EXP/stat-exp/money. All TM/HM/evolution methods. Move learning decisions. Blackout on loss that aborts victory-only scripts.
+
+## Epic 2 — Overworld and Script Integrity (OVR-001 → OVR-011, SCR-001 → SCR-010, UI-001 → UI-003)
+
+Complete all seven field moves as real map actions. Wire fishing rods, headbutt, and item use from menus to overworld. Implement required script command stubs. Fix battle-script control flow (win/loss/catch/run). Finish daycare, breeding foundations, contest, Game Corner, and side-system specials.
+
+## Epic 3 — Continuous Fresh-Save Route (RTE-001 → RTE-004, Stories 3.2 → 3.22)
+
+Convert staged A1–A21 component tests into one persistent StartNewGame checkpoint chain. Each checkpoint must earn its state through real input — no debug warp, set-event, set-flag, set-scene, seed-party, seed-item, or auto-win. Extend one checkpoint at a time: starter → Falkner → Bugsy → ... → Lance → Kanto badges → Red → credits.
+
+## Epic 4 — All 251 Species (DEX-001 → DEX-024)
+
+Runtime acquisition recipes for every species. Playable fishing, headbutt, breeding/hatching, roamers, contest catches, offline trade terminal with version imports and trade evolutions. One long-lived save reaches DexOwn = 251 without debug mutation. Oak/Diploma fires.
+
+## Epic 5 — Release Quality (REL-001 → REL-015)
+
+Burn down all RequiredFor100Percent stubs. Close sprite gaps. Replace generic battle-animation tints with visible primitives. Test all three starters, losses, retries, save interruptions, capacity edge cases. Align README and status docs. Validate clean-machine desktop build.
 
 ---
 
-You are working on the Pokémon Gold F# port in this repository. Your single source of
-truth is `docs/plan/victory-plan.md` — read it fully before doing anything else. It
-contains the architecture map, build commands, conventions, and the ordered work items.
+## Execution protocol
 
-Work this loop, one item at a time:
+For each work item:
+1. Read the relevant .asm source (the behavioral spec).
+2. Write a failing test at the highest applicable verification layer.
+3. Implement the smallest conformance fix.
+4. Run `dotnet test .\tests\PokeGold.Tests`.
+5. Commit with a focused message naming the work item (e.g., "BAT-005: stable party identity").
+6. Update docs\plan\plan.md status (⬜ → ✅) only when the proving test passes.
 
-1. Pick the **first incomplete item** in the plan's suggested order (Workstream A legs
-   A1→A21 first, then B1→B12, then C, then D). An item is complete when its row in
-   `victory-plan.md` is prefixed with ✅. Do not skip ahead; do not work two items at once.
-2. Read the disassembly sources the item names (`maps/*.asm`, `engine/**`,
-   `constants/**`) **before** writing code. The disassembly is the spec. Do not implement
-   from general knowledge of Gen 2 — several "well-known facts" are wrong.
-3. Implement the smallest correct change, following the named pattern to copy.
-4. Run the full suite: `cd engine-dotnet && dotnet test tests/PokeGold.Tests`. All green
-   or you are not done.
-5. Update the bookkeeping in the same change: prefix the item's row in `victory-plan.md`
-   with ✅, and move any `ConformanceLedgerTests.fs` entries you implemented (the ledger
-   is enforced by tests, so a stale entry fails the build).
-6. Commit: short imperative subject, explanatory body, one concern per commit,
-   `Co-authored-by:` trailer for yourself.
-7. Go to 1.
+If a work item is already done (test exists and passes without debug setup), mark it ✅ and move on. If partially done, finish it. If blocked by something upstream, note the block in plan.md and skip to the next unblocked item.
 
-Hard rules — violating any of these is worse than making no progress:
+Do not ask for confirmation on local reads, edits, tests, or commits. Do ask before any destructive action, external write, or material scope expansion beyond this plan.
 
-- **Never weaken, delete, or work around a failing assertion to get green.** A failing
-  leg test means the *runtime* has a bug; fix the engine. If you believe the test itself
-  is wrong, prove it from the disassembly source in your write-up and fix it with the
-  citation in the commit body.
-- **Never edit `Data/Generated/*` by hand** — change the parser/DataGen and rebuild. If
-  you change a macro expansion, update the pinned total in `CoverageSweepTests.fs` with a
-  comment explaining the delta.
-- **Never commit a ROM, save file, or build artifact.** `.gitignore` already covers them;
-  do not "fix" that.
-- **Do not build the solution** — `PokeGold.Host.Android` needs the Android SDK. Build
-  `src/PokeGold.Game`, `src/PokeGold.Host`, and the tests individually.
-- **No drive-by refactors.** Touch only what the work item needs. Purity/architecture
-  rework is explicitly out of scope (see the vNext notes in the plan).
-- **Stop conditions** — stop and write up findings (in the item's row of
-  `victory-plan.md`, marked ⚠️ with a short note) instead of grinding, when: you have
-  retried the same failure 3 times; the fix seems to require changing a core seam
-  (`Script.fs` effect types, `SaveData` schema, scene-stack semantics); or two work items
-  appear to contradict each other.
+## Victory gate
 
-Start now: read `docs/plan/victory-plan.md`, state which item you are picking up and why
-it is the first incomplete one, then begin.
+The plan is complete when:
+- `dotnet test` passes with a continuous StartNewGame → Red credits checkpoint chain
+- A separate test reaches DexOwn = 251 from a post-game save using only runtime-playable channels
+- Zero RequiredFor100Percent entries remain StubNoOp or Unknown
+- docs\plan\plan.md shows all items ✅
