@@ -1003,7 +1003,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
         player <-
             { player with
-                Party = BattleProgression.applyEvents battle.DefeatEvents syncedParty }
+                Party = BattleProgression.applyBattle battle.Outcome battle.DefeatEvents syncedParty }
 
     member private _.CaptureBattleMon(mon: BattleMon) =
         let statusCode (status: StatusCondition) : string =

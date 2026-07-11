@@ -198,8 +198,9 @@ Multi-mon battles emit ordered per-defeat events and now consume them into the p
   - Acceptance: a multi-mon trainer battle with switches asserts exact EXP for every participant.
   - Proved by `defeat events distribute exact EXP and stat EXP across overlapping pools` and the runtime identity round-trip test, covering ordered multi-defeat awards, overlapping participant/EXP Share membership, per-stage flooring, trainer/traded/Lucky Egg boosts, Pokérus, and untouched nonrecipients.
 
-- ⬜ **BAT-010 — Process every crossed level.**
+- ✅ **BAT-010 — Process every crossed level.**
   - A large EXP award must process stats, moves, and evolutions for each intermediate level rather than only the final level.
+  - Source conformance recalculates stats once at each tranche's final level, checks moves at every crossed level in ascending order, applies one level-up happiness change per level-changing tranche, and defers at-most-one evolution until victorious cleanup. Proved by `BAT-010 processes every crossed move level and evolves once after a win`, including the loss path retaining earned progression without evolving.
 
 - ⬜ **BAT-011 — Award money and post-battle rewards exactly once.**
   - Trainer payout uses the correct trainer class/base reward and final enemy level.

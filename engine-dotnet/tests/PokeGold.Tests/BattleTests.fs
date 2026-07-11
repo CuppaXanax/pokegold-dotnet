@@ -431,6 +431,40 @@ let ``defeat events distribute exact EXP and stat EXP across overlapping pools``
     Assert.Equal<System.Guid list>([ a.Id; b.Id; c.Id; d.Id ], result |> List.map _.Id)
 
 [<Fact>]
+let ``BAT-010 processes every crossed move level and evolves once after a win`` () =
+    let species = Species.byName "CYNDAQUIL"
+    let startLevel, finalLevel = 10, 20
+    let startExp = Experience.expForLevel species.GrowthRate startLevel
+    let finalExp = Experience.expForLevel species.GrowthRate finalLevel
+    let seeded = PartyMon.create species.Dex startLevel |> MoveLearn.seedStartingMoves
+    let mon = { seeded with Exp = startExp }
+    let defeated = { Species.byName "RATTATA" with BaseExp = finalExp - startExp }
+    let defeatEvent =
+        { DefeatedSpecies = defeated
+          DefeatedLevel = 7
+          StatExpYield = { Hp = 7; Attack = 14; Defense = 21; Speed = 28; Special = 35 }
+          ParticipantIds = Set.singleton mon.Id
+          ExpShareHolderIds = Set.empty
+          LuckyEggHolderIds = Set.empty
+          IsTrainer = false }
+
+    let lost = BattleProgression.applyBattle (Some Lose) [ defeatEvent ] [ mon ] |> List.head
+    let won = BattleProgression.applyBattle (Some Win) [ defeatEvent ] [ mon ] |> List.head
+    let moveNames partyMon = partyMon.Moves |> List.map (fun (id, _) -> MovesData.byIndex.[id].Name)
+
+    Assert.Equal(finalLevel, lost.Level)
+    Assert.Equal(finalExp, lost.Exp)
+    Assert.Equal(species.Dex, lost.SpeciesId)
+    Assert.Contains("EMBER", moveNames lost)
+    Assert.Contains("QUICK_ATTACK", moveNames lost)
+    Assert.Equal((Species.byName "QUILAVA").Dex, won.SpeciesId)
+    Assert.Equal(finalLevel, won.Level)
+    Assert.Equal(mon.Id, won.Id)
+    Assert.Equal({ Hp = 7; Attack = 14; Defense = 21; Speed = 28; Special = 35 }, won.StatExp)
+    Assert.Equal(PartyMon.deriveMaxHpWith won.SpeciesId finalLevel won.Dvs won.StatExp, won.MaxHp)
+    Assert.Equal(won.MaxHp, won.Hp)
+
+[<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =
     let splash = Moves.byName "SPLASH"
     let player =
