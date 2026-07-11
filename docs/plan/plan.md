@@ -212,7 +212,7 @@ Multi-mon battles emit ordered per-defeat events and now consume them into the p
 
 **Status: 🟡 PARTIAL**
 
-Level-up move learning now preserves source order and suspends battle-script resumption for explicit replace/decline decisions. Only TM01–TM09 are mapped.
+Level-up move learning preserves source order and suspends battle-script resumption for explicit replace/decline decisions. All 50 TMs and seven HMs are generated with source compatibility.
 
 ### Work items
 
@@ -222,11 +222,12 @@ Level-up move learning now preserves source order and suspends battle-script res
   - HM deletion remains restricted to the Move Deleter where required.
   - Proved by `BAT-012 queues full-set move decisions in source order without replacing` and `LearnMoveSceneTests`: requests retain stable party identity and level/learnset order, free slots receive full base PP, explicit replacement preserves the chosen slot order, two-stage cancellation preserves all moves/PP, HM choices are rejected, callbacks are one-shot, and the suspended `StartBattle` script resumes only after the ordered queue drains.
 
-- ⬜ **BAT-013 — Support all TM01–TM50 and HM01–HM07.**
+- ✅ **BAT-013 — Support all TM01–TM50 and HM01–HM07.**
   - Generate the TM/HM mapping rather than maintaining a partial handwritten match.
   - Enforce species compatibility.
   - Consume TMs and preserve HMs according to Gold behavior.
   - Acceptance: tests cover TM01, TM10, TM50, an HM, compatible and incompatible species, cancellation, and a full moveset.
+  - Proved by BAT-013 `TmHmTests`, `PackUseGiveTests`, and the shared BAT-012 decision-scene tests. DataGen emits the exact 57-entry source mapping and all 251 species compatibility sets; boundary TMs/HMs, compatible/incompatible and already-known outcomes, chosen-slot replacement/full PP, cancellation preservation, successful-TM consumption, and reusable HMs are covered.
 
 - ⬜ **BAT-014 — Complete all evolution methods.**
   - Level, item, friendship, time-of-day, stat comparison, Tyrogue branches, trade, and trade-with-item paths must work.

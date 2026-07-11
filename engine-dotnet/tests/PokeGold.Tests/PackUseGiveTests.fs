@@ -119,20 +119,20 @@ let ``applyRepel sets step counter and removes item`` () =
 let ``applyTmHm teaches HM without consuming it`` () =
     let player =
         { PlayerStateOps.initial with
-            Party = [ PartyMon.create 155 10 ]
-            Bag = Bag.add "HM_CUT" 1 Bag.empty }
+            Party = [ PartyMon.create (Species.byName "TOTODILE").Dex 10 ]
+            Bag = Bag.add "HM_SURF" 1 Bag.empty }
 
-    match PackUseGive.applyTmHm "HM_CUT" 0 player with
+    match PackUseGive.applyTmHm "HM_SURF" 0 player with
     | Some updated ->
-        Assert.Equal(1, Bag.count "HM_CUT" updated.Bag)
+        Assert.Equal(1, Bag.count "HM_SURF" updated.Bag)
         Assert.True(updated.Party.[0].Moves.Length > player.Party.[0].Moves.Length)
-    | None -> Assert.Fail("HM_CUT should teach CUT")
+    | None -> Assert.Fail("HM_SURF should teach SURF")
 
 [<Fact>]
 let ``applyTmHm consumes TM after teaching it`` () =
     let player =
         { PlayerStateOps.initial with
-            Party = [ PartyMon.create 155 10 ]
+            Party = [ PartyMon.create (Species.byName "PIKACHU").Dex 10 ]
             Bag = Bag.add "TM01" 1 Bag.empty }
 
     match PackUseGive.applyTmHm "TM01" 0 player with

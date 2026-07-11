@@ -2,6 +2,7 @@ namespace PokeGold.Game.Scenes
 
 open PokeGold.Game.Core
 open PokeGold.Game.Data
+open PokeGold.Game.Player
 open PokeGold.Game.Render
 open PokeGold.Game.Ui
 
@@ -34,9 +35,7 @@ type LearnMoveScene(font: Font, nickname: string, newMoveName: string, currentMo
         |> Option.defaultValue (sprintf "MOVE %d" moveId)
 
     let isHm index =
-        match moves |> List.tryItem index |> Option.map moveName with
-        | Some ("CUT" | "FLY" | "SURF" | "STRENGTH" | "FLASH" | "WHIRLPOOL" | "WATERFALL") -> true
-        | _ -> false
+        moves |> List.tryItem index |> Option.map moveName |> Option.exists TmHm.isHmMove
 
     let complete decision =
         if not finished then

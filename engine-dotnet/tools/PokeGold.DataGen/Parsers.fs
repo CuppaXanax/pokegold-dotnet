@@ -168,7 +168,8 @@ module Parsers =
           Item1: string option
           Item2: string option
           GenderRatio: int
-          GrowthRate: int }
+          GrowthRate: int
+          TmHmMoves: string list }
 
     let private dex = AsmConstants.load "constants/pokemon_constants.asm"
     let private idRx = Regex(@"^\s*db\s+([A-Za-z_]\w*)\b")
@@ -177,6 +178,7 @@ module Parsers =
     let private singleIntDbRx = Regex(@"^\s*db\s+(\d+)\s*$")
     let private growthRx = Regex(@"^\s*db\s+(GROWTH_\w+)")
     let private genderRx = Regex(@"^\s*db\s+(GENDER_\w+)\b")
+    let private tmHmRx = Regex(@"^\s*tmhm(?:\s+(.*?))?\s*$")
     let private growthRates =
         Map.ofList [
             "GROWTH_MEDIUM_FAST", 0
@@ -267,6 +269,20 @@ module Parsers =
                 if m.Success then growthRates.TryFind m.Groups.[1].Value else None)
             |> Option.defaultValue 0
 
+        let tmHmMoves =
+            lines
+            |> List.tryPick (fun line ->
+                let m = tmHmRx.Match line
+                if not m.Success then None
+                elif m.Groups.[1].Success then
+                    Some(
+                        m.Groups.[1].Value.Split(',')
+                        |> Array.map (fun move -> move.Trim())
+                        |> Array.filter (System.String.IsNullOrWhiteSpace >> not)
+                        |> Array.toList)
+                else Some [])
+            |> Option.defaultWith (fun () -> failwithf "No tmhm line in %s" file)
+
         { Constant = constant
           Dex = dex.[constant]
           Hp = stats.[0]
@@ -282,7 +298,8 @@ module Parsers =
           Item1 = heldItem item1
           Item2 = heldItem item2
           GenderRatio = genderRatio
-          GrowthRate = growthRate }
+          GrowthRate = growthRate
+          TmHmMoves = tmHmMoves }
 
     /// Every species' base stats, ordered by national dex number.
     let species : Species list =
@@ -290,6 +307,36 @@ module Parsers =
         |> Array.map parseSpecies
         |> Array.sortBy (fun s -> s.Dex)
         |> Array.toList
+
+    // --- TM/HM mappings ----------------------------------------------------
+
+    type TmHmEntry =
+        { Item: string
+          Move: string
+          IsHm: bool }
+
+    let tmHmEntries : TmHmEntry list =
+        let lines = File.ReadAllLines(Repo.path "constants/item_constants.asm")
+        let tmRx = Regex(@"^\s*add_tm\s+([A-Za-z_]\w*)\b")
+        let hmRx = Regex(@"^\s*add_hm\s+([A-Za-z_]\w*)\b")
+        let tms =
+            lines
+            |> Array.choose (fun line ->
+                let m = tmRx.Match line
+                if m.Success then Some m.Groups.[1].Value else None)
+            |> Array.toList
+        let hms =
+            lines
+            |> Array.choose (fun line ->
+                let m = hmRx.Match line
+                if m.Success then Some m.Groups.[1].Value else None)
+            |> Array.toList
+
+        if tms.Length <> 50 then failwithf "Expected 50 add_tm entries, found %d" tms.Length
+        if hms.Length <> 7 then failwithf "Expected 7 add_hm entries, found %d" hms.Length
+
+        [ yield! tms |> List.mapi (fun i move -> { Item = sprintf "TM%02d" (i + 1); Move = move; IsHm = false })
+          yield! hms |> List.mapi (fun i move -> { Item = sprintf "HM%02d" (i + 1); Move = move; IsHm = true }) ]
 
     // --- Evolutions and learnsets ------------------------------------------
 

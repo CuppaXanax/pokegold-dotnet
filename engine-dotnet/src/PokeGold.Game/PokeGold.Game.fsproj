@@ -62,6 +62,7 @@
     <Compile Include="Data\Generated\TypeChart.Generated.fs" />
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
+    <Compile Include="Data\Generated\TmHm.Generated.fs" />
     <Compile Include="Data\Generated\EvosAttacks.Generated.fs" />
     <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
@@ -269,6 +270,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\TmHm.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\EvosAttacks.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />

@@ -143,6 +143,42 @@ module Emit =
         sb.AppendLine("        |]") |> ignore
         sb.ToString()
 
+    let private tmHmFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated TM/HM move mappings and species compatibility.") |> ignore
+        sb.AppendLine("module TmHmData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let moveByItem : Map<string, string> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+        for entry in Parsers.tmHmEntries do
+            sb.AppendLine(sprintf "            (\"%s\", \"%s\")" entry.Item entry.Move) |> ignore
+        sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let hmItems : Set<string> =") |> ignore
+        sb.AppendLine("        set [") |> ignore
+        for entry in Parsers.tmHmEntries |> List.filter _.IsHm do
+            sb.AppendLine(sprintf "            \"%s\"" entry.Item) |> ignore
+        sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let hmMoves : Set<string> =") |> ignore
+        sb.AppendLine("        set [") |> ignore
+        for entry in Parsers.tmHmEntries |> List.filter _.IsHm do
+            sb.AppendLine(sprintf "            \"%s\"" entry.Move) |> ignore
+        sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let compatibleMovesBySpecies : Map<string, Set<string>> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+        for species in Parsers.species do
+            sb.AppendLine(sprintf "            (\"%s\", set [" species.Constant) |> ignore
+            for move in species.TmHmMoves do
+                sb.AppendLine(sprintf "                \"%s\"" move) |> ignore
+            sb.AppendLine("            ])") |> ignore
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private spriteMovementFile() : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -436,6 +472,7 @@ module Emit =
           "Collision.Generated.fs", collisionFile ()
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
+          "TmHm.Generated.fs", tmHmFile ()
           "EvosAttacks.Generated.fs", evosAttacksFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps

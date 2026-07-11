@@ -282,13 +282,34 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                             Push(
                                 PartyScene(content, currentPlayer, onChange,
                                     fun slotIdx ->
-                                        match PackUseGive.applyTmHm id slotIdx currentPlayer with
-                                        | Some newPlayer ->
+                                        let mon = currentPlayer.Party.[slotIdx]
+                                        let commit taughtMon =
+                                            let bag = if TmHm.isHmItem id then currentPlayer.Bag else Bag.remove id 1 currentPlayer.Bag
+                                            let party = currentPlayer.Party |> List.mapi (fun i existing -> if i = slotIdx then taughtMon else existing)
+                                            let newPlayer = { currentPlayer with Party = party; Bag = bag }
                                             currentPlayer <- newPlayer
                                             rebuildMenus newPlayer.Bag
                                             onChange newPlayer
+
+                                        match TmHm.prepare id mon with
+                                        | LearnedImmediately taughtMon ->
+                                            commit taughtMon
                                             Pop
-                                        | None ->
+                                        | NeedsReplacement moveId ->
+                                            let move = MovesData.byIndex.[moveId]
+                                            Replace(
+                                                LearnMoveScene(
+                                                    content.Font,
+                                                    mon.Nickname,
+                                                    move.Name,
+                                                    mon.Moves,
+                                                    fun decision ->
+                                                        match decision with
+                                                        | DeclineMove -> ()
+                                                        | ReplaceMove index -> commit (TmHm.replaceMove moveId index mon)) :> Scene)
+                                        | UnknownTmHm
+                                        | Incompatible
+                                        | AlreadyKnows ->
                                             Pop) :> Scene)
                         else
                             // Deferred: status cures, revives, vitamins, evo stones,
