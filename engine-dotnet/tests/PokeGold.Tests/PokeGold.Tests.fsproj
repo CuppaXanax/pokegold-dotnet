@@ -59,6 +59,7 @@
     <Compile Include="TradingTests.fs" />
     <Compile Include="BreedingTests.fs" />
     <Compile Include="MoveLearnTests.fs" />
+    <Compile Include="LearnMoveSceneTests.fs" />
     <Compile Include="TmHmTests.fs" />
     <Compile Include="StorageSaveTests.fs" />
     <Compile Include="StorageOpsTests.fs" />

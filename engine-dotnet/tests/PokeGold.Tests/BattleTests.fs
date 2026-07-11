@@ -472,21 +472,53 @@ let ``BAT-010 processes every crossed move level and evolves once after a win`` 
           LuckyEggHolderIds = Set.empty
           IsTrainer = false }
 
-    let lost = BattleProgression.applyBattle (Some Lose) [ defeatEvent ] [ mon ] |> List.head
-    let won = BattleProgression.applyBattle (Some Win) [ defeatEvent ] [ mon ] |> List.head
+    let lostResult = BattleProgression.applyBattleWithRequests (Some Lose) [ defeatEvent ] [ mon ]
+    let wonResult = BattleProgression.applyBattleWithRequests (Some Win) [ defeatEvent ] [ mon ]
+    let lost = lostResult.Party.Head
+    let won = wonResult.Party.Head
     let moveNames partyMon = partyMon.Moves |> List.map (fun (id, _) -> MovesData.byIndex.[id].Name)
 
     Assert.Equal(finalLevel, lost.Level)
     Assert.Equal(finalExp, lost.Exp)
     Assert.Equal(species.Dex, lost.SpeciesId)
     Assert.Contains("EMBER", moveNames lost)
-    Assert.Contains("QUICK_ATTACK", moveNames lost)
+    Assert.Equal<string list>([ "QUICK_ATTACK" ], lostResult.PendingMoves |> List.map (fun request -> MovesData.byIndex.[request.MoveId].Name))
+    Assert.Equal<string list>([ "QUICK_ATTACK" ], wonResult.PendingMoves |> List.map (fun request -> MovesData.byIndex.[request.MoveId].Name))
     Assert.Equal((Species.byName "QUILAVA").Dex, won.SpeciesId)
     Assert.Equal(finalLevel, won.Level)
     Assert.Equal(mon.Id, won.Id)
     Assert.Equal({ Hp = 7; Attack = 14; Defense = 21; Speed = 28; Special = 35 }, won.StatExp)
     Assert.Equal(PartyMon.deriveMaxHpWith won.SpeciesId finalLevel won.Dvs won.StatExp, won.MaxHp)
     Assert.Equal(won.MaxHp, won.Hp)
+
+[<Fact>]
+let ``BAT-012 queues full-set move decisions in source order without replacing`` () =
+    let species = Species.byName "BULBASAUR"
+    let moveSlot name pp =
+        MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name), pp
+    let mon =
+        { PartyMon.create species.Dex 14 with
+            Exp = Experience.expForLevel species.GrowthRate 14
+            Moves =
+                [ moveSlot "TACKLE" 1
+                  moveSlot "GROWL" 2
+                  moveSlot "LEECH_SEED" 3
+                  moveSlot "VINE_WHIP" 4 ] }
+    let defeatEvent =
+        { DefeatedSpecies = { Species.byName "IVYSAUR" with BaseExp = 141 }
+          DefeatedLevel = 21
+          StatExpYield = StatExperience.zero
+          ParticipantIds = Set.singleton mon.Id
+          ExpShareHolderIds = Set.empty
+          LuckyEggHolderIds = Set.empty
+          IsTrainer = false }
+
+    let result = BattleProgression.applyBattleWithRequests (Some Win) [ defeatEvent ] [ mon ]
+    let requestNames = result.PendingMoves |> List.map (fun request -> MovesData.byIndex.[request.MoveId].Name)
+    Assert.Equal(15, result.Party.Head.Level)
+    Assert.Equal<(int * int) list>(mon.Moves, result.Party.Head.Moves)
+    Assert.Equal<System.Guid list>([ mon.Id; mon.Id ], result.PendingMoves |> List.map _.MonId)
+    Assert.Equal<string list>([ "POISONPOWDER"; "SLEEP_POWDER" ], requestNames)
 
 [<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =

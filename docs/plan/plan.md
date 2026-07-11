@@ -212,14 +212,15 @@ Multi-mon battles emit ordered per-defeat events and now consume them into the p
 
 **Status: 🟡 PARTIAL**
 
-Level evolution exists, but move learning automatically replaces the weakest move. Only TM01–TM09 are mapped.
+Level-up move learning now preserves source order and suspends battle-script resumption for explicit replace/decline decisions. Only TM01–TM09 are mapped.
 
 ### Work items
 
-- ⬜ **BAT-012 — Add the four-move learning decision flow.**
+- ✅ **BAT-012 — Add the four-move learning decision flow.**
   - When a Pokémon knows four moves, show the real learn/decline/delete decision.
   - Cancellation preserves the old moveset.
   - HM deletion remains restricted to the Move Deleter where required.
+  - Proved by `BAT-012 queues full-set move decisions in source order without replacing` and `LearnMoveSceneTests`: requests retain stable party identity and level/learnset order, free slots receive full base PP, explicit replacement preserves the chosen slot order, two-stage cancellation preserves all moves/PP, HM choices are rejected, callbacks are one-shot, and the suspended `StartBattle` script resumes only after the ordered queue drains.
 
 - ⬜ **BAT-013 — Support all TM01–TM50 and HM01–HM07.**
   - Generate the TM/HM mapping rather than maintaining a partial handwritten match.

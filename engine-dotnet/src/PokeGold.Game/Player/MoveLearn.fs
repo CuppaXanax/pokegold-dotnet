@@ -1,6 +1,11 @@
 namespace PokeGold.Game.Player
 
+open System
 open PokeGold.Game.Data
+
+type LearnMoveRequest =
+    { MonId: Guid
+      MoveId: int }
 
 /// Move learning on level-up.
 module MoveLearn =
@@ -41,9 +46,9 @@ module MoveLearn =
             |> List.choose (fun entry ->
                 if entry.Level = level then Some entry.Move else None)
 
-    /// Try to learn a move by name. If fewer than 4 moves, add it. If 4 moves,
-    /// replace the first move with lowest power (simplified AI).
-    /// Returns the updated moves list.
+    /// Try to learn a move by name. Duplicate moves are ignored and an open
+    /// slot receives the move at full base PP. A full moveset is never changed;
+    /// the player-controlled replacement decision is handled separately.
     let tryLearnMove (moveName: string) (currentMoves: (int * int) list) : (int * int) list =
         match MovesData.byIndex |> Array.tryFindIndex (fun move -> move.Name = moveName) with
         | None -> currentMoves
@@ -55,21 +60,30 @@ module MoveLearn =
             elif currentMoves.Length < 4 then
                 currentMoves @ [ moveIndex, moveData.Pp ]
             else
-                let weakestIndex =
-                    currentMoves
-                    |> List.mapi (fun i (id, _) ->
-                        let power =
-                            if id > 0 && id < MovesData.byIndex.Length then
-                                MovesData.byIndex.[id].Power
-                            else
-                                0
-                        i, power)
-                    |> List.minBy snd
-                    |> fst
-
                 currentMoves
-                |> List.mapi (fun i entry ->
-                    if i = weakestIndex then moveIndex, moveData.Pp else entry)
+
+    /// Apply a level-up move immediately when a slot is open, otherwise emit a
+    /// stable-identity request for the scene layer to resolve.
+    let applyOrRequest (moveName: string) (mon: PartyMon) : PartyMon * LearnMoveRequest option =
+        match MovesData.byIndex |> Array.tryFindIndex (fun move -> move.Name = moveName) with
+        | None -> mon, None
+        | Some moveId when mon.Moves |> List.exists (fun (knownId, _) -> knownId = moveId) -> mon, None
+        | Some moveId when mon.Moves.Length < 4 ->
+            let move = MovesData.byIndex.[moveId]
+            { mon with Moves = mon.Moves @ [ moveId, move.Pp ] }, None
+        | Some moveId -> mon, Some { MonId = mon.Id; MoveId = moveId }
+
+    /// Process every move at the mon's current level in source order.
+    let learnMovesForLevelWithRequests (mon: PartyMon) : PartyMon * LearnMoveRequest list =
+        let speciesName =
+            Species.all
+            |> Map.tryPick (fun name stats -> if stats.Dex = mon.SpeciesId then Some name else None)
+            |> Option.defaultValue ""
+
+        movesAtLevel speciesName mon.Level
+        |> List.fold (fun (current, requests) moveName ->
+            let updated, request = applyOrRequest moveName current
+            updated, requests @ (request |> Option.toList)) (mon, [])
 
     /// Seed a newly created mon's moves from its species learnset.
     /// Gives all moves at or below its current level (up to 4, latest moves preferred).
@@ -92,15 +106,4 @@ module MoveLearn =
     /// Apply level-up move learning to a PartyMon.
     /// Checks the learnset for the mon's species at its current level.
     let learnMovesForLevel (mon: PartyMon) : PartyMon =
-        let speciesName =
-            Species.all
-            |> Map.tryPick (fun name stats -> if stats.Dex = mon.SpeciesId then Some name else None)
-            |> Option.defaultValue ""
-
-        let newMoves = movesAtLevel speciesName mon.Level
-
-        let updatedMoves =
-            newMoves
-            |> List.fold (fun moves moveName -> tryLearnMove moveName moves) mon.Moves
-
-        { mon with Moves = updatedMoves }
+        learnMovesForLevelWithRequests mon |> fst

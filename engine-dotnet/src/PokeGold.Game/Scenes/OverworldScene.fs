@@ -176,6 +176,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     /// The outcome of the most recent battle (set by BattleScene callback).
     let mutable lastBattleOutcome: Outcome option = None
+    /// Ordered level-up move decisions that must finish before StartBattle resumes.
+    let mutable pendingMoveRequests: LearnMoveRequest list = []
     /// Cache of NPC sprites by SPRITE_* constant (None = no art for it).
     let spriteCache = Dictionary<string, Sprite option>()
 
@@ -1001,9 +1003,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 // of PlayerTeam, so records absent from the battle pass through.
                 |> Option.defaultValue partyMon)
 
-        player <-
-            { player with
-                Party = BattleProgression.applyBattle battle.Outcome battle.DefeatEvents syncedParty }
+        let progression =
+            BattleProgression.applyBattleWithRequests battle.Outcome battle.DefeatEvents syncedParty
+        player <- { player with Party = progression.Party }
+        pendingMoveRequests <- progression.PendingMoves
 
         if battle.Outcome = Some Win then
             let trainerPrize =
@@ -1949,6 +1952,36 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             else
 
             match pending with
+            | Some(_, StartBattle) when not pendingMoveRequests.IsEmpty ->
+                let request = pendingMoveRequests.Head
+                pendingMoveRequests <- pendingMoveRequests.Tail
+                match player.Party |> List.tryFindIndex (fun mon -> mon.Id = request.MonId), Moves.tryByIndex request.MoveId with
+                | Some partyIndex, Some move ->
+                    let mon = player.Party.[partyIndex]
+                    if mon.Moves |> List.exists (fun (moveId, _) -> moveId = request.MoveId) then
+                        Stay
+                    elif mon.Moves.Length < 4 then
+                        let learned = { mon with Moves = mon.Moves @ [ request.MoveId, move.Pp ] }
+                        player <- { player with Party = player.Party |> List.mapi (fun i current -> if i = partyIndex then learned else current) }
+                        Stay
+                    else
+                        Push(
+                            LearnMoveScene(
+                                content.Font,
+                                mon.Nickname,
+                                move.Name,
+                                mon.Moves,
+                                fun decision ->
+                                    match decision with
+                                    | DeclineMove -> ()
+                                    | ReplaceMove moveIndex ->
+                                        let current = player.Party.[partyIndex]
+                                        let moves =
+                                            current.Moves
+                                            |> List.mapi (fun i existing -> if i = moveIndex then request.MoveId, move.Pp else existing)
+                                        let updated = { current with Moves = moves }
+                                        player <- { player with Party = player.Party |> List.mapi (fun i existing -> if i = partyIndex then updated else existing) }) :> Scene)
+                | _ -> Stay
             // A pushed child scene popped — resume the suspended script with its result.
             | Some(vm, effect) ->
                 pending <- None

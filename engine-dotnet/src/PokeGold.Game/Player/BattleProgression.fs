@@ -6,6 +6,10 @@ open PokeGold.Game.Data
 /// Applies source-ordered per-defeat arithmetic and level-crossing effects.
 module BattleProgression =
 
+    type ProgressionResult =
+        { Party: Party
+          PendingMoves: LearnMoveRequest list }
+
     let private boostByHalf value = value + value / 2
     let private saturatingAdd value amount = min 65535 (value + amount)
 
@@ -49,50 +53,72 @@ module BattleProgression =
         let newExp = min (Experience.expForLevel rate 100) (awarded.Exp + boosted)
         let newLevel, _ = Experience.levelAfterExp rate awarded.Level awarded.Exp (newExp - awarded.Exp)
         if newLevel = awarded.Level then
-            { awarded with Exp = newExp }
+            { awarded with Exp = newExp }, []
         else
             let leveled =
                 { PartyMon.withLevel newLevel awarded with
                     Exp = newExp
                     Friendship = levelHappiness awarded.Friendship }
             [ awarded.Level + 1 .. newLevel ]
-            |> List.fold (fun current level ->
-                MoveLearn.learnMovesForLevel { current with Level = level }) leveled
-            |> fun current -> { current with Level = newLevel }
+            |> List.fold (fun (current, requests) level ->
+                let updated, levelRequests =
+                    MoveLearn.learnMovesForLevelWithRequests { current with Level = level }
+                updated, requests @ levelRequests) (leveled, [])
+            |> fun (current, requests) -> { current with Level = newLevel }, requests
 
-    let private applyPool baseDivisor recipients (event: DefeatProgressionEvent) (party: Party) =
-        if Set.isEmpty recipients then party
+    let private applyPool baseDivisor recipients (event: DefeatProgressionEvent) (result: ProgressionResult) =
+        if Set.isEmpty recipients then result
         else
             let divisor = baseDivisor * Set.count recipients
             let baseExp = event.DefeatedSpecies.BaseExp / divisor
             let exp = baseExp * event.DefeatedLevel / 7
             let statExp = scaledStatExp divisor event.StatExpYield
-            party
-            |> List.map (fun mon ->
-                if Set.contains mon.Id recipients then addProgression exp statExp event mon
-                else mon)
+            result.Party
+            |> List.fold (fun (party, requests) mon ->
+                if Set.contains mon.Id recipients then
+                    let updated, monRequests = addProgression exp statExp event mon
+                    party @ [ updated ], requests @ monRequests
+                else
+                    party @ [ mon ], requests) ([], result.PendingMoves)
+            |> fun (party, requests) -> { Party = party; PendingMoves = requests }
 
-    let applyEvent (event: DefeatProgressionEvent) (party: Party) : Party =
+    let private applyEventResult (event: DefeatProgressionEvent) (result: ProgressionResult) : ProgressionResult =
         let shareDivisor = if Set.isEmpty event.ExpShareHolderIds then 1 else 2
-        party
+        result
         |> applyPool shareDivisor event.ParticipantIds event
         |> applyPool shareDivisor event.ExpShareHolderIds event
 
+    let applyEventsWithRequests (events: DefeatProgressionEvent list) (party: Party) : ProgressionResult =
+        events
+        |> List.fold (fun current event -> applyEventResult event current)
+            { Party = party; PendingMoves = [] }
+
+    let applyEvent (event: DefeatProgressionEvent) (party: Party) : Party =
+        applyEventsWithRequests [ event ] party |> _.Party
+
     let applyEvents (events: DefeatProgressionEvent list) (party: Party) : Party =
-        events |> List.fold (fun current event -> applyEvent event current) party
+        applyEventsWithRequests events party |> _.Party
 
     /// Gold defers evolution until victorious battle cleanup. A flagged member
     /// is visited once, so it can evolve by at most one stage per battle.
-    let applyBattle outcome (events: DefeatProgressionEvent list) (party: Party) : Party =
-        let progressed = applyEvents events party
+    let applyBattleWithRequests outcome (events: DefeatProgressionEvent list) (party: Party) : ProgressionResult =
+        let progressed = applyEventsWithRequests events party
         if outcome <> Some Win then progressed
         else
             let originalLevels = party |> List.map (fun mon -> mon.Id, mon.Level) |> Map.ofList
-            progressed
-            |> List.map (fun mon ->
+            progressed.Party
+            |> List.fold (fun (mons, requests) mon ->
                 let gainedLevel = Map.tryFind mon.Id originalLevels |> Option.exists (fun level -> mon.Level > level)
-                if not gainedLevel || mon.HeldItem = Some "EVERSTONE" then mon
+                if not gainedLevel || mon.HeldItem = Some "EVERSTONE" then mons @ [ mon ], requests
                 else
                     match Evolution.checkLevelEvolution mon with
-                    | Some target -> Evolution.applyEvolution target mon |> MoveLearn.learnMovesForLevel
-                    | None -> mon)
+                    | Some target ->
+                        let evolved, evolvedRequests =
+                            Evolution.applyEvolution target mon
+                            |> MoveLearn.learnMovesForLevelWithRequests
+                        mons @ [ evolved ], requests @ evolvedRequests
+                    | None -> mons @ [ mon ], requests) ([], progressed.PendingMoves)
+            |> fun (mons, requests) -> { Party = mons; PendingMoves = requests }
+
+    let applyBattle outcome (events: DefeatProgressionEvent list) (party: Party) : Party =
+        applyBattleWithRequests outcome events party |> _.Party

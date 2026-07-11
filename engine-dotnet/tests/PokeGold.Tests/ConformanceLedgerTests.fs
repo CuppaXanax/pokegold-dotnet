@@ -200,6 +200,7 @@ module ConformanceLedger =
           yield entry SceneSurface "ApricornSelectionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 scene test covers disassembly-order picker entries, selection, and cancel."
           yield entry SceneSurface "DayCareScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B2 scene tests cover deposit, withdraw, and egg pickup flows; exact text/level-growth fidelity remains future daycare polish."
           yield entry SceneSurface "MoveDeletionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B3 scene test covers party-pick, move-pick, confirmation, and compaction after deletion."
+          yield entry SceneSurface "LearnMoveScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BAT-012 tests cover explicit slot replacement, two-stage decline confirmation, HM rejection, cancellation, and one-shot decisions."
           yield entry SceneSurface "PokedexScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "D Pokédex tests cover Start-driven type search, caught-only type filtering from data/types/search_types.asm, AREA wild-encounter nests via FindNest data, and front/question-mark dex pic rendering; exact Pokégear town-map nest icons remain future UI polish."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
