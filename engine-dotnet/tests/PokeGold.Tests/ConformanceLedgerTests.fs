@@ -358,7 +358,7 @@ module ConformanceLedger =
           yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "BattleTests cover party-held item propagation and end-of-turn held healing behavior."
             [ "HELD_LEFTOVERS"; "HELD_BERRY" ]
 
-          yield entry ItemHeldEffect "HELD_AMULET_COIN" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Battle reward helper and trainer reward path double prize money when a party mon holds AMULET_COIN."
+          yield entry ItemHeldEffect "HELD_AMULET_COIN" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "BAT-011 runtime settlement and BattleTests prove the sticky source condition: doubling activates only after a holder is sent out and applies to trainer and Pay Day winnings exactly once."
 
           yield! many ItemHeldEffect ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleTests cover special held-item battle mechanics for priority and lethal-hit survival."
             [ "HELD_QUICK_CLAW"; "HELD_FOCUS_BAND" ]

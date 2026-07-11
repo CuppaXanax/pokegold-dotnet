@@ -395,7 +395,14 @@ let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
 
     Assert.Equal(Some "BattleDone", scene.RuntimeSnapshot.LastTextLabel)
     Assert.True(scene.DebugPlayer.Party.[0].Exp > 0, "battle reward should grant EXP")
-    Assert.True(scene.DebugPlayer.Money > 1000, "trainer battle should award prize money")
+    let trainer = Trainers.lookupByName "YOUNGSTER" "JOEY1" |> Option.get
+    let finalEnemyLevel = trainer.Party |> List.last |> fun enemy -> enemy.Level
+    let expectedPrize = Experience.moneyEarned trainer.BaseReward finalEnemyLevel |> Experience.applyAmuletCoin true
+    Assert.Equal(1000 + expectedPrize, scene.DebugPlayer.Money)
+
+    let settledMoney = scene.DebugPlayer.Money
+    for _ in 1..5 do (scene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(settledMoney, scene.DebugPlayer.Money)
 
 [<Fact>]
 let ``BAT-001 runtime trainer parties match source moves and held items`` () =
@@ -773,6 +780,7 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
             Moves = [ moveId "EMBER", ember.Pp ] }
     let player =
         { PlayerStateOps.initial with
+            Money = 777
             Party = [ mon ]
             Bag = Bag.add "MASTER_BALL" 1 Bag.empty }
     let scene = OverworldScene(content, SilentSound(), state, encounterRandom = FixedRandom([ 191; 0xAB; 0xCD ]))
@@ -801,6 +809,7 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
     Assert.Equal(0xABCD, (List.last scene.DebugPlayer.Party).Dvs)
     Assert.Contains(rattataDex, scene.DebugPlayer.DexOwn)
     Assert.Contains(rattataDex, scene.DebugPlayer.DexSeen)
+    Assert.Equal(777, scene.DebugPlayer.Money)
     Assert.Equal(Some "CatchDone", scene.RuntimeSnapshot.LastTextLabel)
 
 [<Fact>]

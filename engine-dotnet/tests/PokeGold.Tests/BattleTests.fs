@@ -99,12 +99,36 @@ let ``EXP gained from trainer battle has 1.5x multiplier`` () =
 
 [<Fact>]
 let ``money earned from trainer`` () =
-    Assert.Equal(25 * 20, Experience.moneyEarned 25 20)
+    Assert.Equal(4 * 25 * 20, Experience.moneyEarned 25 20)
 
 [<Fact>]
 let ``Amulet Coin doubles trainer reward`` () =
-    Assert.Equal(1000, Experience.applyAmuletCoin true (Experience.moneyEarned 25 20))
-    Assert.Equal(500, Experience.applyAmuletCoin false (Experience.moneyEarned 25 20))
+    Assert.Equal(4000, Experience.applyAmuletCoin true (Experience.moneyEarned 25 20))
+    Assert.Equal(2000, Experience.applyAmuletCoin false (Experience.moneyEarned 25 20))
+
+[<Fact>]
+let ``BAT-011 Amulet Coin activates only after its holder is sent out and stays active`` () =
+    let splash = Moves.byName "SPLASH"
+    let lead = { BattleMon.ofSpecies (Species.byName "PIDGEY") 10 [ splash ] with PersistentId = Some(System.Guid.NewGuid()) }
+    let holder =
+        { BattleMon.ofSpecies (Species.byName "RATTATA") 10 [ splash ] with
+            PersistentId = Some(System.Guid.NewGuid())
+            HeldItem = Some "AMULET_COIN" }
+    let foe = BattleMon.ofSpecies (Species.byName "CATERPIE") 5 [ splash ]
+    let initial = Battle.createTeam [ lead; holder ] [ foe ] 0u
+    Assert.False(initial.AmuletCoinActivated)
+    let activated = initial |> Battle.switchMon 1
+    Assert.True(activated.AmuletCoinActivated)
+    Assert.True((activated |> Battle.switchMon 1).AmuletCoinActivated)
+
+[<Fact>]
+let ``BAT-011 Pay Day records level-scaled coins once per successful use`` () =
+    let payDay = Moves.byName "PAY_DAY"
+    let splash = Moves.byName "SPLASH"
+    let user = { BattleMon.ofSpecies (Species.byName "PERSIAN") 50 [ payDay ] with Pp = [ payDay.Pp ] }
+    let foe = { BattleMon.ofSpecies (Species.byName "SNORLAX") 50 [ splash ] with Hp = 500; MaxHp = 500; Pp = [ splash.Pp ] }
+    let after = Battle.create user foe 0u |> Battle.chooseMove 0
+    Assert.Equal(100, after.PayDayMoney)
 
 // --- Damage formula: worked examples (no crit, fixed roll) --------------------
 

@@ -41,6 +41,8 @@ type BattleState =
       EnemyTeam: BattleMon list
       Participants: Set<Guid>
       DefeatEvents: DefeatProgressionEvent list
+      AmuletCoinActivated: bool
+      PayDayMoney: int
       Kind: BattleKind
       Messages: string list
       Outcome: Outcome option
@@ -85,6 +87,8 @@ module Battle =
           EnemyTeam = [ enemy ]
           Participants = activeParticipant player
           DefeatEvents = []
+          AmuletCoinActivated = player.HeldItem = Some "AMULET_COIN"
+          PayDayMoney = 0
           Kind = WildBattle
           Messages = openingMessages WildBattle enemy
           Outcome = None
@@ -103,6 +107,8 @@ module Battle =
           EnemyTeam = enemyTeam
           Participants = activeParticipant player
           DefeatEvents = []
+          AmuletCoinActivated = player.HeldItem = Some "AMULET_COIN"
+          PayDayMoney = 0
           Kind = kind
           Messages = openingMessages kind enemy
           Outcome = None
@@ -1058,6 +1064,7 @@ module Battle =
         let mutable outcome: Outcome option = None
         let mutable participants = if enemySwitched then activeParticipant player else s.Participants
         let mutable defeatEvents = s.DefeatEvents
+        let mutable payDayMoney = s.PayDayMoney
 
         let currentState () =
             { s with
@@ -1067,6 +1074,8 @@ module Battle =
                 EnemyTeam = enemyTeam
                 Participants = participants
                 DefeatEvents = defeatEvents
+                AmuletCoinActivated = s.AmuletCoinActivated || player.HeldItem = Some "AMULET_COIN"
+                PayDayMoney = payDayMoney
                 Rng = rng
                 WeatherTimer = weatherTimer
                 WeatherType = weatherType
@@ -1465,6 +1474,8 @@ module Battle =
                             weatherTimer <- weatherTimer'
                             weatherType <- weatherType'
                             msgs <- msgs @ moveMsgs
+                            if hit && moveToUse.Effect = "EFFECT_PAY_DAY" then
+                                payDayMoney <- min 0xffffff (payDayMoney + user.Level * 2)
 
                             let foe =
                                 if lastDamage > 0 && foe.Volatile.BideTurns.IsSome then
@@ -1670,6 +1681,8 @@ module Battle =
             EnemyTeam = enemyTeam
             Participants = participants
             DefeatEvents = defeatEvents
+            AmuletCoinActivated = s.AmuletCoinActivated || player.HeldItem = Some "AMULET_COIN"
+            PayDayMoney = payDayMoney
             Messages = msgs
             Outcome = outcome
             Rng = rng
@@ -1720,4 +1733,5 @@ module Battle =
                     Player = incoming
                     PlayerTeam = team
                     Participants = Set.union s.Participants (activeParticipant incoming)
+                    AmuletCoinActivated = s.AmuletCoinActivated || incoming.HeldItem = Some "AMULET_COIN"
                     Messages = [ $"Come back, {s.Player.Species.Name}!"; $"Go, {incoming.Species.Name}!" ] }

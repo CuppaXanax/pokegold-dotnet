@@ -12,7 +12,7 @@ module Experience =
 
     /// Calculate money earned from a trainer battle.
     let moneyEarned (baseReward: int) (lastMonLevel: int) : int =
-        baseReward * lastMonLevel
+        4 * baseReward * lastMonLevel
 
     let applyAmuletCoin (hasAmuletCoin: bool) (reward: int) : int =
         if hasAmuletCoin then reward * 2 else reward

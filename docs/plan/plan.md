@@ -202,10 +202,11 @@ Multi-mon battles emit ordered per-defeat events and now consume them into the p
   - A large EXP award must process stats, moves, and evolutions for each intermediate level rather than only the final level.
   - Source conformance recalculates stats once at each tranche's final level, checks moves at every crossed level in ascending order, applies one level-up happiness change per level-changing tranche, and defers at-most-one evolution until victorious cleanup. Proved by `BAT-010 processes every crossed move level and evolves once after a win`, including the loss path retaining earned progression without evolving.
 
-- ⬜ **BAT-011 — Award money and post-battle rewards exactly once.**
+- ✅ **BAT-011 — Award money and post-battle rewards exactly once.**
   - Trainer payout uses the correct trainer class/base reward and final enemy level.
   - Amulet Coin applies under source-accurate conditions.
   - Losses, catches, and script retries cannot duplicate rewards.
+  - Proved by the exact runtime trainer settlement test plus `BAT-011 Amulet Coin activates only after its holder is sent out and stays active` and `BAT-011 Pay Day records level-scaled coins once per successful use`. Settlement uses the terminal battle state, the source four-quarter prize formula and final defeated level, sticky sent-out Amulet Coin activation, winning-only Pay Day, capped wallet addition, and a one-shot terminal callback; wild catches receive no trainer prize and running is not treated as a loss.
 
 ## Story 1.4 — Move learning and evolution are player-controlled and source-correct
 

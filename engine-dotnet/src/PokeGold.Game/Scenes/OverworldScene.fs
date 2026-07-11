@@ -1005,6 +1005,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             { player with
                 Party = BattleProgression.applyBattle battle.Outcome battle.DefeatEvents syncedParty }
 
+        if battle.Outcome = Some Win then
+            let trainerPrize =
+                match battle.Kind with
+                | TrainerBattle context ->
+                    match context.BaseReward, List.tryLast battle.DefeatEvents with
+                    | Some baseReward, Some finalDefeat ->
+                        Experience.moneyEarned baseReward finalDefeat.DefeatedLevel
+                    | _ -> 0
+                | WildBattle -> 0
+            let trainerPrize = Experience.applyAmuletCoin battle.AmuletCoinActivated trainerPrize
+            let payDayPrize = Experience.applyAmuletCoin battle.AmuletCoinActivated battle.PayDayMoney
+            player <- { player with Money = Money.give player.Money (trainerPrize + payDayPrize) }
+
     member private _.CaptureBattleMon(mon: BattleMon) =
         let statusCode (status: StatusCondition) : string =
             match status with
@@ -1981,29 +1994,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 Some 1
                         | StartBattle ->
                             let won = lastBattleOutcome = Some Win
-                            let isTrainer = stagedTrainer.IsSome
-
-                            if won then
-                                if isTrainer then
-                                    let baseReward =
-                                        match stagedTrainer with
-                                        | Some(group, id) ->
-                                            match Trainers.lookupByName group id with
-                                            | Some trainer ->
-                                                let fallbackLevel = player.Party |> List.tryHead |> Option.map _.Level |> Option.defaultValue 5
-                                                let lastMonLevel = trainer.Party |> List.tryLast |> Option.map _.Level |> Option.defaultValue fallbackLevel
-                                                Experience.moneyEarned trainer.BaseReward lastMonLevel
-                                            | None ->
-                                                let fallbackLevel = player.Party |> List.tryHead |> Option.map _.Level |> Option.defaultValue 5
-                                                Experience.moneyEarned 25 fallbackLevel
-                                        | None -> 0
-
-                                    let hasAmuletCoin =
-                                        player.Party
-                                        |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
-                                    let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
-                                    player <- { player with Money = Money.give player.Money reward }
-                            else
+                            if lastBattleOutcome = Some Lose then
                                 // Lost: heal party, deduct half money
                                 player <- { player with
                                                 Party = Heal.healParty player.Party

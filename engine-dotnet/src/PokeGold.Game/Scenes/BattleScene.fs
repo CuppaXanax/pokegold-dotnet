@@ -34,6 +34,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
     let mutable prev = Buttons.none
     let mutable animFrames = 0
     let mutable currentAnim = NoAnim
+    let mutable endNotified = false
 
     /// Build the demo encounter: the player's CYNDAQUIL vs a wild PIDGEY.
     static member StartDemo(content: Content) : BattleScene =
@@ -226,7 +227,9 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                             Stay
                         | [] ->
                             if Battle.isOver state then
-                                onBattleEnd state
+                                if not endNotified then
+                                    endNotified <- true
+                                    onBattleEnd state
                                 Pop
                             elif startedWithBox then
                                 this.AfterBattleAction()
