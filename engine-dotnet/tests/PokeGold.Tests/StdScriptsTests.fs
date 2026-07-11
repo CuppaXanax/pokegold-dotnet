@@ -189,6 +189,7 @@ let ``Azalea nurse heal restores a fainted party`` () =
             Moves = [ (1, 0) ]
             Dvs = 0
             StatExp = PokeGold.Game.Battle.StatExperience.zero
+            Pokerus = 0
             HeldItem = None
             OtName = "P"
             OtId = 0

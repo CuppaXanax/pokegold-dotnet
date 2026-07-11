@@ -184,7 +184,7 @@ Stable GUID identity synchronizes duplicate species/level party members exactly 
 
 **Status: 🟡 PARTIAL**
 
-Multi-mon battles now emit ordered per-defeat events containing the exact defeated enemy, living participants, EXP Share/Lucky Egg holders, trainer modifier, and five-field stat yield. Overworld integration still grants one representative award to the persistent lead until BAT-009 consumes those events.
+Multi-mon battles emit ordered per-defeat events and now consume them into the persistent party with source-ordered participant and EXP Share division, modifier rounding, stat EXP, Pokérus doubling, and saturation. Crossed-level side effects remain scoped to BAT-010.
 
 ### Work items
 
@@ -193,9 +193,10 @@ Multi-mon battles now emit ordered per-defeat events containing the exact defeat
   - Do not recompute the battle history from staged script data after the battle.
   - Proved by `BAT-008 records exact ordered progression events for every enemy defeat`, including two trainer defeats across switches, independent overlapping EXP Share membership, exact stat yields, wild/trainer modifiers, event order, and terminal de-duplication.
 
-- ⬜ **BAT-009 — Award EXP and stat EXP per defeated enemy.**
+- ✅ **BAT-009 — Award EXP and stat EXP per defeated enemy.**
   - Each eligible persistent party member receives the correct share.
   - Acceptance: a multi-mon trainer battle with switches asserts exact EXP for every participant.
+  - Proved by `defeat events distribute exact EXP and stat EXP across overlapping pools` and the runtime identity round-trip test, covering ordered multi-defeat awards, overlapping participant/EXP Share membership, per-stage flooring, trainer/traded/Lucky Egg boosts, Pokérus, and untouched nonrecipients.
 
 - ⬜ **BAT-010 — Process every crossed level.**
   - A large EXP award must process stats, moves, and evolutions for each intermediate level rather than only the final level.

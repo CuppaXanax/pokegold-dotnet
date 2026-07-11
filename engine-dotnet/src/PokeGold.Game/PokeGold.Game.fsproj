@@ -129,6 +129,7 @@
     <Compile Include="Battle\Catch.fs" />
     <!-- Player: persistent party, bag, dex state. -->
     <Compile Include="Player\PartyMon.fs" />
+    <Compile Include="Player\BattleProgression.fs" />
     <Compile Include="Player\Breeding.fs" />
     <Compile Include="Player\Evolution.fs" />
     <Compile Include="Player\Trading.fs" />

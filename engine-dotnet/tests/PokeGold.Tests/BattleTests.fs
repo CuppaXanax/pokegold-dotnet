@@ -384,6 +384,53 @@ let ``BAT-008 records exact ordered progression events for every enemy defeat`` 
     Assert.False(wild.DefeatEvents.Head.IsTrainer)
 
 [<Fact>]
+let ``defeat events distribute exact EXP and stat EXP across overlapping pools`` () =
+    let makeMon species level = PartyMon.create (Species.byName species).Dex level
+    let a = makeMon "CYNDAQUIL" 10
+    let b = { makeMon "TOTODILE" 10 with Pokerus = 1 }
+    let c = { makeMon "CHIKORITA" 10 with OtId = 1 }
+    let d = makeMon "PIDGEY" 10
+    let defeated baseExp hp attack defense speed special =
+        { Species.byName "RATTATA" with
+            BaseExp = baseExp
+            Hp = hp
+            Attack = attack
+            Defense = defense
+            Speed = speed
+            SpAttack = special }
+    let event species level statYield =
+        { DefeatedSpecies = species
+          DefeatedLevel = level
+          StatExpYield = statYield
+          ParticipantIds = Set.ofList [ a.Id; b.Id ]
+          ExpShareHolderIds = Set.ofList [ b.Id; c.Id ]
+          LuckyEggHolderIds = Set.singleton a.Id
+          IsTrainer = true }
+    let firstSpecies = defeated 70 10 20 30 40 50
+    let secondSpecies = defeated 91 11 21 31 41 51
+    let statYield (species: BaseStats) =
+        { Hp = species.Hp
+          Attack = species.Attack
+          Defense = species.Defense
+          Speed = species.Speed
+          Special = species.SpAttack }
+    let result =
+        [ event firstSpecies 10 (statYield firstSpecies)
+          event secondSpecies 20 (statYield secondSpecies) ]
+        |> fun events -> BattleProgression.applyEvents events [ a; b; c; d ]
+    let a', b', c', d' = result.[0], result.[1], result.[2], result.[3]
+
+    Assert.Equal(a.Exp + 193, a'.Exp)
+    Assert.Equal(b.Exp + 258, b'.Exp)
+    Assert.Equal(c.Exp + 193, c'.Exp)
+    Assert.Equal(d.Exp, d'.Exp)
+    Assert.Equal({ Hp = 4; Attack = 10; Defense = 14; Speed = 20; Special = 24 }, a'.StatExp)
+    Assert.Equal({ Hp = 16; Attack = 40; Defense = 56; Speed = 80; Special = 96 }, b'.StatExp)
+    Assert.Equal({ Hp = 4; Attack = 10; Defense = 14; Speed = 20; Special = 24 }, c'.StatExp)
+    Assert.Equal(StatExperience.zero, d'.StatExp)
+    Assert.Equal<System.Guid list>([ a.Id; b.Id; c.Id; d.Id ], result |> List.map _.Id)
+
+[<Fact>]
 let ``Leftovers heals at end of turn without being consumed`` () =
     let splash = Moves.byName "SPLASH"
     let player =

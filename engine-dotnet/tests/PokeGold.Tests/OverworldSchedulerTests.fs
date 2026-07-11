@@ -727,24 +727,27 @@ let ``BAT-007 switching and fainting identical members round-trips by identity``
     let battle = finalBattle |> Option.defaultWith (fun () -> failwith "battle never resolved")
     let finalSecond = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some second.Id)
     let actualFirst, actualSecond = scene.DebugPlayer.Party.[0], scene.DebugPlayer.Party.[1]
+    let progressedFirst, progressedSecond =
+        let progressed = BattleProgression.applyEvents battle.DefeatEvents [ first; second ]
+        progressed.[0], progressed.[1]
 
     Assert.Equal(first.Id, actualFirst.Id)
     Assert.Equal(0, actualFirst.Hp)
     Assert.Equal("", actualFirst.Status)
     Assert.Equal<(int * int) list>([ moveId "SPLASH", 4 ], actualFirst.Moves)
     Assert.Equal(first.HeldItem, actualFirst.HeldItem)
-    Assert.Equal(first.Exp, actualFirst.Exp)
+    Assert.Equal(progressedFirst.Exp, actualFirst.Exp)
     Assert.Equal(first.Dvs, actualFirst.Dvs)
-    Assert.Equal(first.StatExp, actualFirst.StatExp)
+    Assert.Equal(progressedFirst.StatExp, actualFirst.StatExp)
     Assert.Equal(first.Friendship, actualFirst.Friendship)
 
     Assert.Equal(second.Id, actualSecond.Id)
     Assert.Equal(finalSecond.Hp, actualSecond.Hp)
     Assert.Equal<(int * int) list>([ moveId "DRAGON_RAGE", 9 ], actualSecond.Moves)
     Assert.Equal(second.HeldItem, actualSecond.HeldItem)
-    Assert.Equal(second.Exp, actualSecond.Exp)
+    Assert.Equal(progressedSecond.Exp, actualSecond.Exp)
     Assert.Equal(second.Dvs, actualSecond.Dvs)
-    Assert.Equal(second.StatExp, actualSecond.StatExp)
+    Assert.Equal(progressedSecond.StatExp, actualSecond.StatExp)
     Assert.Equal(second.Friendship, actualSecond.Friendship)
 
 [<Fact>]

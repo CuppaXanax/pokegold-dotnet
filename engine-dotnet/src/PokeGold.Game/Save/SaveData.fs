@@ -60,6 +60,7 @@ type PartyMonSave =
       Moves: MovesSave[]; Dvs: int
       StatExp: int // v1-v7 scalar compatibility
       StatExperience: StatExperienceSave
+      Pokerus: int
       HeldItem: string; OtName: string; OtId: int; Friendship: int }
 
 [<CLIMutable>]
@@ -112,7 +113,7 @@ type PlayerSave =
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
 /// v3 saves have a full Player block; v2 saves only have a flat Bag array.
-/// v7 adds native stable identities; v8 adds five-field stat experience.
+/// v7 adds identities; v8 adds five-field stat experience; v9 adds Pokérus.
 /// The `Version` lets `SaveFile` reject or migrate older shapes.
 [<CLIMutable>]
 type SaveData =
@@ -126,7 +127,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 8
+    let CurrentVersion = 9
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -211,6 +212,7 @@ module SaveData =
           Hp = pm.Hp; MaxHp = pm.MaxHp; Status = pm.Status
           Moves = pm.Moves |> List.map (fun (mid, pp) -> { MoveId = mid; Pp = pp }) |> List.toArray
           Dvs = pm.Dvs; StatExp = 0; StatExperience = statExperienceToSave pm.StatExp
+          Pokerus = pm.Pokerus
           HeldItem = pm.HeldItem |> Option.defaultValue ""
           OtName = pm.OtName; OtId = pm.OtId; Friendship = pm.Friendship }
 
@@ -221,6 +223,7 @@ module SaveData =
           Status = nullToEmptyStr s.Status
           Moves = nullToEmpty s.Moves |> Array.map (fun m -> m.MoveId, m.Pp) |> Array.toList
           Dvs = s.Dvs; StatExp = statExperienceOfSave s.StatExp s.StatExperience
+          Pokerus = s.Pokerus
           HeldItem = nullToNone s.HeldItem
           OtName = nullToEmptyStr s.OtName; OtId = s.OtId; Friendship = s.Friendship }
 

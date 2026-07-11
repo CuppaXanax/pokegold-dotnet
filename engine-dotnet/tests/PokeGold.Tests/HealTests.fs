@@ -18,6 +18,7 @@ let private makeMon hp maxHp status moves : PartyMon =
       Moves = moves
       Dvs = 0
       StatExp = PokeGold.Game.Battle.StatExperience.zero
+      Pokerus = 0
       HeldItem = None
       OtName = "PLAYER"
       OtId = 0

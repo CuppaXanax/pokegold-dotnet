@@ -1001,7 +1001,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 // of PlayerTeam, so records absent from the battle pass through.
                 |> Option.defaultValue partyMon)
 
-        player <- { player with Party = syncedParty }
+        player <-
+            { player with
+                Party = BattleProgression.applyEvents battle.DefeatEvents syncedParty }
 
     member private _.CaptureBattleMon(mon: BattleMon) =
         let statusCode (status: StatusCondition) : string =
@@ -1982,80 +1984,25 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             let isTrainer = stagedTrainer.IsSome
 
                             if won then
-                                match player.Party with
-                                | lead :: rest when lead.Hp > 0 ->
-                                    let enemyBaseExp, enemyLevel =
-                                        match stagedWild with
-                                        | Some(species, level) ->
-                                            let baseExp =
-                                                Species.all
-                                                |> Map.tryFind species
-                                                |> Option.map (fun stats -> stats.BaseExp)
-                                                |> Option.defaultValue 64
-                                            (baseExp, level)
-                                        | None ->
-                                            match stagedTrainer with
-                                            | Some(group, id) ->
-                                                match Trainers.lookupByName group id with
-                                                | Some trainer ->
-                                                    let leadMon = trainer.Party |> List.tryHead
-                                                    let baseExp =
-                                                        leadMon
-                                                        |> Option.bind (fun mon -> Map.tryFind mon.Species Species.all)
-                                                        |> Option.map (fun stats -> stats.BaseExp)
-                                                        |> Option.defaultValue 64
-                                                    (baseExp, leadMon |> Option.map (fun mon -> mon.Level) |> Option.defaultValue 5)
-                                                | None ->
-                                                    (64, match player.Party with h :: _ -> h.Level | [] -> 5)
+                                if isTrainer then
+                                    let baseReward =
+                                        match stagedTrainer with
+                                        | Some(group, id) ->
+                                            match Trainers.lookupByName group id with
+                                            | Some trainer ->
+                                                let fallbackLevel = player.Party |> List.tryHead |> Option.map _.Level |> Option.defaultValue 5
+                                                let lastMonLevel = trainer.Party |> List.tryLast |> Option.map _.Level |> Option.defaultValue fallbackLevel
+                                                Experience.moneyEarned trainer.BaseReward lastMonLevel
                                             | None ->
-                                                (64, match player.Party with h :: _ -> h.Level | [] -> 5)
+                                                let fallbackLevel = player.Party |> List.tryHead |> Option.map _.Level |> Option.defaultValue 5
+                                                Experience.moneyEarned 25 fallbackLevel
+                                        | None -> 0
 
-                                    let exp = Experience.expGained enemyBaseExp enemyLevel isTrainer
-                                    let growthRate =
-                                        Species.all
-                                        |> Map.tryPick (fun _ stats -> if stats.Dex = lead.SpeciesId then Some stats.GrowthRate else None)
-                                        |> Option.defaultValue 0
-                                    let newLevel, newExp = Experience.levelAfterExp growthRate lead.Level lead.Exp exp
-                                    let updatedLead =
-                                        { PartyMon.withLevel newLevel lead with Exp = newExp }
-
-                                    let evolvedLead =
-                                        if newLevel > lead.Level then
-                                            match Evolution.checkLevelEvolution updatedLead with
-                                            | Some target ->
-                                                Evolution.applyEvolution target updatedLead
-                                            | None -> updatedLead
-                                        else updatedLead
-
-                                    let learnedLead =
-                                        if newLevel > lead.Level then
-                                            MoveLearn.learnMovesForLevel evolvedLead
-                                        else
-                                            evolvedLead
-
-                                    player <- { player with Party = learnedLead :: rest }
-
-                                    if isTrainer then
-                                        let baseReward =
-                                            match stagedTrainer with
-                                            | Some(group, id) ->
-                                                match Trainers.lookupByName group id with
-                                                | Some trainer ->
-                                                    let lastMonLevel =
-                                                        trainer.Party
-                                                        |> List.tryLast
-                                                        |> Option.map (fun mon -> mon.Level)
-                                                        |> Option.defaultValue enemyLevel
-                                                    Experience.moneyEarned trainer.BaseReward lastMonLevel
-                                                | None -> Experience.moneyEarned 25 enemyLevel
-                                            | None -> 0
-
-                                        let hasAmuletCoin =
-                                            player.Party
-                                            |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
-                                        let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
-                                        player <- { player with Money = Money.give player.Money reward }
-                                | _ -> ()
+                                    let hasAmuletCoin =
+                                        player.Party
+                                        |> List.exists (fun mon -> mon.HeldItem = Some "AMULET_COIN")
+                                    let reward = Experience.applyAmuletCoin hasAmuletCoin baseReward
+                                    player <- { player with Money = Money.give player.Money reward }
                             else
                                 // Lost: heal party, deduct half money
                                 player <- { player with

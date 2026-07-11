@@ -18,6 +18,7 @@ type PartyMon =
       Moves: (int * int) list   // (moveId, currentPP) pairs, up to 4
       Dvs: int                  // packed Attack/Defense/Speed/Special nibbles
       StatExp: StatExperience   // five 16-bit HP/Atk/Def/Speed/Special words
+      Pokerus: int              // persistent Pokérus status byte; 0 = none
       HeldItem: string option   // item constant or None
       OtName: string
       OtId: int
@@ -60,6 +61,7 @@ module PartyMon =
           Moves = []
           Dvs = dvs
           StatExp = StatExperience.zero
+          Pokerus = 0
           HeldItem = None
           OtName = "PLAYER"
           OtId = 0

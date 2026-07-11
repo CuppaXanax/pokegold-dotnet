@@ -70,7 +70,7 @@ let ``v6 Pokemon without identity migrate uniquely across persistent storage`` (
         SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
         |> SaveFile.serialize
         |> fun json -> System.Text.RegularExpressions.Regex.Replace(json, "\"Id\": \"[^\"]+\",\\s*", "")
-        |> fun json -> json.Replace("\"Version\": 8", "\"Version\": 6")
+        |> fun json -> json.Replace("\"Version\": 9", "\"Version\": 6")
     let migrated = legacyJson |> SaveFile.deserialize |> Option.get |> SaveData.playerOf
     let ids =
         [ migrated.Party.Head.Id
