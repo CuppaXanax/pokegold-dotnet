@@ -8,7 +8,8 @@ module BattleProgression =
 
     type ProgressionResult =
         { Party: Party
-          PendingMoves: LearnMoveRequest list }
+          PendingMoves: LearnMoveRequest list
+          PendingEvolutions: EvolutionRequest list }
 
     let private boostByHalf value = value + value / 2
     let private saturatingAdd value amount = min 65535 (value + amount)
@@ -80,7 +81,7 @@ module BattleProgression =
                     party @ [ updated ], requests @ monRequests
                 else
                     party @ [ mon ], requests) ([], result.PendingMoves)
-            |> fun (party, requests) -> { Party = party; PendingMoves = requests }
+            |> fun (party, requests) -> { result with Party = party; PendingMoves = requests }
 
     let private applyEventResult (event: DefeatProgressionEvent) (result: ProgressionResult) : ProgressionResult =
         let shareDivisor = if Set.isEmpty event.ExpShareHolderIds then 1 else 2
@@ -91,7 +92,7 @@ module BattleProgression =
     let applyEventsWithRequests (events: DefeatProgressionEvent list) (party: Party) : ProgressionResult =
         events
         |> List.fold (fun current event -> applyEventResult event current)
-            { Party = party; PendingMoves = [] }
+            { Party = party; PendingMoves = []; PendingEvolutions = [] }
 
     let applyEvent (event: DefeatProgressionEvent) (party: Party) : Party =
         applyEventsWithRequests [ event ] party |> _.Party
@@ -101,24 +102,23 @@ module BattleProgression =
 
     /// Gold defers evolution until victorious battle cleanup. A flagged member
     /// is visited once, so it can evolve by at most one stage per battle.
-    let applyBattleWithRequests outcome (events: DefeatProgressionEvent list) (party: Party) : ProgressionResult =
+    let applyBattleWithRequestsAtTime time outcome (events: DefeatProgressionEvent list) (party: Party) : ProgressionResult =
         let progressed = applyEventsWithRequests events party
         if outcome <> Some Win then progressed
         else
             let originalLevels = party |> List.map (fun mon -> mon.Id, mon.Level) |> Map.ofList
             progressed.Party
-            |> List.fold (fun (mons, requests) mon ->
+            |> List.fold (fun requests mon ->
                 let gainedLevel = Map.tryFind mon.Id originalLevels |> Option.exists (fun level -> mon.Level > level)
-                if not gainedLevel || mon.HeldItem = Some "EVERSTONE" then mons @ [ mon ], requests
+                if not gainedLevel then requests
                 else
-                    match Evolution.checkLevelEvolution mon with
-                    | Some target ->
-                        let evolved, evolvedRequests =
-                            Evolution.applyEvolution target mon
-                            |> MoveLearn.learnMovesForLevelWithRequests
-                        mons @ [ evolved ], requests @ evolvedRequests
-                    | None -> mons @ [ mon ], requests) ([], progressed.PendingMoves)
-            |> fun (mons, requests) -> { Party = mons; PendingMoves = requests }
+                    match Evolution.tryFind (LevelUp time) mon with
+                    | Some candidate -> requests @ [ { MonId = mon.Id; Candidate = candidate } ]
+                    | None -> requests) progressed.PendingEvolutions
+            |> fun requests -> { progressed with PendingEvolutions = requests }
+
+    let applyBattleWithRequests outcome events party =
+        applyBattleWithRequestsAtTime PokeGold.Game.Core.Day outcome events party
 
     let applyBattle outcome (events: DefeatProgressionEvent list) (party: Party) : Party =
         applyBattleWithRequests outcome events party |> _.Party

@@ -42,31 +42,26 @@ module Trading =
     /// Check if a traded mon should evolve (trade evolution).
     /// Returns Some(targetSpecies) if the mon evolves on trade.
     let checkTradeEvolution (mon: PartyMon) : string option =
-        let speciesName =
-            Species.all
-            |> Map.tryPick (fun name s -> if s.Dex = mon.SpeciesId then Some name else None)
+        Evolution.tryFind (Trade false) mon |> Option.map _.Target
 
-        match speciesName with
+    let private evolveReceived isTimeCapsule accept (mon: PartyMon) =
+        match Evolution.tryFind (Trade isTimeCapsule) mon with
+        | Some candidate ->
+            let attempted = Evolution.prepareAttempt candidate mon
+            if accept then Evolution.applyCandidate candidate attempted else attempted
+        | None -> mon
+
+    /// Trade with explicit acceptance/cancellation and Time Capsule context.
+    let tradeWithEvolutionDecision isTimeCapsule accept (party: Party) indexA (partner: Party) indexB =
+        match executeTrade party indexA partner indexB with
         | None -> None
-        | Some name ->
-            match EvosAttacksAccess.forSpecies name with
-            | None -> None
-            | Some data ->
-                data.Evolutions
-                |> List.tryPick (fun evo ->
-                    if evo.Method = "EVOLVE_TRADE" then Some evo.Target
-                    else None)
+        | Some(party', partner') ->
+            let receivedByPlayer = evolveReceived isTimeCapsule accept party'.[indexA]
+            let receivedByPartner = evolveReceived isTimeCapsule accept partner'.[indexB]
+            Some(
+                party' |> List.mapi (fun i mon -> if i = indexA then receivedByPlayer else mon),
+                partner' |> List.mapi (fun i mon -> if i = indexB then receivedByPartner else mon))
 
     /// Apply trade: swap mons, then check for trade evolution on the received mon.
     let tradeWithEvolution (party: Party) (indexA: int) (partner: Party) (indexB: int) : (Party * Party) option =
-        match executeTrade party indexA partner indexB with
-        | Some(party', partner') ->
-            // Check trade evolution for the mon the player received
-            let received = party'.[indexA]
-            let evolved =
-                match checkTradeEvolution received with
-                | Some target -> Evolution.applyEvolution target received
-                | None -> received
-            let party'' = party' |> List.mapi (fun i m -> if i = indexA then evolved else m)
-            Some(party'', partner')
-        | None -> None
+        tradeWithEvolutionDecision false true party indexA partner indexB

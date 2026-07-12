@@ -278,6 +278,30 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                         | None ->
                                             // Mon already at full HP — don't consume. Pop back to Pack.
                                             Pop) :> Scene)
+                        elif PackUseGive.isEvolutionStone id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.prepareEvolution id slotIdx currentPlayer with
+                                        | None -> Pop
+                                        | Some candidate ->
+                                            let mon = currentPlayer.Party.[slotIdx]
+                                            currentPlayer <- PackUseGive.consumeEvolutionStone id currentPlayer
+                                            rebuildMenus currentPlayer.Bag
+                                            onChange currentPlayer
+                                            Replace(
+                                                EvolutionScene(
+                                                    content.Font,
+                                                    mon.Nickname,
+                                                    candidate.Target,
+                                                    fun decision ->
+                                                        match decision with
+                                                        | CancelEvolution -> ()
+                                                        | AcceptEvolution ->
+                                                            let newPlayer = PackUseGive.applyEvolution id slotIdx candidate currentPlayer
+                                                            currentPlayer <- newPlayer
+                                                            rebuildMenus newPlayer.Bag
+                                                            onChange newPlayer) :> Scene)) :> Scene)
                         elif PackUseGive.isTmHm id then
                             Push(
                                 PartyScene(content, currentPlayer, onChange,

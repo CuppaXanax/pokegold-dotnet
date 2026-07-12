@@ -139,6 +139,29 @@ let ``applyTmHm consumes TM after teaching it`` () =
     | Some updated -> Assert.Equal(0, Bag.count "TM01" updated.Bag)
     | None -> Assert.Fail("TM01 should teach DYNAMICPUNCH")
 
+[<Fact>]
+let ``BAT-014 accepted stone evolution consumes one stone and cancellation can defer mutation`` () =
+    let gloom = PartyMon.create (Species.byName "GLOOM").Dex 20
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ gloom ]
+            Bag = Bag.add "LEAF_STONE" 2 Bag.empty }
+    let candidate = PackUseGive.prepareEvolution "LEAF_STONE" 0 player |> Option.get
+    Assert.Equal(gloom.SpeciesId, player.Party.Head.SpeciesId)
+    Assert.Equal(2, Bag.count "LEAF_STONE" player.Bag)
+    let attempted = PackUseGive.consumeEvolutionStone "LEAF_STONE" player
+    let evolved = PackUseGive.applyEvolution "LEAF_STONE" 0 candidate attempted
+    Assert.Equal((Species.byName "VILEPLUME").Dex, evolved.Party.Head.SpeciesId)
+    Assert.Equal(1, Bag.count "LEAF_STONE" evolved.Bag)
+
+[<Fact>]
+let ``BAT-014 incompatible or Everstone-held mon cannot consume a stone`` () =
+    let cyndaquil = PartyMon.create (Species.byName "CYNDAQUIL").Dex 20
+    let player = { PlayerStateOps.initial with Party = [ cyndaquil ]; Bag = Bag.add "LEAF_STONE" 1 Bag.empty }
+    Assert.True(PackUseGive.prepareEvolution "LEAF_STONE" 0 player |> Option.isNone)
+    let gloom = { PartyMon.create (Species.byName "GLOOM").Dex 20 with HeldItem = Some "EVERSTONE" }
+    Assert.True(PackUseGive.prepareEvolution "LEAF_STONE" 0 { player with Party = [ gloom ] } |> Option.isNone)
+
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
 [<Fact>]

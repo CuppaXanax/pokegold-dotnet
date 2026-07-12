@@ -229,9 +229,10 @@ Level-up move learning preserves source order and suspends battle-script resumpt
   - Acceptance: tests cover TM01, TM10, TM50, an HM, compatible and incompatible species, cancellation, and a full moveset.
   - Proved by BAT-013 `TmHmTests`, `PackUseGiveTests`, and the shared BAT-012 decision-scene tests. DataGen emits the exact 57-entry source mapping and all 251 species compatibility sets; boundary TMs/HMs, compatible/incompatible and already-known outcomes, chosen-slot replacement/full PP, cancellation preservation, successful-TM consumption, and reusable HMs are covered.
 
-- ⬜ **BAT-014 — Complete all evolution methods.**
+- ✅ **BAT-014 — Complete all evolution methods.**
   - Level, item, friendship, time-of-day, stat comparison, Tyrogue branches, trade, and trade-with-item paths must work.
   - Evolution cancellation and move learning after evolution must follow source ordering.
+  - Proved by BAT-014 `EvolutionTests`, `EvolutionSceneTests`, `TradingTests`, `PackUseGiveTests`, and crossed-level progression coverage. The ordered source matcher covers all five encoded methods, friendship/time thresholds, calculated Tyrogue stats, Everstone, stone branches, plain/item trade and Time Capsule restrictions; battle and stone evolution suspend for explicit acceptance/cancellation, attempt-time catalysts follow ROM consumption timing, and evolved-species current-level move decisions follow acceptance.
 
 - ⬜ **BAT-015 — Update owned/seen Pokédex state after evolution.**
   - The evolved species is registered without losing the prior species.

@@ -1,6 +1,7 @@
 module PokeGold.Tests.TradingTests
 
 open Xunit
+open PokeGold.Game.Data
 open PokeGold.Game.Player
 
 [<Fact>]
@@ -19,6 +20,28 @@ let ``trade evolution triggers for eligible mons`` () =
     match Trading.checkTradeEvolution kadabra with
     | Some target -> Assert.Equal("ALAKAZAM", target)
     | None -> ()
+
+[<Fact>]
+let ``BAT-014 trade-with-item evolves both received sides and consumes catalysts`` () =
+    let poliwhirl = { PartyMon.create (Species.byName "POLIWHIRL").Dex 25 with HeldItem = Some "KINGS_ROCK" }
+    let seadra = { PartyMon.create (Species.byName "SEADRA").Dex 32 with HeldItem = Some "DRAGON_SCALE" }
+    match Trading.tradeWithEvolution [ poliwhirl ] 0 [ seadra ] 0 with
+    | Some([ kingdra ], [ politoed ]) ->
+        Assert.Equal((Species.byName "KINGDRA").Dex, kingdra.SpeciesId)
+        Assert.Equal((Species.byName "POLITOED").Dex, politoed.SpeciesId)
+        Assert.True(kingdra.HeldItem.IsNone)
+        Assert.True(politoed.HeldItem.IsNone)
+    | result -> Assert.Fail($"unexpected trade result {result}")
+
+[<Fact>]
+let ``BAT-014 cancelled trade-item evolution preserves species but consumes catalyst`` () =
+    let pidgey = PartyMon.create (Species.byName "PIDGEY").Dex 5
+    let poliwhirl = { PartyMon.create (Species.byName "POLIWHIRL").Dex 25 with HeldItem = Some "KINGS_ROCK" }
+    match Trading.tradeWithEvolutionDecision false false [ pidgey ] 0 [ poliwhirl ] 0 with
+    | Some([ received ], _) ->
+        Assert.Equal((Species.byName "POLIWHIRL").Dex, received.SpeciesId)
+        Assert.True(received.HeldItem.IsNone)
+    | result -> Assert.Fail($"unexpected trade result {result}")
 
 [<Fact>]
 let ``offline terminal imports configured version exclusive species`` () =

@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1322/1322) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1333/1333) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -59,8 +59,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   money now settle exactly once from terminal battle state with source payout
   and Amulet Coin rules. Full level-up movesets now enter an ordered,
   player-controlled replace/decline flow with HM protection. All 50 TMs, seven
-  HMs, and 251 source compatibility sets are generated and enforced; blackout
-  remains critical-path work.
+  HMs, and 251 source compatibility sets are generated and enforced. All Gold
+  evolution methods share ordered source eligibility with cancellable battle/
+  item presentation and exact trade catalysts; blackout remains critical-path work.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -75,7 +76,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-014 through BAT-019: finish evolution methods and blackout.
+1. Complete BAT-015 through BAT-019: finish evolution Pokédex updates and blackout.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

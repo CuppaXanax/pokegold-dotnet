@@ -26,6 +26,7 @@ let private repelItems =
     Map.ofList [ "REPEL", 100; "SUPER_REPEL", 200; "MAX_REPEL", 250 ]
 
 let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
+let private evolutionStones = Set.ofList [ "MOON_STONE"; "FIRE_STONE"; "THUNDERSTONE"; "WATER_STONE"; "LEAF_STONE"; "SUN_STONE" ]
 
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
@@ -38,6 +39,8 @@ let isRepel (itemName: string) : bool = repelItems.ContainsKey itemName
 
 /// True when this item is a fishing rod.
 let isFishingRod (itemName: string) : bool = Set.contains itemName fishingRods
+
+let isEvolutionStone itemName = Set.contains itemName evolutionStones
 
 // ── Pure mutation helpers (unit-testable without the scene stack) ──────────────
 
@@ -100,3 +103,17 @@ let applyTmHm (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerStat
                 if TmHm.isHmItem itemId then player.Bag
                 else Bag.remove itemId 1 player.Bag
             Some { player with Party = newParty; Bag = newBag }
+
+let prepareEvolution itemId slotIdx (player: PlayerState) =
+    if not (isEvolutionStone itemId) || slotIdx < 0 || slotIdx >= player.Party.Length then None
+    else Evolution.tryFind (ItemUse itemId) player.Party.[slotIdx]
+
+let consumeEvolutionStone itemId (player: PlayerState) =
+    { player with Bag = Bag.remove itemId 1 player.Bag }
+
+/// Apply an accepted stone evolution. The caller consumes the stone when the
+/// evolution attempt begins, before the cancellable animation.
+let applyEvolution _itemId slotIdx candidate (player: PlayerState) =
+    let evolved = Evolution.applyCandidate candidate player.Party.[slotIdx]
+    { player with
+        Party = player.Party |> List.mapi (fun i mon -> if i = slotIdx then evolved else mon) }

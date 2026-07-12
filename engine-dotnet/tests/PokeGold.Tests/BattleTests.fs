@@ -475,7 +475,8 @@ let ``BAT-010 processes every crossed move level and evolves once after a win`` 
     let lostResult = BattleProgression.applyBattleWithRequests (Some Lose) [ defeatEvent ] [ mon ]
     let wonResult = BattleProgression.applyBattleWithRequests (Some Win) [ defeatEvent ] [ mon ]
     let lost = lostResult.Party.Head
-    let won = wonResult.Party.Head
+    let pendingEvolution = Assert.Single(wonResult.PendingEvolutions)
+    let won = Evolution.applyCandidate pendingEvolution.Candidate wonResult.Party.Head
     let moveNames partyMon = partyMon.Moves |> List.map (fun (id, _) -> MovesData.byIndex.[id].Name)
 
     Assert.Equal(finalLevel, lost.Level)
@@ -484,6 +485,7 @@ let ``BAT-010 processes every crossed move level and evolves once after a win`` 
     Assert.Contains("EMBER", moveNames lost)
     Assert.Equal<string list>([ "QUICK_ATTACK" ], lostResult.PendingMoves |> List.map (fun request -> MovesData.byIndex.[request.MoveId].Name))
     Assert.Equal<string list>([ "QUICK_ATTACK" ], wonResult.PendingMoves |> List.map (fun request -> MovesData.byIndex.[request.MoveId].Name))
+    Assert.Equal("QUILAVA", pendingEvolution.Candidate.Target)
     Assert.Equal((Species.byName "QUILAVA").Dex, won.SpeciesId)
     Assert.Equal(finalLevel, won.Level)
     Assert.Equal(mon.Id, won.Id)
