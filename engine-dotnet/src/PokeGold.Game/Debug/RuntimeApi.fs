@@ -74,6 +74,9 @@ type RuntimeControl =
     | SetFlag of flag: string * value: bool
     | SetVar of name: string * value: int
     | SetScene of mapId: string * scene: int
+    /// Component-test setup for battle-gated map scripts. Forbidden in the
+    /// continuous fresh-save route gate.
+    | SetBattleTestMon of species: string * level: int * move: string
     | StartNewGame of playerName: string
 
 type RuntimeControlResult =

@@ -849,7 +849,7 @@ let ``caught Pokemon goes to PC when party is full`` () =
     Assert.Single(scene.DebugPlayer.Pc.Boxes.[scene.DebugPlayer.Pc.CurrentBox].Mons)
 
 [<Fact>]
-let ``wild battle loss heals party and halves money on script resume`` () =
+let ``BAT-016 defeated battle aborts the suspended script continuation`` () =
     let content = Content()
     let state =
         scriptedScene
@@ -889,13 +889,11 @@ let ``wild battle loss heals party and halves money on script resume`` () =
 
     Assert.Equal(1, stack.Count)
 
-    match (scene :> Scene).Update Buttons.none with
-    | Push (:? TextBoxScene) -> ()
-    | other -> failwithf "expected post-loss script text, got %A" other
-
-    Assert.Equal(1000, scene.DebugPlayer.Money)
-    Assert.True(scene.DebugPlayer.Party.[0].Hp > 1, "loss should heal party")
-    Assert.Equal(Some "AfterLoss", scene.RuntimeSnapshot.LastTextLabel)
+    Assert.Equal(Stay, (scene :> Scene).Update Buttons.none)
+    Assert.Equal(2000, scene.DebugPlayer.Money)
+    Assert.Equal(0, scene.DebugPlayer.Party.[0].Hp)
+    Assert.NotEqual(Some "AfterLoss", scene.RuntimeSnapshot.LastTextLabel)
+    for _ in 1..5 do Assert.Equal(Stay, (scene :> Scene).Update Buttons.none)
 
 [<Fact>]
 let ``phone contact script effects mutate player state`` () =

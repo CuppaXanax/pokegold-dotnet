@@ -204,6 +204,13 @@ type Game(?saveDirectory: string) =
                 ow.DebugSetScene mapId scene
                 Applied
             | None -> Rejected "no overworld scene active"
+        | SetBattleTestMon(species, level, move) ->
+            match overworld, Map.tryFind species Species.all, MovesData.byIndex |> Array.tryFindIndex (fun candidate -> candidate.Name = move) with
+            | Some ow, Some stats, Some moveId ->
+                let mon = { PartyMon.create stats.Dex level with Moves = [ moveId, 255 ] }
+                ow.Restore(ow.DebugWorld, { ow.DebugPlayer with Party = [ mon ] })
+                Applied
+            | _ -> Rejected "invalid battle test mon"
         | StartNewGame playerName ->
             this.NewGame playerName
             Applied

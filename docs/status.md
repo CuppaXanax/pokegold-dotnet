@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-10.
+Last updated: 2026-07-11.
 
 ## Current goal
 
@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1334/1334) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1335/1335) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -77,7 +77,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-016 through BAT-019: finish explicit defeat and blackout semantics.
+1. Complete BAT-017 through BAT-019: finish blackout, boss-loss, and retry semantics.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

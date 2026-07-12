@@ -175,7 +175,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             3
 
     /// The outcome of the most recent battle (set by BattleScene callback).
-    let mutable lastBattleOutcome: Outcome option = None
+    let mutable lastBattleResult: BattleScriptResult option = None
     /// Ordered level-up move decisions that must finish before StartBattle resumes.
     let mutable pendingMoveRequests: LearnMoveRequest list = []
     let mutable pendingEvolutionRequests: EvolutionRequest list = []
@@ -960,7 +960,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             else 1
 
     member private _.SyncBattleParty (battle: BattleState) =
-        lastBattleOutcome <- battle.Outcome
+        lastBattleResult <- battle.Outcome |> Option.map BattleScriptResult.ofOutcome
         let statusCode (status: StatusCondition) : string =
             match status with
             | Healthy -> ""
@@ -2014,6 +2014,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                             DexSeen = Set.add evolved.SpeciesId player.DexSeen
                                             DexOwn = Set.add evolved.SpeciesId player.DexOwn }
                                     pendingMoveRequests <- pendingMoveRequests @ requests) :> Scene)
+            | Some(_, StartBattle) when lastBattleResult = Some BattleDefeat ->
+                // Defeat replaces the suspended battle script; it is never
+                // resumed with an ordinary zero result. BAT-017 performs the
+                // whiteout mutation/warp at this explicit abort boundary.
+                pending <- None
+                stagedWild <- None
+                stagedTrainer <- None
+                world <- World.setVar "VAR_BATTLETYPE" 0 world
+                stagedWinText <- ""
+                stagedLossText <- ""
+                lastBattleResult <- None
+                Stay
             // A pushed child scene popped — resume the suspended script with its result.
             | Some(vm, effect) ->
                 pending <- None
@@ -2058,20 +2070,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             else
                                 Some 1
                         | StartBattle ->
-                            let won = lastBattleOutcome = Some Win
-                            if lastBattleOutcome = Some Lose then
-                                // Lost: heal party, deduct half money
-                                player <- { player with
-                                                Party = Heal.healParty player.Party
-                                                Money = player.Money / 2 }
-
+                            let won = lastBattleResult = Some BattleVictory
                             stagedWild <- None
                             stagedTrainer <- None
                             world <- World.setVar "VAR_BATTLETYPE" 0 world
                             stagedWinText <- ""
                             stagedLossText <- ""
-                            lastBattleOutcome <- None
-                            Some (if won then 1 else 0)
+                            lastBattleResult <- None
+                            // ROM wBattleResult is zero for victory and nonzero
+                            // for escape/draw. Defeat is intercepted above and
+                            // never resumes this script continuation.
+                            Some (if won then 0 else 1)
                         | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
                         | _ -> None
 

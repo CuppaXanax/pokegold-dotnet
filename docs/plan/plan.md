@@ -240,14 +240,15 @@ Level-up move learning preserves source order and suspends battle-script resumpt
 
 ## Story 1.5 — Losing a battle causes a real blackout
 
-**Status: ⬜ TODO**
+**Status: 🟡 PARTIAL**
 
-The runtime currently heals the party, halves money, returns `0` to the suspended script, and continues normal script execution. This can allow post-victory commands to run after a loss.
+Defeat now has an explicit result and aborts the suspended post-battle continuation. The remaining work is to apply the source blackout destination, healing, money, boss-loss, and retry semantics at that boundary.
 
 ### Work items
 
-- ⬜ **BAT-016 — Add an explicit defeated battle result.**
+- ✅ **BAT-016 — Add an explicit defeated battle result.**
   - A loss must not be represented as an ordinary script result that resumes post-victory commands.
+  - Proved by `BAT-016 battle outcomes map to explicit script results` and `BAT-016 defeated battle aborts the suspended script continuation`; victory resumes with the source `wBattleResult = 0`, while defeat has an explicit result and discards the suspended post-battle continuation.
 
 - ⬜ **BAT-017 — Implement blackout destination and abort semantics.**
   - Apply the configured blackout/spawn map.

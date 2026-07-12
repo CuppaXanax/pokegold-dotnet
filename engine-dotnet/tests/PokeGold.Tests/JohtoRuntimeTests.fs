@@ -28,6 +28,9 @@ let private press button =
     | "b" -> { Buttons.none with B = true }
     | _ -> Buttons.none
 
+let private seedBattleWinner (driver: GameDriver) =
+    driver.Apply(SetBattleTestMon("MEWTWO", 255, "SURF"))
+
 let private directionButton direction =
     match direction with
     | Up -> { Buttons.none with Up = true }
@@ -2396,6 +2399,7 @@ let ``A16 Vermilion Port passage and gym door load Vermilion City and Gym`` () =
 let ``A16 Surge awards ThunderBadge after battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     // VermilionGym.asm: Surge stands at 5,2.
     driver.Apply(Warp("VermilionGym", 5, 3, Some Up))
 
@@ -2484,6 +2488,7 @@ let ``A16 Route5 and Route8 Saffron guard text is static per disassembly`` () =
 let ``A16 Saffron Gym teleport path reaches Sabrina and awards MarshBadge`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
 
     // SaffronCity.asm: warp_event 34,3, SAFFRON_GYM, 1.
     driver.Apply(Warp("SaffronCity", 34, 4, Some Up))
@@ -2550,6 +2555,7 @@ let ``A16 Saffron Gym teleport path reaches Sabrina and awards MarshBadge`` () =
 let ``A17 Cerulean and Power Plant Machine Part chain works on foot`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
 
     // PowerPlant.asm: manager at 14,10 starts the theft investigation.
     driver.Apply(Warp("PowerPlant", 14, 11, Some Up))
@@ -2664,6 +2670,7 @@ let ``A17 Cerulean and Power Plant Machine Part chain works on foot`` () =
 let ``A18 EXPN Card Pokegear radio tune wakes Vermilion Snorlax`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     driver.Apply(SetEvent("EVENT_RETURNED_MACHINE_PART", true))
 
     // LavRadioTower1F.asm: gentleman at 9,1 gives EXPN CARD after the Machine Part is returned.
@@ -2816,6 +2823,7 @@ let ``A19 Pewter Celadon and Fuchsia gym doors load their gyms`` () =
 let ``A19 Brock awards BoulderBadge after battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     // PewterGym.asm: Brock stands at 5,1.
     driver.Apply(Warp("PewterGym", 5, 2, Some Up))
 
@@ -2843,6 +2851,7 @@ let ``A19 Brock awards BoulderBadge after battle`` () =
 let ``A19 Erika awards RainbowBadge and TM19 after battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     // CeladonGym.asm: Erika stands at 5,3.
     driver.Apply(Warp("CeladonGym", 5, 4, Some Up))
 
@@ -2870,6 +2879,7 @@ let ``A19 Erika awards RainbowBadge and TM19 after battle`` () =
 let ``A19 Janine awards SoulBadge and TM06 after battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     // FuchsiaGym.asm: Janine stands at 1,10.
     driver.Apply(Warp("FuchsiaGym", 1, 11, Some Up))
 
@@ -2959,6 +2969,7 @@ let ``A20 Cinnabar east surf route loads Route20 and Seafoam Gym`` () =
 let ``A20 Blaine awards VolcanoBadge after Seafoam Gym battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     driver.Apply(SetEvent("EVENT_SEAFOAM_GYM_GYM_GUIDE", true))
     // SeafoamGym.asm: Blaine stands at 5,2.
     driver.Apply(Warp("SeafoamGym", 5, 3, Some Up))
@@ -2975,6 +2986,7 @@ let ``A20 Blaine awards VolcanoBadge after Seafoam Gym battle`` () =
                 && ow.Events |> List.contains "EVENT_BEAT_BLAINE"
                 && ow.EngineFlags |> List.contains "ENGINE_VOLCANOBADGE"
                 && not (ow.Events |> List.contains "EVENT_SEAFOAM_GYM_GYM_GUIDE")
+                && hasActor "SeafoamGymGuideScript" true ow
             | None -> false)
 
     let ow = owOf driver.Snapshot
@@ -2987,6 +2999,7 @@ let ``A20 Blaine awards VolcanoBadge after Seafoam Gym battle`` () =
 let ``A20 Viridian Gym door loads gym and Blue awards EarthBadge`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     driver.Apply(SetEvent("EVENT_VIRIDIAN_GYM_BLUE", false))
 
     // ViridianCity.asm: warp_event 32,7, VIRIDIAN_GYM, 1.
@@ -3110,6 +3123,7 @@ let ``A21 VictoryRoadGate Mt Silver guard blocks until Oak opens route`` () =
 let ``A21 Silver Cave warps reach Red and credits roll after battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
+    seedBattleWinner driver
     driver.Apply(SetEvent("EVENT_RED_IN_MT_SILVER", false))
 
     // SilverCaveOutside.asm: warp_event 18,11, SILVER_CAVE_ROOM_1, 1.

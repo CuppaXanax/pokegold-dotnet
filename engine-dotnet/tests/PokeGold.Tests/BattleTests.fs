@@ -107,6 +107,12 @@ let ``Amulet Coin doubles trainer reward`` () =
     Assert.Equal(2000, Experience.applyAmuletCoin false (Experience.moneyEarned 25 20))
 
 [<Fact>]
+let ``BAT-016 defeat is an explicit script-facing battle result`` () =
+    Assert.Equal(BattleVictory, BattleScriptResult.ofOutcome Win)
+    Assert.Equal(BattleDefeat, BattleScriptResult.ofOutcome Lose)
+    Assert.Equal(BattleEscape, BattleScriptResult.ofOutcome Ran)
+
+[<Fact>]
 let ``BAT-011 Amulet Coin activates only after its holder is sent out and stays active`` () =
     let splash = Moves.byName "SPLASH"
     let lead = { BattleMon.ofSpecies (Species.byName "PIDGEY") 10 [ splash ] with PersistentId = Some(System.Guid.NewGuid()) }

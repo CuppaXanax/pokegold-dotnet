@@ -9,6 +9,19 @@ type Outcome =
     | Lose
     | Ran
 
+/// Script-facing terminal result. Defeat is a distinct control-flow outcome,
+/// never an ordinary zero-valued result for post-victory continuation.
+type BattleScriptResult =
+    | BattleVictory
+    | BattleDefeat
+    | BattleEscape
+
+module BattleScriptResult =
+    let ofOutcome = function
+        | Win -> BattleVictory
+        | Lose -> BattleDefeat
+        | Ran -> BattleEscape
+
 type TrainerBattleContext =
     { Group: string
       Id: string
