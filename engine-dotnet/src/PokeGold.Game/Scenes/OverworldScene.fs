@@ -2010,7 +2010,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                         |> MoveLearn.learnMovesForLevelWithRequests
                                     player <-
                                         { player with
-                                            Party = player.Party |> List.mapi (fun i existing -> if i = partyIndex then evolved else existing) }
+                                            Party = player.Party |> List.mapi (fun i existing -> if i = partyIndex then evolved else existing)
+                                            DexSeen = Set.add evolved.SpeciesId player.DexSeen
+                                            DexOwn = Set.add evolved.SpeciesId player.DexOwn }
                                     pendingMoveRequests <- pendingMoveRequests @ requests) :> Scene)
             // A pushed child scene popped — resume the suspended script with its result.
             | Some(vm, effect) ->

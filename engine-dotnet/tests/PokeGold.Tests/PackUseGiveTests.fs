@@ -145,7 +145,9 @@ let ``BAT-014 accepted stone evolution consumes one stone and cancellation can d
     let player =
         { PlayerStateOps.initial with
             Party = [ gloom ]
-            Bag = Bag.add "LEAF_STONE" 2 Bag.empty }
+            Bag = Bag.add "LEAF_STONE" 2 Bag.empty
+            DexSeen = Set.singleton gloom.SpeciesId
+            DexOwn = Set.singleton gloom.SpeciesId }
     let candidate = PackUseGive.prepareEvolution "LEAF_STONE" 0 player |> Option.get
     Assert.Equal(gloom.SpeciesId, player.Party.Head.SpeciesId)
     Assert.Equal(2, Bag.count "LEAF_STONE" player.Bag)
@@ -153,6 +155,10 @@ let ``BAT-014 accepted stone evolution consumes one stone and cancellation can d
     let evolved = PackUseGive.applyEvolution "LEAF_STONE" 0 candidate attempted
     Assert.Equal((Species.byName "VILEPLUME").Dex, evolved.Party.Head.SpeciesId)
     Assert.Equal(1, Bag.count "LEAF_STONE" evolved.Bag)
+    Assert.Contains(gloom.SpeciesId, evolved.DexSeen)
+    Assert.Contains(gloom.SpeciesId, evolved.DexOwn)
+    Assert.Contains(evolved.Party.Head.SpeciesId, evolved.DexSeen)
+    Assert.Contains(evolved.Party.Head.SpeciesId, evolved.DexOwn)
 
 [<Fact>]
 let ``BAT-014 incompatible or Everstone-held mon cannot consume a stone`` () =
@@ -161,6 +167,21 @@ let ``BAT-014 incompatible or Everstone-held mon cannot consume a stone`` () =
     Assert.True(PackUseGive.prepareEvolution "LEAF_STONE" 0 player |> Option.isNone)
     let gloom = { PartyMon.create (Species.byName "GLOOM").Dex 20 with HeldItem = Some "EVERSTONE" }
     Assert.True(PackUseGive.prepareEvolution "LEAF_STONE" 0 { player with Party = [ gloom ] } |> Option.isNone)
+
+[<Fact>]
+let ``BAT-015 accepted evolution retains prior dex entry and registers target`` () =
+    let gloom = PartyMon.create (Species.byName "GLOOM").Dex 20
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ gloom ]
+            Bag = Bag.add "SUN_STONE" 1 Bag.empty
+            DexSeen = Set.singleton gloom.SpeciesId
+            DexOwn = Set.singleton gloom.SpeciesId }
+    let candidate = PackUseGive.prepareEvolution "SUN_STONE" 0 player |> Option.get
+    let evolved = player |> PackUseGive.consumeEvolutionStone "SUN_STONE" |> PackUseGive.applyEvolution "SUN_STONE" 0 candidate
+    let target = (Species.byName "BELLOSSOM").Dex
+    Assert.Equal<Set<int>>(Set.ofList [ gloom.SpeciesId; target ], evolved.DexSeen)
+    Assert.Equal<Set<int>>(Set.ofList [ gloom.SpeciesId; target ], evolved.DexOwn)
 
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 

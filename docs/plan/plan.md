@@ -234,8 +234,9 @@ Level-up move learning preserves source order and suspends battle-script resumpt
   - Evolution cancellation and move learning after evolution must follow source ordering.
   - Proved by BAT-014 `EvolutionTests`, `EvolutionSceneTests`, `TradingTests`, `PackUseGiveTests`, and crossed-level progression coverage. The ordered source matcher covers all five encoded methods, friendship/time thresholds, calculated Tyrogue stats, Everstone, stone branches, plain/item trade and Time Capsule restrictions; battle and stone evolution suspend for explicit acceptance/cancellation, attempt-time catalysts follow ROM consumption timing, and evolved-species current-level move decisions follow acceptance.
 
-- ⬜ **BAT-015 — Update owned/seen Pokédex state after evolution.**
+- ✅ **BAT-015 — Update owned/seen Pokédex state after evolution.**
   - The evolved species is registered without losing the prior species.
+  - Proved by `BAT-015 accepted evolution retains prior dex entry and registers target`; both battle-accepted and stone-accepted evolution callbacks add the target to `DexSeen` and `DexOwn` while preserving the source species.
 
 ## Story 1.5 — Losing a battle causes a real blackout
 

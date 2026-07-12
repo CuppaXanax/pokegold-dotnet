@@ -116,4 +116,6 @@ let consumeEvolutionStone itemId (player: PlayerState) =
 let applyEvolution _itemId slotIdx candidate (player: PlayerState) =
     let evolved = Evolution.applyCandidate candidate player.Party.[slotIdx]
     { player with
-        Party = player.Party |> List.mapi (fun i mon -> if i = slotIdx then evolved else mon) }
+        Party = player.Party |> List.mapi (fun i mon -> if i = slotIdx then evolved else mon)
+        DexSeen = Set.add evolved.SpeciesId player.DexSeen
+        DexOwn = Set.add evolved.SpeciesId player.DexOwn }
