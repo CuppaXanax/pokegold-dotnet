@@ -1055,6 +1055,110 @@ let ``BAT-022 Ether battle use persists PP and bag state after runtime victory``
     Assert.Equal<(int * int) list>([ moveId "TACKLE", 10; moveId "DRAGON_RAGE", dragonRage.Pp - 1 ], scene.DebugPlayer.Party.[0].Moves)
 
 [<Fact>]
+let ``BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "HeldItemCapture"
+            [| Loadwildmon("MAGIKARP", 5)
+               Startbattle
+               End |]
+    let splash = Moves.byName "SPLASH"
+    let leadBase = PartyMon.create (Species.byName "CYNDAQUIL").Dex 20
+    let lead =
+        { leadBase with
+            Hp = max 1 (leadBase.MaxHp / 2)
+            Moves = [ moveId "SPLASH", splash.Pp ]
+            HeldItem = Some "BERRY" }
+    let reserve =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "SPLASH", splash.Pp ]
+            HeldItem = Some "CHARCOAL" }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ lead; reserve ]; Bag = Bag.add "MASTER_BALL" 1 Bag.empty })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable phase = 0
+
+    let completed () =
+        stack.Count = 1 && scene.CanCapture && phase = 3
+
+    while frame < 3000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top with
+            | :? BattleScene as battle ->
+                if phase = 0 && battle.CurrentState.PlayerTeam |> List.exists (fun mon -> mon.PersistentId = Some lead.Id && mon.HeldItem.IsNone) then
+                    phase <- 1
+
+                if phase = 1 && battle.CurrentState.Player.PersistentId = Some reserve.Id then
+                    phase <- 2
+
+                if phase = 2 && battle.CurrentState.Outcome = Some Win then
+                    phase <- 3
+
+                let snap = battle.RuntimeSnapshot
+                if frame % 2 <> 0 then
+                    Buttons.none
+                elif snap.MessageActive || not snap.PendingMessages.IsEmpty then
+                    { Buttons.none with A = true }
+                elif phase = 0 then
+                    match snap.Mode with
+                    | "CommandMenu"
+                    | "MoveMenu" -> { Buttons.none with A = true }
+                    | _ -> Buttons.none
+                elif phase = 1 then
+                    match snap.Mode with
+                    | "CommandMenu" when battle.CommandCursor = 1 -> { Buttons.none with A = true }
+                    | "CommandMenu" when battle.CommandCursor = 0 -> { Buttons.none with Right = true }
+                    | "CommandMenu" -> { Buttons.none with Left = true }
+                    | "PartyMenu" when battle.PartyCursor = 0 -> { Buttons.none with Down = true }
+                    | "PartyMenu" -> { Buttons.none with A = true }
+                    | _ -> Buttons.none
+                elif phase = 2 then
+                    match snap.Mode with
+                    | "CommandMenu" when battle.CommandCursor = 2 -> { Buttons.none with A = true }
+                    | "CommandMenu" when battle.CommandCursor = 0 -> { Buttons.none with Down = true }
+                    | "CommandMenu" -> { Buttons.none with Left = true }
+                    | "PackMenu" -> { Buttons.none with A = true }
+                    | _ -> Buttons.none
+                else
+                    Buttons.none
+            | :? TextBoxScene when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (top.Update buttons)
+
+    Assert.True(completed (), "The held-item runtime route should consume Berry, switch, capture, and reach an idle save point")
+    let consumedLead = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = lead.Id)
+    let retainedReserve = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = reserve.Id)
+    Assert.Equal(None, consumedLead.HeldItem)
+    Assert.Equal(Some "CHARCOAL", retainedReserve.HeldItem)
+    Assert.Equal(3, scene.DebugPlayer.Party.Length)
+
+    let save =
+        scene.Capture()
+        |> PokeGold.Game.Save.SaveFile.serialize
+        |> PokeGold.Game.Save.SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "expected held-item runtime save to deserialize")
+    let reloaded = OverworldScene.OfSave(content, SilentSound(), save)
+    let reloadedLead = reloaded.DebugPlayer.Party |> List.find (fun mon -> mon.Id = lead.Id)
+    let reloadedReserve = reloaded.DebugPlayer.Party |> List.find (fun mon -> mon.Id = reserve.Id)
+    Assert.Equal(None, reloadedLead.HeldItem)
+    Assert.Equal(Some "CHARCOAL", reloadedReserve.HeldItem)
+
+[<Fact>]
 let ``phone contact script effects mutate player state`` () =
     let content = Content()
     let state =

@@ -890,6 +890,35 @@ let ``MysteryBerry restores PP when a move reaches zero`` () =
     Assert.Contains(after.Messages, fun msg -> msg.Contains("restored PP"))
 
 [<Fact>]
+let ``BAT-023 fainted Berry holder retains item and Leftovers remains held across turns`` () =
+    let splash = Moves.byName "SPLASH"
+    let berryHolder =
+        { mon "BERRY_HOLDER" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Hp = 1
+            Moves = [ splash ]
+            Pp = [ splash.Pp ]
+            HeldItem = Some "BERRY" }
+    let attacker =
+        { mon "ATTACKER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let fainted = Battle.create berryHolder attacker 0u |> Battle.chooseMove 0
+    Assert.Equal(0, fainted.Player.Hp)
+    Assert.Equal(Some "BERRY", fainted.Player.HeldItem)
+
+    let leftoversHolder =
+        { mon "LEFTOVERS_HOLDER" (ty "NORMAL") (ty "NORMAL") 50 160 100 100 200 with
+            Hp = 80
+            Moves = [ splash ]
+            Pp = [ splash.Pp ]
+            HeldItem = Some "LEFTOVERS" }
+    let passiveEnemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+    let first = Battle.create leftoversHolder passiveEnemy 0u |> Battle.chooseMove 0
+    let second = first |> Battle.chooseMove 0
+    Assert.Equal(Some "LEFTOVERS", second.Player.HeldItem)
+    Assert.True(second.Player.Hp > first.Player.Hp)
+
+[<Fact>]
 let ``Smoke Ball allows escape while trapped`` () =
     let trapped = { VolatileStatus.empty with Trapped = Some 3 }
     let player =

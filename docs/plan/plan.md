@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,353 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,355 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -282,8 +282,9 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - Source-backed battle items now cover Revive/Max Revive, HP and status healing, Full Restore restrictions, X Attack/Defend/Speed/Special, X Accuracy, Guard Spec., Dire Hit, Poké Doll, Ether/Max Ether, and Elixer/Max Elixer. Rejected uses preserve the bag and turn; successful nonterminal uses consume the player turn; and PP/bag state survives runtime battle cleanup.
   - Proved by `BAT-022 Revive restores a fainted bench target consumes once and costs a turn`, `BAT-022 source battle item table enforces revive status PP and direct effects`, `BAT-022 X Accuracy and Guard Spec alter source battle checks`, `BAT-022 X Attack consumes a battle turn while rejected use preserves bag and turn`, `BAT-022 Ether uses move targeting and restores PP without restoring a full slot`, `BAT-022 Poke Doll escapes wild battles but is rejected by trainers`, and `BAT-022 Ether battle use persists PP and bag state after runtime victory`.
 
-- 🟡 **BAT-023 — Complete held-item integration.**
-  - Current effects have targeted coverage; verify consumption and persistence across real runtime battles.
+- ✅ **BAT-023 — Complete held-item integration.**
+  - Consumable held healing/status/PP effects activate once, remain unconsumed when a holder faints before residual handling, and do not resurrect through switching, capture cleanup, battle synchronization, or save/reload. Nonconsumables retain their item state across turns and cleanup; existing source-effect tests cover type damage, priority, critical, survival, PP, and status behavior. Source held stat-up entries are explicitly unused by the original battle core.
+  - Proved by `BAT-023 fainted Berry holder retains item and Leftovers remains held across turns` and `BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`, together with existing `type boosting held item increases matching move damage`, `Quick Claw lets a slower holder move first on a successful roll`, `Focus Band can leave the holder at 1 HP against lethal damage`, `MysteryBerry restores PP when a move reaches zero`, and status-berry tests.
 
 - 🟡 **BAT-024 — Audit trainer AI at the integration layer.**
   - Gym leaders, Elite Four, Lance, and Red must select from their real moves and switch/use items where the source requires it.

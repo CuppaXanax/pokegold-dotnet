@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-12.
+Last updated: 2026-07-13.
 
 ## Current goal
 
@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1353/1353) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1355/1355) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -74,6 +74,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Battle PACK now applies source-backed healing, revive, PP restoration, stat/volatile,
   and Poké Doll effects with rejected-use preservation, turn consumption, and runtime
   PP/bag persistence coverage.
+  Consumable and nonconsumable held items now retain source-consistent state through
+  residual activation, fainting, switching, capture cleanup, battle synchronization,
+  and save/reload.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -88,7 +91,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-023 through BAT-024: held-item persistence and trainer AI.
+1. Complete BAT-024: trainer AI integration.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
