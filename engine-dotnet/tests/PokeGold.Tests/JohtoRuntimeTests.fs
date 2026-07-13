@@ -31,6 +31,9 @@ let private press button =
 let private seedBattleWinner (driver: GameDriver) =
     driver.Apply(SetBattleTestMon("MEWTWO", 255, "SURF"))
 
+let private seedBattleLoser (driver: GameDriver) =
+    driver.Apply(SetBattleTestMon("MAGIKARP", 2, "SPLASH"))
+
 let private directionButton direction =
     match direction with
     | Up -> { Buttons.none with Up = true }
@@ -155,6 +158,26 @@ let private owMap (s: RuntimeSnapshot) =
 
 let private owOf (s: RuntimeSnapshot) =
     s.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+
+let private driveBossLossToBlackout (driver: GameDriver) =
+    let blackedOut (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some ow ->
+            ow.CanCapture
+            && ow.MapId = "PlayersHouse2F"
+            && (ow.Player.CellX, ow.Player.CellY) = (3, 3)
+        | None -> false
+
+    advanceRuntimeUntil driver 15000 blackedOut
+    Assert.True(blackedOut driver.Snapshot, "The weak party should reach the home blackout destination")
+
+    let battles =
+        driver.Trace
+        |> List.choose (fun tick -> tick.Snapshot.Battle)
+
+    Assert.NotEmpty(battles)
+    Assert.True(battles |> List.exists (fun battle -> battle.Outcome = Some "Lose"), "The fixture must actually lose the real battle")
+    owOf driver.Snapshot
 
 let private settleUntilCapture (driver: GameDriver) maxFrames =
     driver.RunUntil(
@@ -3164,3 +3187,79 @@ let ``A21 Silver Cave warps reach Red and credits roll after battle`` () =
     Assert.True(hasActor "Red" false ow, "Red's object should be hidden after disappear")
     Assert.Equal(Some 1, Map.tryFind "__credits_rolled" ow.Vars)
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
+let ``BAT-018 Falkner loss blackouts without ZephyrBadge or TM31`` () =
+    let saveDirectory =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pokegold-bat018-" + System.Guid.NewGuid().ToString("N"))
+
+    System.IO.Directory.CreateDirectory(saveDirectory) |> ignore
+
+    try
+        let driver = GameDriver(PokeGold.Game.Game(saveDirectory = saveDirectory))
+        driver.Apply(StartNewGame "A")
+        seedBattleLoser driver
+        driver.Apply(Warp("VioletGym", 5, 2, Some Up))
+
+        let beforeBattle = owOf driver.Snapshot
+        Assert.True(hasActor "VioletGymFalknerScript" true beforeBattle, "Falkner should be the real generated map actor")
+
+        driver.Talk()
+        let blackout = driveBossLossToBlackout driver
+
+        Assert.False(blackout.Events |> List.contains "EVENT_BEAT_FALKNER")
+        Assert.False(blackout.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE")
+        Assert.False(blackout.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP")
+
+        driver.Game.Save()
+        let saved =
+            SaveFile.tryReadFrom saveDirectory
+            |> Option.defaultWith (fun () -> failwith "expected capturable blackout save")
+
+        Assert.Equal(0, Bag.count "TM_MUD_SLAP" (SaveData.playerOf saved).Bag)
+        driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+    finally
+        if System.IO.Directory.Exists(saveDirectory) then
+            System.IO.Directory.Delete(saveDirectory, true)
+
+[<Fact>]
+let ``BAT-018 Lance loss blackouts before Hall of Fame`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    seedBattleLoser driver
+    driver.Apply(SetScene("LancesRoom", 1))
+    driver.Apply(Warp("LancesRoom", 5, 3, Some Up))
+
+    let beforeBattle = owOf driver.Snapshot
+    Assert.True(hasActor "LancesRoomLanceScript" true beforeBattle, "Lance should be the real generated map actor")
+
+    driver.Talk()
+    let blackout = driveBossLossToBlackout driver
+
+    Assert.False(blackout.Events |> List.contains "EVENT_BEAT_CHAMPION_LANCE")
+    Assert.False(blackout.Events |> List.contains "EVENT_BEAT_ELITE_FOUR")
+    Assert.Equal(None, Map.tryFind "__hall_of_fame_count" blackout.Vars)
+    Assert.Equal(None, Map.tryFind "__credits_rolled" blackout.Vars)
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
+let ``BAT-018 Red loss blackouts without removal or credits`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    seedBattleLoser driver
+    driver.Apply(SetEvent("EVENT_RED_IN_MT_SILVER", false))
+    driver.Apply(Warp("SilverCaveRoom3", 9, 11, Some Up))
+
+    let beforeBattle = owOf driver.Snapshot
+    Assert.True(hasActor "Red" true beforeBattle, "Red should be the real generated map actor")
+
+    driver.Talk()
+    let blackout = driveBossLossToBlackout driver
+
+    Assert.False(blackout.Events |> List.contains "EVENT_RED_IN_MT_SILVER")
+    Assert.Equal(None, Map.tryFind "__credits_rolled" blackout.Vars)
+
+    driver.Apply(Warp("SilverCaveRoom3", 9, 11, Some Up))
+    let afterBlackout = owOf driver.Snapshot
+    Assert.True(hasActor "Red" true afterBlackout, "Red must remain after a real loss")
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)

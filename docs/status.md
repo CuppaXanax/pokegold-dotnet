@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1336/1336) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1339/1339) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -64,8 +64,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   item presentation and exact trade catalysts; accepted evolutions preserve the
   prior Pokédex entry and register the target. Source blackout now resolves baked
   spawn destinations, heals party HP/status/PP, floors money-halving, clears
-  transient state, and aborts the defeated script continuation. Boss-loss and retry
-  persistence remain critical-path work.
+  transient state, and aborts the defeated script continuation. Real generated
+  Falkner, Lance, and Red losses now prove that no victory-only mutation occurs.
+  Retry persistence remains critical-path work.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -80,7 +81,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-018 through BAT-019: protect boss scripts from defeat and prove retry persistence.
+1. Complete BAT-019: prove blackout retry persistence.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

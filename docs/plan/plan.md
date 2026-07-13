@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,336 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,339 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -242,7 +242,7 @@ Level-up move learning preserves source order and suspends battle-script resumpt
 
 **Status: 🟡 PARTIAL**
 
-Defeat now has an explicit result, source-defined blackout transition, and aborts the suspended post-battle continuation. The remaining work is to prove boss-loss and retry semantics at that boundary.
+Defeat now has an explicit result, source-defined blackout transition, and aborts the suspended post-battle continuation. Real generated boss scripts now prove that loss cannot execute victory-only mutations. The remaining work is retry persistence at that boundary.
 
 ### Work items
 
@@ -254,10 +254,9 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
   - Source-defined spawn data resolves a valid `blackoutmod` map and falls back to `PLAYERS_HOUSE_2F` at `(3, 3)` when it is invalid. Defeat heals party HP, status, and PP; floors money-halving; clears transient battle/script state; warps; and aborts the defeated script’s normal continuation.
   - Proved by `BAT-017 defeat applies source blackout spawn and aborts continuation`, a runtime theory covering `CHERRYGROVE_CITY` at `(29, 4)`, the home fallback, odd-money flooring, party healing, and stable post-loss idle behavior.
 
-- ⬜ **BAT-018 — Protect every boss script from loss-as-victory.**
-  - Losing to Falkner grants no badge or TM.
-  - Losing to Lance grants no Hall of Fame entry.
-  - Losing to Red does not remove Red, heal as a victory reward, or roll credits.
+- ✅ **BAT-018 — Protect every boss script from loss-as-victory.**
+  - Real generated-map battle transitions with a level-2 Magikarp using Splash record actual losses, blackout to `PLAYERS_HOUSE_2F` at `(3, 3)`, and abort the victory continuation. Falkner grants no Zephyr Badge or TM31; Lance does not enter the Hall of Fame; and Red remains present without credits.
+  - Proved by `BAT-018 Falkner loss blackouts without ZephyrBadge or TM31`, `BAT-018 Lance loss blackouts before Hall of Fame`, and `BAT-018 Red loss blackouts without removal or credits`.
 
 - ⬜ **BAT-019 — Prove retry behavior.**
   - After blackout and save/reload, the trainer remains available and can later be defeated normally.
