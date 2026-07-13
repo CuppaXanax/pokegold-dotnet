@@ -29,7 +29,7 @@ let private press button =
     | _ -> Buttons.none
 
 let private seedBattleWinner (driver: GameDriver) =
-    driver.Apply(SetBattleTestMon("MEWTWO", 255, "SURF"))
+    driver.Apply(SetBattleTestMon("MEWTWO", 100, "PSYCHIC_M"))
 
 let private seedBattleLoser (driver: GameDriver) =
     driver.Apply(SetBattleTestMon("MAGIKARP", 2, "SPLASH"))

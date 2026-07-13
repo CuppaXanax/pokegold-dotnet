@@ -206,10 +206,17 @@ type Game(?saveDirectory: string) =
             | None -> Rejected "no overworld scene active"
         | SetBattleTestMon(species, level, move) ->
             match overworld, Map.tryFind species Species.all, MovesData.byIndex |> Array.tryFindIndex (fun candidate -> candidate.Name = move) with
-            | Some ow, Some stats, Some moveId ->
-                let mon = { PartyMon.create stats.Dex level with Moves = [ moveId, 255 ] }
-                ow.Restore(ow.DebugWorld, { ow.DebugPlayer with Party = [ mon ] })
-                Applied
+            | Some ow, Some stats, Some moveId when level >= 1 && level <= 100 ->
+                let seed = PartyMon.create stats.Dex level
+                let isLevelUpMove = MoveLearn.startingMoveNames stats.Name level |> List.contains move
+                let isCompatibleTmHm = TmHm.canLearnMove move seed
+                if not (isLevelUpMove || isCompatibleTmHm) then
+                    Rejected "battle test move is not source-compatible"
+                else
+                    let mon = { seed with Moves = [ moveId, MovesData.byIndex.[moveId].Pp ] }
+                    ow.Restore(ow.DebugWorld, { ow.DebugPlayer with Party = [ mon ] })
+                    Applied
+            | Some _, Some _, Some _ -> Rejected "battle test level must be between 1 and 100"
             | _ -> Rejected "invalid battle test mon"
         | StartNewGame playerName ->
             this.NewGame playerName

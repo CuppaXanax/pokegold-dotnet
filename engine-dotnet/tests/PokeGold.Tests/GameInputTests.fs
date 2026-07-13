@@ -98,6 +98,21 @@ let ``typed runtime control can boot and inspect debug Azalea`` () =
     Assert.True(ow.Actors |> List.exists (fun actor -> actor.Visible))
 
 [<Fact>]
+let ``battle test setup accepts only legal level and source-compatible moves`` () =
+    let g = Game()
+    g.ApplyControl(StartNewGame "A") |> assertApplied
+
+    match g.ApplyControl(SetBattleTestMon("MEWTWO", 101, "PSYCHIC_M")) with
+    | Rejected reason -> Assert.Contains("between 1 and 100", reason)
+    | Applied -> Assert.Fail("level 101 battle fixture must be rejected")
+
+    match g.ApplyControl(SetBattleTestMon("MAGIKARP", 20, "PSYCHIC_M")) with
+    | Rejected reason -> Assert.Contains("source-compatible", reason)
+    | Applied -> Assert.Fail("incompatible battle fixture move must be rejected")
+
+    g.ApplyControl(SetBattleTestMon("MEWTWO", 100, "PSYCHIC_M")) |> assertApplied
+
+[<Fact>]
 let ``typed runtime input drives the real tick path`` () =
     let g = Game()
     g.ApplyControl(Press { Buttons.none with Start = true }) |> assertApplied

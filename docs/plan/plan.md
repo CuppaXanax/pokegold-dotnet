@@ -261,8 +261,8 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
   - Proved by `BAT-018 Falkner loss blackouts without ZephyrBadge or TM31`, `BAT-018 Lance loss blackouts before Hall of Fame`, and `BAT-018 Red loss blackouts without removal or credits`.
 
 - ✅ **BAT-019 — Prove retry behavior.**
-  - A real Falkner loss blackouts, saves only after the runtime is capturable, reloads in a new runtime, retains Falkner and no beaten/badge/TM state, then retries with a real victory. The later victory grants and persists exactly one TM31 with the Zephyr Badge and beaten flag.
-  - Proved by `BAT-019 Falkner loss save reload and retry awards progression once`.
+  - A real Falkner loss blackouts, saves only after the runtime is capturable, reloads in a new runtime, retains Falkner and no beaten/badge/TM state, then retries with a real victory. The isolated retry setup now uses a legal level-100 Mewtwo with naturally learned `PSYCHIC_M`, normal base PP, and derived source stats; the component seam rejects levels outside 1–100 and incompatible moves.
+  - Proved by `BAT-019 Falkner loss save reload and retry awards progression once` and `battle test setup accepts only legal level and source-compatible moves`.
 
 ## Story 1.6 — The battle command shell supports a normal playthrough
 
