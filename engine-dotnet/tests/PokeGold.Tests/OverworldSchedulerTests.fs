@@ -108,6 +108,67 @@ let private scriptedScene content mapId x y facing label commands =
 let private moveId name =
     MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name)
 
+let private driveStagedBattle (scene: OverworldScene) (selectMove: BattleScene -> int) maxFrames =
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable finalBattle: BattleState option = None
+
+    while frame < maxFrames && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top with
+            | :? BattleScene as battle ->
+                let snapshot = battle.RuntimeSnapshot
+                if battle.CurrentState.Outcome.IsSome then
+                    finalBattle <- Some battle.CurrentState
+
+                if frame % 2 <> 0 then
+                    Buttons.none
+                elif snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                    { Buttons.none with A = true }
+                elif snapshot.Mode = "CommandMenu" then
+                    if battle.CommandCursor = 0 then { Buttons.none with A = true }
+                    else { Buttons.none with Up = true }
+                elif snapshot.Mode = "MoveMenu" then
+                    let desired = selectMove battle
+                    if battle.MoveCursor < desired then { Buttons.none with Down = true }
+                    elif battle.MoveCursor > desired then { Buttons.none with Up = true }
+                    else { Buttons.none with A = true }
+                elif snapshot.Mode = "ForcedSwitch" then
+                    let targetIndex =
+                        battle.CurrentState.PlayerTeam
+                        |> List.mapi (fun index mon -> index, mon)
+                        |> List.tryFind (fun (index, mon) -> index > 0 && not (BattleMon.isFainted mon))
+                        |> Option.map fst
+                        |> Option.defaultWith (fun () -> failwith "forced replacement had no healthy bench member")
+                    if battle.PartyCursor < targetIndex then { Buttons.none with Down = true }
+                    elif battle.PartyCursor > targetIndex then { Buttons.none with Up = true }
+                    else { Buttons.none with A = true }
+                else
+                    Buttons.none
+            | :? TextBoxScene when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (top.Update buttons)
+
+    if stack.Count <> 1 then
+        let top = stack.[stack.Count - 1]
+        let detail =
+            match top with
+            | :? BattleScene as battle ->
+                let snapshot = battle.RuntimeSnapshot
+                $"mode={snapshot.Mode} player={snapshot.PlayerSpecies} enemy={snapshot.EnemySpecies} outcome={snapshot.Outcome} messages={snapshot.PendingMessages.Length}"
+            | _ -> top.GetType().Name
+        failwithf "staged battle did not settle within %d frames: %s" maxFrames detail
+
+    (scene :> Scene).Update Buttons.none |> ignore
+    finalBattle |> Option.defaultWith (fun () -> failwith "staged battle never reached a terminal outcome")
+
 let private averageBrightness (fb: Framebuffer) =
     let pixels = fb.Pixels
     let mutable total = 0L
@@ -403,6 +464,160 @@ let ``trainer battle runtime grants EXP and Amulet Coin prize money`` () =
     let settledMoney = scene.DebugPlayer.Money
     for _ in 1..5 do (scene :> Scene).Update Buttons.none |> ignore
     Assert.Equal(settledMoney, scene.DebugPlayer.Money)
+
+[<Fact>]
+let ``EPIC1 matrix legal wild and ordinary trainer victories synchronize persistent battle state`` () =
+    let content = Content()
+    let psychic = Moves.byName "PSYCHIC_M"
+
+    let legalMewtwo () =
+        let baseMon = PartyMon.create (Species.byName "MEWTWO").Dex 100
+        Assert.Contains("PSYCHIC_M", MoveLearn.startingMoveNames "MEWTWO" 100)
+        { baseMon with
+            Hp = baseMon.MaxHp - 10
+            Status = "PAR"
+            HeldItem = Some "LEFTOVERS"
+            Moves = [ moveId "PSYCHIC_M", psychic.Pp ] }
+
+    let run label commands money =
+        let hero = legalMewtwo ()
+        let state = scriptedScene content "NewBarkTown" 5 5 Down label commands
+        let scene = OverworldScene(content, SilentSound(), state)
+        scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ hero ]; Money = money })
+        let battle = driveStagedBattle scene (fun _ -> 0) 4000
+        let synced = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = hero.Id)
+        let finalHero = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some hero.Id)
+
+        Assert.Equal(Some Win, battle.Outcome)
+        Assert.Equal(hero.Id, synced.Id)
+        Assert.Equal(finalHero.Hp, synced.Hp)
+        Assert.Equal("PAR", synced.Status)
+        Assert.Equal(Some "LEFTOVERS", synced.HeldItem)
+        Assert.Equal<(int * int) list>([ moveId "PSYCHIC_M", finalHero.Pp.Head ], synced.Moves)
+        Assert.True(synced.Exp > hero.Exp)
+        Assert.True(synced.StatExp.Hp > hero.StatExp.Hp)
+        scene, hero, battle
+
+    let wildScene, wildHero, wildBattle =
+        run "Epic1WildBattle" [| Loadwildmon("RATTATA", 5); Startbattle; End |] 777
+    Assert.False(Battle.isTrainerBattle wildBattle)
+    Assert.Equal(777, wildScene.DebugPlayer.Money)
+    Assert.Equal(psychic.Pp - 1, (wildScene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = wildHero.Id)).Moves.Head |> snd)
+
+    let trainerScene, trainerHero, trainerBattle =
+        run "Epic1OrdinaryTrainerBattle" [| Loadtrainer("YOUNGSTER", "JOEY1"); Startbattle; End |] 1000
+    let trainer = Trainers.lookupByName "YOUNGSTER" "JOEY1" |> Option.defaultWith (fun () -> failwith "JOEY1 not found")
+    let finalDefeat = trainerBattle.DefeatEvents |> List.last
+    Assert.True(Battle.isTrainerBattle trainerBattle)
+    Assert.Equal(1000 + Experience.moneyEarned trainer.BaseReward finalDefeat.DefeatedLevel, trainerScene.DebugPlayer.Money)
+    Assert.Equal(psychic.Pp - 1, (trainerScene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = trainerHero.Id)).Moves.Head |> snd)
+
+[<Fact>]
+let ``EPIC1 matrix legal Will runtime victory synchronizes all five generated defeats`` () =
+    let content = Content()
+    let will = Trainers.lookup "WILL" 1 |> Option.defaultWith (fun () -> failwith "WILL not found")
+    let thunder = Moves.byName "THUNDER"
+    let fireBlast = Moves.byName "FIRE_BLAST"
+    let psychic = Moves.byName "PSYCHIC_M"
+    let baseMon = PartyMon.create (Species.byName "MEWTWO").Dex 100
+    Assert.True(TmHm.canLearnMove "THUNDER" baseMon)
+    Assert.True(TmHm.canLearnMove "FIRE_BLAST" baseMon)
+    Assert.Contains("PSYCHIC_M", MoveLearn.startingMoveNames "MEWTWO" 100)
+    let hero =
+        { baseMon with
+            HeldItem = Some "LEFTOVERS"
+            Moves = [ moveId "THUNDER", thunder.Pp; moveId "FIRE_BLAST", fireBlast.Pp; moveId "PSYCHIC_M", psychic.Pp ] }
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "Epic1WillBattle"
+            [| Loadtrainer("WILL", "WILL1")
+               Startbattle
+               End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ hero ]; Money = 1500 })
+
+    let selectMove (battle: BattleScene) =
+        battle.CurrentState.Player.Moves
+        |> List.mapi (fun index move -> index, move)
+        |> List.filter (fun (index, _) -> index < battle.CurrentState.Player.Pp.Length && battle.CurrentState.Player.Pp.[index] > 0)
+        |> List.maxBy (fun (_, move) -> Damage.calc battle.CurrentState.Player battle.CurrentState.Enemy move false Damage.MaxRoll false)
+        |> fst
+
+    let battle = driveStagedBattle scene selectMove 15000
+    let synced = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = hero.Id)
+    let finalHero = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some hero.Id)
+    let finalDefeat = battle.DefeatEvents |> List.last
+
+    Assert.Equal(Some Win, battle.Outcome)
+    Assert.Equal(will.Party.Length, battle.DefeatEvents.Length)
+    Assert.Equal<string list>(
+        will.Party |> List.map (fun mon -> mon.Species) |> List.sort,
+        battle.DefeatEvents |> List.map (fun defeat -> defeat.DefeatedSpecies.Name) |> List.sort)
+    Assert.True(battle.EnemyTeam |> List.forall BattleMon.isFainted)
+    Assert.Equal(hero.Id, synced.Id)
+    Assert.Equal(finalHero.Hp, synced.Hp)
+    Assert.Equal(Some "LEFTOVERS", synced.HeldItem)
+    Assert.Equal<int list>(finalHero.Pp, synced.Moves |> List.map snd)
+    Assert.True(synced.Exp > hero.Exp)
+    Assert.True(synced.StatExp.Hp > hero.StatExp.Hp)
+    Assert.Equal(1500 + Experience.moneyEarned will.BaseReward finalDefeat.DefeatedLevel, scene.DebugPlayer.Money)
+
+[<Fact>]
+let ``EPIC1 matrix legal Red runtime victory synchronizes generated six member battle`` () =
+    let content = Content()
+    let red = Trainers.lookup "RED" 1 |> Option.defaultWith (fun () -> failwith "RED not found")
+    let legalParty =
+        [ "FERALIGATR"; "TYRANITAR"; "DRAGONITE"; "SNORLAX"; "ESPEON"; "HO_OH" ]
+        |> List.map (fun species ->
+            let mon = PartyMon.create (Species.byName species).Dex 100 |> MoveLearn.seedStartingMoves
+            Assert.NotEmpty(mon.Moves)
+            mon)
+    let party =
+        legalParty
+        |> List.mapi (fun index mon -> if index = 3 then { mon with HeldItem = Some "LEFTOVERS" } else mon)
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "Epic1RedBattle"
+            [| Loadtrainer("RED", "RED1")
+               Startbattle
+               End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = party; Money = 2500 })
+
+    let selectMove (battle: BattleScene) =
+        battle.CurrentState.Player.Moves
+        |> List.mapi (fun index move -> index, move)
+        |> List.filter (fun (index, _) -> index < battle.CurrentState.Player.Pp.Length && battle.CurrentState.Player.Pp.[index] > 0)
+        |> List.maxBy (fun (_, move) -> Damage.calc battle.CurrentState.Player battle.CurrentState.Enemy move false Damage.MaxRoll false)
+        |> fst
+
+    let battle = driveStagedBattle scene selectMove 20000
+
+    Assert.Equal(Some Win, battle.Outcome)
+    Assert.Equal(red.Party.Length, battle.DefeatEvents.Length)
+    Assert.Equal<string list>(
+        red.Party |> List.map (fun mon -> mon.Species) |> List.sort,
+        battle.DefeatEvents |> List.map (fun defeat -> defeat.DefeatedSpecies.Name) |> List.sort)
+    Assert.Equal<Set<System.Guid>>(party |> List.map _.Id |> Set.ofList, scene.DebugPlayer.Party |> List.map _.Id |> Set.ofList)
+    for original in party do
+        let synced = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = original.Id)
+        let finalMon = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some original.Id)
+        Assert.Equal(finalMon.Hp, synced.Hp)
+        Assert.Equal(finalMon.HeldItem, synced.HeldItem)
+        Assert.Equal<int list>(finalMon.Pp, synced.Moves |> List.map snd)
+    Assert.True(scene.DebugPlayer.Party |> List.exists (fun mon -> mon.Exp > 0))
+    Assert.True(scene.DebugPlayer.Party |> List.exists (fun mon -> mon.StatExp.Hp > 0))
+    Assert.Equal(2500 + Experience.moneyEarned red.BaseReward (battle.DefeatEvents |> List.last).DefeatedLevel, scene.DebugPlayer.Money)
 
 [<Fact>]
 let ``BAT-001 runtime trainer parties match source moves and held items`` () =
@@ -909,15 +1124,15 @@ let ``BAT-017 defeat applies source blackout spawn and aborts continuation``
 [<Fact>]
 let ``BAT-021 real Falkner battle requires replacement before repeated trainer cycles`` () =
     let content = Content()
-    let splash = Moves.byName "SPLASH"
-    let dragonRage = Moves.byName "DRAGON_RAGE"
+    let tackle = Moves.byName "TACKLE"
+    let psychic = Moves.byName "PSYCHIC_M"
     let lead =
-        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 2 with
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 5 with
             Hp = 1
-            Moves = [ moveId "SPLASH", splash.Pp ] }
+            Moves = [ moveId "TACKLE", tackle.Pp ] }
     let finisher =
         { PartyMon.create (Species.byName "MEWTWO").Dex 100 with
-            Moves = [ moveId "DRAGON_RAGE", dragonRage.Pp ] }
+            Moves = [ moveId "PSYCHIC_M", psychic.Pp ] }
     let scene =
         OverworldScene(
             content,
@@ -984,7 +1199,7 @@ let ``BAT-021 real Falkner battle requires replacement before repeated trainer c
     Assert.Equal(0, actualLead.Hp)
     Assert.Equal(finisher.Id, actualFinisher.Id)
     Assert.Equal(finalFinisher.Hp, actualFinisher.Hp)
-    Assert.Equal<(int * int) list>([ moveId "DRAGON_RAGE", dragonRage.Pp - 2 ], actualFinisher.Moves)
+    Assert.Equal<(int * int) list>([ moveId "PSYCHIC_M", psychic.Pp - 2 ], actualFinisher.Moves)
     Assert.True(World.hasFlag "ENGINE_ZEPHYRBADGE" scene.DebugWorld)
 
 [<Fact>]

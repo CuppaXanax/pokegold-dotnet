@@ -39,9 +39,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1367/1367) are green from `engine-dotnet`.
-- `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
-  its MonoGame assets were not restored and NuGet access failed with `NU1301`.
+  .\tests\PokeGold.Tests` (1380/1380) are green from `engine-dotnet`.
+- `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
 
@@ -79,10 +78,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Consumable and nonconsumable held items now retain source-consistent state through
   residual activation, fainting, switching, capture cleanup, battle synchronization,
   and save/reload.
-  Trainer AI profile data now reads generated class flags from
-  `data/trainers/attributes.asm`, but its decision policy is not yet source-conformant:
-  generated scoring layers, randomized ties, distinct switch rates/restrictions, and
-  trainer item context/probability behavior need an ASM-backed correction pass.
+  Trainer AI now runs source-directional, seeded profile scoring for every generated
+  move layer and every `AI_Smart_EffectHandlers` entry, randomized minimum-score ties,
+  profile-specific switching rates and restrictions, and source trainer-item
+  eligibility/context/probability behavior. Legal generated Falkner, Will, Lance, and
+  Red fixtures cover the integration path.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -97,13 +97,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Replace the BAT-024 AI approximation with source-conformant scoring, switching,
-  item behavior, and discriminating seeded tests.
-2. Repair BAT-019's legal-party retry proof and add the explicit Epic 1 runtime
-  acceptance matrix without fabricated battle fixtures.
-3. Complete route-required overworld and script semantics, then extend the
+1. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
-4. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
+2. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
    source.
-5. After the route gate is proven, update public docs with the exact command,
+3. After the route gate is proven, update public docs with the exact command,
    current test count, and a host screenshot or GIF.

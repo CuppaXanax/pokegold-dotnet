@@ -13,7 +13,7 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-13:** 1367/1367 tests green. The script-VM golden path is verified
+**State as of 2026-07-13:** 1380/1380 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
@@ -35,9 +35,11 @@ covered through the real Falkner battle. Source-backed battle-item use now cover
 revives, PP restoration, X/Guard/Dire effects, and Poké Doll restrictions with runtime
 persistence proof. Held-item consumption and nonconsumable persistence now survive runtime
 battle cleanup and save/reload. BAT-022 now retains fainted reserves for real Revive
-targeting and covers every source battle-menu item family. BAT-024 remains incomplete because
-its trainer-AI policy is not yet source-conformant. Correct that Epic 1 blocker before
-extending the continuous Red route.
+targeting and covers every source battle-menu item family. BAT-024 now executes generated
+source AI layers with seeded source-direction scores, full Smart-handler dispatch, tie selection,
+switching, and trainer item rules. A legal-party component acceptance matrix covers wild,
+ordinary trainer, gym, Elite Four, and Red battle paths; extending the continuous Red route
+remains the next critical path.
 
 ---
 
@@ -75,7 +77,7 @@ extending the continuous Red route.
 
 | Item | Current | Target |
 |---|---|---|
-| Battle command/trainer UX | trainer/wild context, trainer-shaped opening text, FIGHT/PKMN/PACK/RUN menu, player-selected forced replacement, multi-mon trainer flow, a partial source-backed battle-item layer, and generated trainer-class AI profile data are covered by `BattleTests` plus real Falkner and Cherrygrove rival runtime script paths | finish real Revive/item targeting and source-conformant trainer AI, then extend the continuous runtime route through all boss battles |
+| Battle command/trainer UX | trainer/wild context, trainer-shaped opening text, FIGHT/PKMN/PACK/RUN menu, player-selected forced replacement, multi-mon trainer flow, full source battle-menu item coverage, and seeded generated trainer-class AI profiles are covered by `BattleTests` plus legal runtime matrix rows for wild, ordinary trainer, Falkner, Will, and Red paths | extend the continuous runtime route through all boss battles |
 
 ### The debt ledger is the to-do list
 

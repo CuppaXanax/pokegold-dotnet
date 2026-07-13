@@ -120,11 +120,12 @@ let ``BAT-024 real Red AI uses generated Full Restore at critical HP`` () =
     let enemy =
         { BattleMon.ofSpeciesWithStats (Species.byName redLead.Species) redLead.Level redMoves red.Dvs StatExperience.zero with
             Hp = 1 }
-    let splash = Moves.byName "SPLASH"
+    let recover = Moves.byName "RECOVER"
+    let recoverId = MovesData.byIndex |> Array.findIndex (fun move -> move.Name = "RECOVER")
     let player =
-        { BattleMon.ofSpecies (Species.byName "SNORLAX") 100 [ splash ] with
-            Moves = [ splash ]
-            Pp = [ splash.Pp ] }
+        { PartyMon.create (Species.byName "MEWTWO").Dex 100 with
+            Moves = [ recoverId, recover.Pp ] }
+        |> PartyMon.toBattleMon
     let context =
         { Group = "RED"
           Id = "RED1"
@@ -158,22 +159,20 @@ let private sourceTrainerContext (trainer: TrainerData) =
       LossText = None
       BaseReward = Some trainer.BaseReward }
 
-let private durableSplashPlayer () =
-    let splash = Moves.byName "SPLASH"
-    { BattleMon.ofSpecies (Species.byName "MEWTWO") 100 [ splash ] with
-        MaxHp = 10000
-        Hp = 10000
-        Defense = 999
-        SpDefense = 999
-        Speed = 1
-        Pp = [ splash.Pp ] }
+let private legalRecoverMewtwo () =
+    let recover = Moves.byName "RECOVER"
+    let recoverId = MovesData.byIndex |> Array.findIndex (fun move -> move.Name = "RECOVER")
+    Assert.Contains("RECOVER", MoveLearn.startingMoveNames "MEWTWO" 100)
+    { PartyMon.create (Species.byName "MEWTWO").Dex 100 with
+        Moves = [ recoverId, recover.Pp ] }
+    |> PartyMon.toBattleMon
 
 [<Fact>]
 let ``BAT-024 generated trainer profiles select only real source moves`` () =
     for group, id in [ "FALKNER", 1; "WILL", 1; "CHAMPION", 1; "RED", 1 ] do
         let trainer = Trainers.lookup group id |> Option.defaultWith (fun () -> failwith $"{group} not found")
         let enemy = sourceTrainerBattleMon trainer trainer.Party.Head
-        let initial = Battle.createTrainer (sourceTrainerContext trainer) [ durableSplashPlayer () ] [ enemy ] 0u
+        let initial = Battle.createTrainer (sourceTrainerContext trainer) [ legalRecoverMewtwo () ] [ enemy ] 0u
         let after = Battle.chooseMove 0 initial
         let sourceMoveMessages = enemy.Moves |> List.map (fun move -> $"{enemy.Species.Name} used {move.Name}!")
 
@@ -186,7 +185,7 @@ let ``BAT-024 Falkner source switch policy changes to real Pidgeotto`` () =
     let falkner = Trainers.lookup "FALKNER" 1 |> Option.defaultWith (fun () -> failwith "FALKNER not found")
     let lead = { sourceTrainerBattleMon falkner falkner.Party.[0] with Hp = 1 }
     let bench = sourceTrainerBattleMon falkner falkner.Party.[1]
-    let player = BattleMon.ofSpecies (Species.byName "CHIKORITA") 20 [ Moves.byName "SPLASH" ]
+    let player = BattleMon.ofSpecies (Species.byName "CHIKORITA") 20 [ Moves.byName "TACKLE" ]
 
     let after =
         Battle.createTrainer (sourceTrainerContext falkner) [ player ] [ lead; bench ] 0u
@@ -203,7 +202,7 @@ let ``BAT-024 Lance source item priority uses Full Restore before Full Heal`` ()
     let enemy = { sourceTrainerBattleMon lance highestLevelMon with Hp = 1; Status = Poison }
 
     let after =
-        Battle.createTrainer (sourceTrainerContext lance) [ durableSplashPlayer () ] [ enemy ] 0u
+        Battle.createTrainer (sourceTrainerContext lance) [ legalRecoverMewtwo () ] [ enemy ] 0u
         |> Battle.chooseMove 0
 
     Assert.Equal(enemy.MaxHp, after.Enemy.Hp)
@@ -212,26 +211,20 @@ let ``BAT-024 Lance source item priority uses Full Restore before Full Heal`` ()
     Assert.Contains(after.Messages, fun message -> message.Contains("used FULL RESTORE"))
 
 [<Fact>]
-let ``BAT-024 real Will team cycles every generated Elite Four member`` () =
+let ``BAT-024 legal Mewtwo defeats every generated Will party member through real turns`` () =
     let will = Trainers.lookup "WILL" 1 |> Option.defaultWith (fun () -> failwith "WILL not found")
-    let finisher =
-        { Moves.byName "PSYCHIC_M" with
-            Name = "BAT024_FINISHER"
-            Effect = "EFFECT_NORMAL_HIT"
-            Power = 255
-            Accuracy = 255
-            Pp = 99 }
+    let legalMewtwo = PartyMon.create (Species.byName "MEWTWO").Dex 100
+    Assert.True(TmHm.canLearnMove "THUNDER" legalMewtwo)
+    Assert.True(TmHm.canLearnMove "FIRE_BLAST" legalMewtwo)
+    Assert.True(TmHm.canLearnMove "PSYCHIC_M" legalMewtwo)
+    let thunder = Moves.byName "THUNDER"
+    let fireBlast = Moves.byName "FIRE_BLAST"
+    let psychic = Moves.byName "PSYCHIC_M"
+    let moveId name = MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name)
     let player =
-        { BattleMon.ofSpecies (Species.byName "MEWTWO") 100 [ finisher ] with
-            PersistentId = Some(System.Guid.NewGuid())
-            MaxHp = 10000
-            Hp = 10000
-            Attack = 999
-            Defense = 999
-            Speed = 999
-            SpAttack = 999
-            SpDefense = 999
-            Pp = [ finisher.Pp ] }
+        { legalMewtwo with
+            Moves = [ moveId "THUNDER", thunder.Pp; moveId "FIRE_BLAST", fireBlast.Pp; moveId "PSYCHIC_M", psychic.Pp ] }
+        |> PartyMon.toBattleMon
     let initial =
         Battle.createTrainer
             (sourceTrainerContext will)
@@ -239,17 +232,27 @@ let ``BAT-024 real Will team cycles every generated Elite Four member`` () =
             (will.Party |> List.map (sourceTrainerBattleMon will))
             0u
 
+    let moveIndex state =
+        match state.Enemy.Species.Name with
+        | "XATU"
+        | "SLOWBRO" -> 0
+        | "JYNX"
+        | "EXEGGUTOR" -> 1
+        | _ -> 2
+
     let rec resolve turns (state: BattleState) =
         match state.Outcome with
         | Some _ -> state
         | None when turns = 0 -> state
         | None when Battle.requiresPlayerReplacement state -> failwith "The prepared player should not need a replacement"
-        | None -> resolve (turns - 1) (Battle.chooseMove 0 state)
+        | None -> resolve (turns - 1) (Battle.chooseMove (moveIndex state) state)
 
-    let final = resolve 10 initial
+    let final = resolve 80 initial
 
     Assert.Equal(Some Win, final.Outcome)
-    Assert.Equal<string list>(will.Party |> List.map (fun trainerMon -> trainerMon.Species), final.DefeatEvents |> List.map (fun defeat -> defeat.DefeatedSpecies.Name))
+    Assert.Equal<string list>(
+        will.Party |> List.map (fun trainerMon -> trainerMon.Species) |> List.sort,
+        final.DefeatEvents |> List.map (fun defeat -> defeat.DefeatedSpecies.Name) |> List.sort)
     Assert.Equal(will.Party.Length, final.DefeatEvents.Length)
 
 [<Fact>]
@@ -379,9 +382,10 @@ let ``AI prefers super-effective moves`` () =
     let tackle = Moves.byName "TACKLE"
     let user = BattleMon.ofSpecies fire 10 [ ember; tackle ]
     let target = BattleMon.ofSpecies grass 10 [ tackle ]
-    let scoreEmber = BattleAI.scoreMove user target ember
-    let scoreTackle = BattleAI.scoreMove user target tackle
-    Assert.True(scoreEmber > scoreTackle)
+    let profile: BattleAI.TrainerProfile = { MoveFlags = [ "AI_TYPES" ]; ItemSwitchFlags = []; Items = [] }
+    let scoreEmber = BattleAI.scoreMoveWithProfile profile 0 user target ember
+    let scoreTackle = BattleAI.scoreMoveWithProfile profile 0 user target tackle
+    Assert.True(scoreEmber < scoreTackle)
 
 [<Fact>]
 let ``AI avoids immune moves`` () =
@@ -390,7 +394,293 @@ let ``AI avoids immune moves`` () =
     let tackle = Moves.byName "TACKLE"
     let user = BattleMon.ofSpecies normal 10 [ tackle ]
     let target = BattleMon.ofSpecies ghost 10 [ tackle ]
-    Assert.True(BattleAI.scoreMove user target tackle < 0)
+    let profile: BattleAI.TrainerProfile = { MoveFlags = [ "AI_TYPES" ]; ItemSwitchFlags = []; Items = [] }
+    Assert.True(BattleAI.scoreMoveWithProfile profile 0 user target tackle > 20)
+
+[<Fact>]
+let ``BAT-024 source Offensive layer discourages Sleep Powder behind a damaging move`` () =
+    let sleepPowder = Moves.byName "SLEEP_POWDER"
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies (Species.byName "BUTTERFREE") 20 [ sleepPowder; tackle ]
+    let target = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ tackle ]
+    let profile: BattleAI.TrainerProfile = { MoveFlags = [ "AI_OFFENSIVE" ]; ItemSwitchFlags = []; Items = [] }
+
+    let chosen =
+        BattleAI.chooseMoveWithProfile profile 0 user target
+        |> Option.defaultWith (fun () -> failwith "expected a legal AI move")
+
+    Assert.Equal("TACKLE", fst chosen |> fun move -> move.Name)
+
+[<Fact>]
+let ``BAT-024 source minimum-score ties use the seeded battle RNG`` () =
+    let tackle = Moves.byName "TACKLE"
+    let scratch = Moves.byName "SCRATCH"
+    let pound = Moves.byName "POUND"
+    let quickAttack = Moves.byName "QUICK_ATTACK"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 20 500 30 30 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 500 30 30 200 with
+            Moves = [ tackle; scratch; pound; quickAttack ]
+            Pp = [ tackle.Pp; scratch.Pp; pound.Pp; quickAttack.Pp ] }
+    let context =
+        { Group = "AI_TEST"
+          Id = "1"
+          Name = "AI"
+          ClassName = "TEST"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+    let seeds =
+        [ 0u .. 255u ]
+        |> List.groupBy (fun seed ->
+            let roll, _ = Rng.next (Rng.create seed)
+            roll &&& 3)
+        |> List.choose (fun (_, grouped) -> grouped |> List.tryHead)
+        |> List.take 2
+    let selectedMove seed =
+        let after = Battle.createTrainer context [ player ] [ enemy ] seed |> Battle.chooseMove 0
+        after.Messages
+        |> List.find (fun message -> message.StartsWith("ENEMY used "))
+
+    Assert.NotEqual<string>(selectedMove seeds.[0], selectedMove seeds.[1])
+
+[<Fact>]
+let ``BAT-024 trapped and Mean Looked trainers cannot switch`` () =
+    let player = { mon "GHOST" (ty "GHOST") (ty "GHOST") 30 120 70 70 50 with Moves = [ Moves.byName "SPLASH" ] }
+    let activeEnemy =
+        { mon "WALLED" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
+            Hp = 20
+            Moves = [ Moves.byName "TACKLE" ] }
+    let benchEnemy =
+        { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with
+            Moves = [ Moves.byName "BITE" ] }
+    let context =
+        { Group = "FALKNER"
+          Id = "1"
+          Name = "FALKNER"
+          ClassName = "FALKNER"
+          WinText = None
+          LossText = None
+          BaseReward = Some 25 }
+    let blockedStates =
+        [ { activeEnemy with Volatile = { activeEnemy.Volatile with Trapped = Some 2 } }
+          { activeEnemy with Volatile = { activeEnemy.Volatile with CantEscape = true } }
+          { activeEnemy with Volatile = { activeEnemy.Volatile with Charging = Some 1; ChargingMove = Some (Moves.byName "TACKLE") } }
+          { activeEnemy with Volatile = { activeEnemy.Volatile with Rampage = Some 2 } }
+          { activeEnemy with Volatile = { activeEnemy.Volatile with BideTurns = Some 2 } } ]
+
+    for blocked in blockedStates do
+        let after = Battle.createTrainer context [ player ] [ blocked; benchEnemy ] 0u |> Battle.chooseMove 0
+        Assert.Equal("WALLED", after.Enemy.Species.Name)
+        Assert.DoesNotContain(after.Messages, fun message -> message.Contains("Enemy withdrew"))
+
+[<Fact>]
+let ``BAT-024 source switch policy rates differ for the same opportunity`` () =
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { mon "WALLED" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
+            Moves = [ Moves.byName "TACKLE" ] }
+    let player = { mon "GHOST" (ty "GHOST") (ty "GHOST") 30 120 70 70 50 with Moves = [ splash ] }
+    let bench = { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with Moves = [ Moves.byName "BITE" ] }
+    let seed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate ->
+            let roll, _ = Rng.next (Rng.create candidate)
+            roll >= 30 && roll < 128)
+    let profile flags : BattleAI.TrainerProfile =
+        { MoveFlags = []
+          ItemSwitchFlags = flags
+          Items = [] }
+    let context: BattleAI.AiContext =
+                { EnemyTurnsTaken = 0; PlayerTurnsTaken = 0; EnemySide = SideState.Empty; PlayerSide = SideState.Empty; WeatherType = None; EnemyTeam = [ active; bench ]; PlayerTeam = [ player ] }
+    let choose flags =
+        BattleAI.chooseSwitchWithProfileAndRng
+            (profile flags)
+            context
+            active
+            player
+            [ active; bench ]
+            (Rng.create seed)
+        |> fst
+
+    Assert.Equal(Some 1, choose [ "SWITCH_OFTEN" ])
+    Assert.Equal(None, choose [ "SWITCH_RARELY" ])
+    Assert.Equal(Some 1, choose [ "SWITCH_SOMETIMES" ])
+
+    let playerHeld = { player with Volatile = { player.Volatile with CantEscape = true } }
+    let heldChoice =
+        BattleAI.chooseSwitchWithProfileAndRng
+            (profile [ "SWITCH_OFTEN" ])
+            context
+            active
+            playerHeld
+            [ active; bench ]
+            (Rng.create seed)
+        |> fst
+    Assert.Equal(None, heldChoice)
+
+    let perishContext = { context with EnemySide = { SideState.Empty with PerishCounter = Some 1 } }
+    let perishChoice =
+        BattleAI.chooseSwitchWithProfileAndRng
+            (profile [ "SWITCH_RARELY" ])
+            perishContext
+            { active with Hp = active.MaxHp }
+            player
+            [ active; bench ]
+            (Rng.create 0u)
+        |> fst
+    Assert.Equal(Some 1, perishChoice)
+
+[<Fact>]
+let ``BAT-024 source Full Heal ignores confusion without a nonvolatile status`` () =
+    let splash = Moves.byName "SPLASH"
+    let enemy =
+        { BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ splash ] with
+            Volatile = { VolatileStatus.empty with Confusion = Some 2 } }
+    let profile: BattleAI.TrainerProfile = { MoveFlags = []; ItemSwitchFlags = [ "CONTEXT_USE" ]; Items = [ "FULL_HEAL" ] }
+
+    Assert.Equal(None, BattleAI.tryUseItem profile [ "FULL_HEAL" ] [ enemy ] enemy 0)
+
+[<Fact>]
+let ``BAT-024 source trainer item context uses seeded thresholds and preserves Full Heal confusion`` () =
+    let splash = Moves.byName "SPLASH"
+    let profile: BattleAI.TrainerProfile = { MoveFlags = []; ItemSwitchFlags = [ "CONTEXT_USE" ]; Items = [] }
+    let baseEnemy = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ splash ]
+    let attempt item enemy turns seed =
+        BattleAI.tryUseItemWithRng profile [ item ] [ enemy ] enemy turns (Rng.create seed)
+        |> fst
+    let rejectionSeed =
+        [ 0u .. 255u ]
+        |> List.find (fun seed ->
+            let roll, _ = Rng.next (Rng.create seed)
+            roll >= 128)
+
+    Assert.Equal(None, attempt "FULL_HEAL" { baseEnemy with Status = Poison } 0 0u)
+    Assert.Equal(None, attempt "FULL_HEAL" { baseEnemy with Status = BadPoison 3 } 0 0u)
+    Assert.True((attempt "FULL_HEAL" { baseEnemy with Status = BadPoison 4 } 0 0u).IsSome)
+
+    let frozenConfused =
+        { baseEnemy with
+            Status = Freeze
+            Volatile = { baseEnemy.Volatile with Confusion = Some 2 } }
+    let fullHeal = attempt "FULL_HEAL" frozenConfused 0 0u |> Option.get
+    Assert.Equal(Healthy, fullHeal.Enemy.Status)
+    Assert.Equal(Some 2, fullHeal.Enemy.Volatile.Confusion)
+
+    let atQuarter = { baseEnemy with Hp = max 1 (baseEnemy.MaxHp / 4) }
+    Assert.True((attempt "MAX_POTION" atQuarter 0 0u).IsSome)
+    let betweenQuarterAndHalf = { baseEnemy with Hp = baseEnemy.MaxHp / 2 }
+    Assert.Equal(None, attempt "MAX_POTION" betweenQuarterAndHalf 0 rejectionSeed)
+
+    let lowerLevel = { baseEnemy with Level = 10; Hp = 1 }
+    let highestLevel = { baseEnemy with Level = 20; Hp = 1 }
+    Assert.Equal(None, BattleAI.tryUseItem profile [ "MAX_POTION" ] [ lowerLevel; highestLevel ] lowerLevel 0)
+
+    Assert.Equal(None, attempt "X_ATTACK" baseEnemy 0 0u)
+    Assert.True((attempt "X_ATTACK" baseEnemy 0 rejectionSeed).IsSome)
+    Assert.Equal(None, attempt "X_ATTACK" baseEnemy 1 rejectionSeed)
+
+let private aiProfile flags : BattleAI.TrainerProfile =
+    { MoveFlags = flags
+      ItemSwitchFlags = []
+      Items = [] }
+
+let private aiContext enemyTurnsTaken playerTurnsTaken : BattleAI.AiContext =
+    { EnemyTurnsTaken = enemyTurnsTaken; PlayerTurnsTaken = playerTurnsTaken; EnemySide = SideState.Empty; PlayerSide = SideState.Empty; WeatherType = None; EnemyTeam = []; PlayerTeam = [] }
+
+let private sourceAiChoice flags enemyTurnsTaken playerTurnsTaken user target seed =
+    BattleAI.chooseMoveWithProfileAndRng
+        (aiProfile flags)
+        (aiContext enemyTurnsTaken playerTurnsTaken)
+        user
+        target
+        (Rng.create seed)
+    |> fst
+    |> Option.defaultWith (fun () -> failwith "expected a legal source AI move")
+    |> fst
+
+[<Fact>]
+let ``BAT-024 source AI skips zero PP and disabled moves when another move is legal`` () =
+    let ember = Moves.byName "EMBER"
+    let tackle = Moves.byName "TACKLE"
+    let user =
+        { BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 20 [ ember; tackle ] with
+            Pp = [ 0; tackle.Pp ] }
+    let target = BattleMon.ofSpecies (Species.byName "CHIKORITA") 20 [ tackle ]
+    let choose battleMon =
+        BattleAI.chooseMoveWithProfileAndRng
+            (aiProfile [ "AI_TYPES" ])
+            (aiContext 0 0)
+            battleMon
+            target
+            (Rng.create 0u)
+        |> fst
+        |> Option.defaultWith (fun () -> failwith "expected a legal AI move")
+        |> fst
+
+    Assert.Equal("TACKLE", (choose user).Name)
+    let disabledTackle =
+        { user with
+            Pp = [ ember.Pp; tackle.Pp ]
+            Volatile = { user.Volatile with DisabledMoveIndex = Some 1 } }
+    Assert.Equal("EMBER", (choose disabledTackle).Name)
+
+[<Fact>]
+let ``BAT-024 Smart handler inventory matches the source scoring dispatch`` () =
+        let expected = Set.ofList [ "EFFECT_SLEEP"; "EFFECT_LEECH_HIT"; "EFFECT_SELFDESTRUCT"; "EFFECT_DREAM_EATER"; "EFFECT_MIRROR_MOVE"; "EFFECT_EVASION_UP"; "EFFECT_ALWAYS_HIT"; "EFFECT_ACCURACY_DOWN"; "EFFECT_RESET_STATS"; "EFFECT_BIDE"; "EFFECT_FORCE_SWITCH"; "EFFECT_HEAL"; "EFFECT_TOXIC"; "EFFECT_LIGHT_SCREEN"; "EFFECT_OHKO"; "EFFECT_RAZOR_WIND"; "EFFECT_SUPER_FANG"; "EFFECT_TRAP_TARGET"; "EFFECT_UNUSED_2B"; "EFFECT_CONFUSE"; "EFFECT_SP_DEF_UP_2"; "EFFECT_REFLECT"; "EFFECT_PARALYZE"; "EFFECT_SPEED_DOWN_HIT"; "EFFECT_SUBSTITUTE"; "EFFECT_HYPER_BEAM"; "EFFECT_RAGE"; "EFFECT_MIMIC"; "EFFECT_LEECH_SEED"; "EFFECT_DISABLE"; "EFFECT_COUNTER"; "EFFECT_ENCORE"; "EFFECT_PAIN_SPLIT"; "EFFECT_SNORE"; "EFFECT_CONVERSION2"; "EFFECT_LOCK_ON"; "EFFECT_DEFROST_OPPONENT"; "EFFECT_SLEEP_TALK"; "EFFECT_DESTINY_BOND"; "EFFECT_REVERSAL"; "EFFECT_SPITE"; "EFFECT_HEAL_BELL"; "EFFECT_PRIORITY_HIT"; "EFFECT_THIEF"; "EFFECT_MEAN_LOOK"; "EFFECT_NIGHTMARE"; "EFFECT_FLAME_WHEEL"; "EFFECT_CURSE"; "EFFECT_PROTECT"; "EFFECT_FORESIGHT"; "EFFECT_PERISH_SONG"; "EFFECT_SANDSTORM"; "EFFECT_ENDURE"; "EFFECT_ROLLOUT"; "EFFECT_SWAGGER"; "EFFECT_FURY_CUTTER"; "EFFECT_ATTRACT"; "EFFECT_SAFEGUARD"; "EFFECT_MAGNITUDE"; "EFFECT_BATON_PASS"; "EFFECT_PURSUIT"; "EFFECT_RAPID_SPIN"; "EFFECT_MORNING_SUN"; "EFFECT_SYNTHESIS"; "EFFECT_MOONLIGHT"; "EFFECT_HIDDEN_POWER"; "EFFECT_RAIN_DANCE"; "EFFECT_SUNNY_DAY"; "EFFECT_BELLY_DRUM"; "EFFECT_PSYCH_UP"; "EFFECT_MIRROR_COAT"; "EFFECT_SKULL_BASH"; "EFFECT_TWISTER"; "EFFECT_EARTHQUAKE"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_STOMP"; "EFFECT_SOLARBEAM"; "EFFECT_THUNDER"; "EFFECT_FLY" ]
+
+        Assert.Equal<Set<string>>(expected, BattleAI.smartHandlerEffects)
+
+[<Fact>]
+let ``BAT-024 every generated source scoring layer changes a real move decision`` () =
+    let tackle = Moves.byName "TACKLE"
+    let awakeTarget = BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ tackle ]
+
+    let basicUser = BattleMon.ofSpecies (Species.byName "HYPNO") 30 [ Moves.byName "DREAM_EATER"; tackle ]
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_BASIC" ] 0 0 basicUser awakeTarget 0u).Name)
+
+    let setupUser = BattleMon.ofSpecies (Species.byName "SCYTHER") 30 [ Moves.byName "SWORDS_DANCE"; tackle ]
+    Assert.Equal("SWORDS_DANCE", (sourceAiChoice [ "AI_SETUP" ] 0 0 setupUser awakeTarget 0u).Name)
+    let discourageSeed =
+        [ 0u .. 255u ]
+        |> List.find (fun seed ->
+            let roll, _ = Rng.next (Rng.create seed)
+            roll >= 30)
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SETUP" ] 1 1 setupUser awakeTarget discourageSeed).Name)
+
+    let grassTarget = BattleMon.ofSpecies (Species.byName "CHIKORITA") 30 [ tackle ]
+    let typesUser = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 30 [ Moves.byName "EMBER"; tackle ]
+    Assert.Equal("EMBER", (sourceAiChoice [ "AI_TYPES" ] 0 0 typesUser grassTarget 0u).Name)
+
+    let offensiveUser = BattleMon.ofSpecies (Species.byName "BUTTERFREE") 30 [ Moves.byName "SLEEP_POWDER"; tackle ]
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_OFFENSIVE" ] 0 0 offensiveUser awakeTarget 0u).Name)
+
+    let smartBase = BattleMon.ofSpecies (Species.byName "MILTANK") 30 [ Moves.byName "MILK_DRINK"; tackle ]
+    let smartUser = { smartBase with Hp = 1 }
+    Assert.Equal("MILK_DRINK", (sourceAiChoice [ "AI_SMART" ] 0 0 smartUser awakeTarget 0u).Name)
+
+    let opportunistBase = BattleMon.ofSpecies (Species.byName "SCYTHER") 30 [ Moves.byName "SWORDS_DANCE"; tackle ]
+    let opportunistUser = { opportunistBase with Hp = 1 }
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_OPPORTUNIST" ] 0 0 opportunistUser awakeTarget 0u).Name)
+
+    let aggressiveUser = BattleMon.ofSpecies (Species.byName "SNORLAX") 30 [ tackle; Moves.byName "HYPER_BEAM" ]
+    Assert.Equal("HYPER_BEAM", (sourceAiChoice [ "AI_AGGRESSIVE" ] 0 0 aggressiveUser awakeTarget 0u).Name)
+
+    let cautiousUser = BattleMon.ofSpecies (Species.byName "BULBASAUR") 30 [ Moves.byName "LEECH_SEED"; tackle ]
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_CAUTIOUS" ] 1 0 cautiousUser awakeTarget 0u).Name)
+
+    let poisonTarget = BattleMon.ofSpecies (Species.byName "EKANS") 30 [ tackle ]
+    let statusUser = BattleMon.ofSpecies (Species.byName "ODDISH") 30 [ Moves.byName "POISONPOWDER"; tackle ]
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_STATUS" ] 0 0 statusUser poisonTarget 0u).Name)
+
+    let riskyBase = BattleMon.ofSpecies (Species.byName "GEODUDE") 30 [ Moves.byName "SELFDESTRUCT"; tackle ]
+    let riskyUser = { riskyBase with Hp = riskyBase.MaxHp - 1 }
+    let lowTarget = { awakeTarget with Hp = 1 }
+    Assert.Equal("SELFDESTRUCT", (sourceAiChoice [ "AI_RISKY" ] 0 0 riskyUser lowTarget 0u).Name)
 
 [<Fact>]
 let ``PartyMon conversion preserves identity PP status and held item for battle`` () =
@@ -1152,8 +1442,16 @@ let ``trainer AI switches out of a bad low HP matchup`` () =
     let benchEnemy =
         { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with
             Moves = [ Moves.byName "BITE" ] }
+    let trainer =
+        { Group = "FALKNER"
+          Id = "1"
+          Name = "FALKNER"
+          ClassName = "FALKNER"
+          WinText = None
+          LossText = None
+          BaseReward = Some 25 }
 
-    let after = Battle.createTeam [ player ] [ activeEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
+    let after = Battle.createTrainer trainer [ player ] [ activeEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
 
     Assert.Equal("ANSWER", after.Enemy.Species.Name)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("Enemy withdrew"))

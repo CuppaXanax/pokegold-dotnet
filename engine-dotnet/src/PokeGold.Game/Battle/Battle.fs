@@ -67,6 +67,7 @@ type BattleState = {
     SkipNextPlayerAction: bool
     EnemyAiItems: string list
     EnemyTurnsTaken: int
+    PlayerTurnsTaken: int
     Messages: string list
     Outcome: Outcome option
     Rng: Rng
@@ -118,6 +119,7 @@ module Battle =
           SkipNextPlayerAction = false
           EnemyAiItems = []
           EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
           Messages = openingMessages WildBattle enemy
           Outcome = None
           Rng = Rng.create seed
@@ -146,6 +148,7 @@ module Battle =
           SkipNextPlayerAction = false
           EnemyAiItems = enemyAiItems
           EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
           Messages = openingMessages kind enemy
           Outcome = None
           Rng = Rng.create seed
@@ -932,8 +935,16 @@ module Battle =
         | TrainerBattle context -> BattleAI.profileForTrainer context.Group context.Id
         | WildBattle -> BattleAI.profileForTrainer "" ""
 
-    let private enemyMoveChoice profile enemyTurnsTaken (enemy: BattleMon) (player: BattleMon) : (MoveData * int) option =
-        BattleAI.chooseMoveWithProfile profile enemyTurnsTaken enemy player
+    let private enemyMoveChoice profile enemyTurnsTaken playerTurnsTaken enemySide playerSide weatherType (enemyTeam: BattleMon list) (playerTeam: BattleMon list) (enemy: BattleMon) (player: BattleMon) (rng: Rng) =
+        let context: BattleAI.AiContext =
+            { EnemyTurnsTaken = enemyTurnsTaken
+              PlayerTurnsTaken = playerTurnsTaken
+              EnemySide = enemySide
+              PlayerSide = playerSide
+              WeatherType = weatherType
+              EnemyTeam = enemyTeam
+              PlayerTeam = playerTeam }
+        BattleAI.chooseMoveWithProfileAndRng profile context enemy player rng
 
     // -- Orchestrator --------------------------------------------------------
 
@@ -1078,6 +1089,7 @@ module Battle =
                         Participants = Set.union s.Participants (activeParticipant incoming)
                         AmuletCoinActivated = s.AmuletCoinActivated || incoming.HeldItem = Some "AMULET_COIN"
                         ReplacementState = NoReplacementRequired
+                        PlayerTurnsTaken = 0
                         Messages = [ $"Go, {incoming.Species.Name}!" ] }
 
                 if enemyAlsoFainted then
@@ -1104,9 +1116,16 @@ module Battle =
         let mutable preEnemy = s.Enemy
         let mutable preEnemyTeam = s.EnemyTeam
         let mutable enemyTurnsTaken = s.EnemyTurnsTaken
+        let mutable playerTurnsTaken = s.PlayerTurnsTaken
+        let mutable rng = s.Rng
         let profile = enemyProfile s
+        let switchContext: BattleAI.AiContext =
+                        { EnemyTurnsTaken = enemyTurnsTaken; PlayerTurnsTaken = playerTurnsTaken; EnemySide = s.EnemySide; PlayerSide = s.PlayerSide; WeatherType = s.WeatherType; EnemyTeam = preEnemyTeam; PlayerTeam = s.PlayerTeam }
+        let enemySwitchChoice, rngAfterSwitch =
+            BattleAI.chooseSwitchWithProfileAndRng profile switchContext preEnemy s.Player preEnemyTeam rng
+        rng <- rngAfterSwitch
         let enemySwitched, enemySwitchMsgs =
-            match BattleAI.chooseSwitchWithProfile profile enemyTurnsTaken preEnemy s.Player preEnemyTeam with
+            match enemySwitchChoice with
             | Some switchIndex ->
                 match switchTeamTo switchIndex preEnemy preEnemyTeam (fun _ target -> clearSwitchVolatile target) with
                 | Some(incoming, team') ->
@@ -1122,7 +1141,10 @@ module Battle =
             if enemySwitched then
                 false, [], s.EnemyAiItems
             else
-                match BattleAI.tryUseItem profile s.EnemyAiItems preEnemyTeam preEnemy enemyTurnsTaken with
+                let itemChoice, rngAfterItem =
+                    BattleAI.tryUseItemWithRng profile s.EnemyAiItems preEnemyTeam preEnemy enemyTurnsTaken rng
+                rng <- rngAfterItem
+                match itemChoice with
                 | Some itemUse ->
                     preEnemy <- itemUse.Enemy
                     preEnemyTeam <- preEnemyTeam |> List.mapi (fun i mon -> if i = 0 then itemUse.Enemy else mon)
@@ -1135,7 +1157,12 @@ module Battle =
                 | None -> false, [], s.EnemyAiItems
 
         // Enemy move selection.
-        let enemyChoice = if enemySwitched || enemyUsedItem then None else enemyMoveChoice profile enemyTurnsTaken preEnemy s.Player
+        let enemyChoice, rngAfterChoice =
+            if enemySwitched || enemyUsedItem then
+                None, rng
+            else
+                enemyMoveChoice profile enemyTurnsTaken playerTurnsTaken s.EnemySide s.PlayerSide s.WeatherType preEnemyTeam s.PlayerTeam preEnemy s.Player rng
+        rng <- rngAfterChoice
         let enemyStruggle = (not enemySwitched) && (not enemyUsedItem) && enemyChoice.IsNone
         let enemyMv, enemyMvIndex =
             if enemySwitched || enemyUsedItem then Moves.byName "SPLASH", -1
@@ -1160,7 +1187,6 @@ module Battle =
         let mutable enemy = resetProtectCountIfNeeded enemyMv preEnemy
         let mutable playerTeam = s.PlayerTeam |> List.mapi (fun i m -> if i = 0 then player else m)
         let mutable enemyTeam = preEnemyTeam |> List.mapi (fun i m -> if i = 0 then enemy else m)
-        let mutable rng = s.Rng
         let mutable weatherTimer = s.WeatherTimer
         let mutable weatherType = s.WeatherType
         let mutable playerSide = s.PlayerSide
@@ -1182,6 +1208,7 @@ module Battle =
                 AmuletCoinActivated = s.AmuletCoinActivated || player.HeldItem = Some "AMULET_COIN"
                 PayDayMoney = payDayMoney
                 EnemyTurnsTaken = enemyTurnsTaken
+                PlayerTurnsTaken = playerTurnsTaken
                 Rng = rng
                 WeatherTimer = weatherTimer
                 WeatherType = weatherType
@@ -1255,7 +1282,8 @@ module Battle =
                 skipEnemyAction <- false
                 false
             else
-                if not playerIsUser then enemyTurnsTaken <- enemyTurnsTaken + 1
+                if playerIsUser then playerTurnsTaken <- playerTurnsTaken + 1
+                else enemyTurnsTaken <- enemyTurnsTaken + 1
                 let user, foe, selectedMove, selectedMoveIndex, isStruggle =
                     if playerIsUser then player, enemy, playerMv, playerMvIndex, playerStruggle
                     else enemy, player, enemyMv, enemyMvIndex, enemyStruggle
@@ -1669,6 +1697,7 @@ module Battle =
                                     | Some(incoming, team') ->
                                         player <- incoming
                                         playerTeam <- team'
+                                        playerTurnsTaken <- 0
                                         participants <- Set.union participants (activeParticipant incoming)
                                         enemy <- resetBatonPassOpponentStatus foe
                                         enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then enemy else m)
@@ -1718,6 +1747,7 @@ module Battle =
                                         enemyTeam <- enemyTeam |> List.mapi (fun i m -> if i = 0 then user else m)
                                         player <- incoming
                                         playerTeam <- team'
+                                        playerTurnsTaken <- 0
                                         participants <- Set.union participants (activeParticipant incoming)
                                         skipPlayerAction <- true
                                         msgs <- msgs @ [ $"Go, {incoming.Species.Name}!" ]
@@ -1743,6 +1773,7 @@ module Battle =
                                 playerTeam <- switched.PlayerTeam
                                 enemyTeam <- switched.EnemyTeam
                                 enemyTurnsTaken <- switched.EnemyTurnsTaken
+                                if enemyFainted && playerIsUser then skipEnemyAction <- true
                                 updateParticipantsAfterFaint enemyFainted playerFainted
                                 msgs <- msgs @ switchMsgs
                                 true
@@ -1798,6 +1829,7 @@ module Battle =
             SkipNextPlayerAction = false
             EnemyAiItems = enemyAiItems
             EnemyTurnsTaken = enemyTurnsTaken
+            PlayerTurnsTaken = playerTurnsTaken
             Messages = msgs
             Outcome = outcome
             Rng = rng
@@ -1857,4 +1889,5 @@ module Battle =
                     PlayerTeam = team
                     Participants = Set.union s.Participants (activeParticipant incoming)
                     AmuletCoinActivated = s.AmuletCoinActivated || incoming.HeldItem = Some "AMULET_COIN"
+                    PlayerTurnsTaken = 0
                     Messages = [ $"Come back, {s.Player.Species.Name}!"; $"Go, {incoming.Species.Name}!" ] }

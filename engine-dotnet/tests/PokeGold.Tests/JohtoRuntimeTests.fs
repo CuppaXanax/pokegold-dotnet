@@ -3039,7 +3039,7 @@ let ``A20 Viridian Gym door loads gym and Blue awards EarthBadge`` () =
 
     advanceRuntimeUntil
         driver
-        5000
+        15000
         (fun s ->
             match s.Overworld with
             | Some ow ->

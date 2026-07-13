@@ -126,7 +126,7 @@ Epic 0 is complete when all later epics can use generated source data, save stat
 
 This epic is the first critical-path blocker. Route extension beyond early Johto is not meaningful until real battles produce trustworthy persistent results.
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 ## Story 1.1 — Trainers and wild encounters use authentic battle parties
 
@@ -159,7 +159,7 @@ Runtime trainer and wild construction uses source moves, held-item data, and pre
 
 ## Story 1.2 — Persistent party members enter and leave battle without identity loss
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 Stable GUID identity synchronizes duplicate species/level party members exactly and survives reordering, boxing, saving, and legacy-save migration. Packed DVs and five-field stat experience calculate all six stats exactly. Canonical moves/PP, items, status including sleep count, EXP/stat-EXP carriers, level, and friendship now round-trip by identity while Transform/Mimic state is discarded and Sketch persists.
 
@@ -184,7 +184,7 @@ Stable GUID identity synchronizes duplicate species/level party members exactly 
 
 ## Story 1.3 — Multi-Pokémon trainer battles award correct progression
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 Multi-mon battles emit ordered per-defeat events and now consume them into the persistent party with source-ordered participant and EXP Share division, modifier rounding, stat EXP, Pokérus doubling, and saturation. Crossed-level side effects remain scoped to BAT-010.
 
@@ -212,7 +212,7 @@ Multi-mon battles emit ordered per-defeat events and now consume them into the p
 
 ## Story 1.4 — Move learning and evolution are player-controlled and source-correct
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 Level-up move learning preserves source order and suspends battle-script resumption for explicit replace/decline decisions. All 50 TMs and seven HMs are generated with source compatibility.
 
@@ -266,7 +266,7 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
 
 ## Story 1.6 — The battle command shell supports a normal playthrough
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, and broad move-effect behavior exist.
 
@@ -289,16 +289,16 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - Consumable held healing/status/PP effects activate once, remain unconsumed when a holder faints before residual handling, and do not resurrect through switching, capture cleanup, battle synchronization, or save/reload. Nonconsumables retain their item state across turns and cleanup; existing source-effect tests cover type damage, priority, critical, survival, PP, and status behavior. Source held stat-up entries are explicitly unused by the original battle core.
   - Proved by `BAT-023 fainted Berry holder retains item and Leftovers remains held across turns` and `BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`, together with existing `type boosting held item increases matching move damage`, `Quick Claw lets a slower holder move first on a successful roll`, `Focus Band can leave the holder at 1 HP against lethal damage`, `MysteryBerry restores PP when a move reaches zero`, and status-berry tests.
 
-- 🟡 **BAT-024 — Audit trainer AI at the integration layer.**
-  - Generated trainer-class profiles preserve source move, item, and switch flags, but the current battle policy is an approximation rather than a source-conformant AI implementation. It does not yet model every generated scoring layer, source score direction and randomized ties, distinct switch probabilities and restrictions, or trainer-item context and probability behavior.
-  - Completion requires an ASM-backed implementation and discriminating seeded tests for every generated scoring layer, tie selection, switch policy and switching restrictions, trainer-item thresholds/probabilities, and real generated Falkner, Elite Four/Lance, and Red decisions. Loading a source move is not sufficient evidence that source AI selected it.
-  - Existing profile-generation and integration tests remain valuable regression coverage but are not acceptance evidence for the complete source AI contract.
+- ✅ **BAT-024 — Audit trainer AI at the integration layer.**
+  - Generated trainer-class profiles now drive source-directional $20$-base move scores. All generated flags execute explicit ASM-backed layers: `AI_BASIC`, `AI_SETUP`, `AI_TYPES`, `AI_OFFENSIVE`, `AI_SMART`, `AI_OPPORTUNIST`, `AI_AGGRESSIVE`, `AI_CAUTIOUS`, `AI_STATUS`, and `AI_RISKY`. Legal PP/Disable filtering, randomized minimum-score tie selection, profile-specific switch rates, trapped/lock-in switch restrictions, highest-level trainer-item eligibility, context/probability gates, and the source Full Heal confusion quirk use the seeded battle RNG.
+  - The old deterministic high-score heuristic has been removed. Source AI decisions now consume and persist battle RNG state through switch, item, and move selection. Real generated Falkner, Will, Lance, and Red profiles remain covered with legal player-party fixtures; Will’s five generated party members are defeated through real battle turns, allowing source switching and preserving all progression events.
+  - Proved by `BAT-024 every generated source scoring layer changes a real move decision`, `BAT-024 Smart handler inventory matches the source scoring dispatch`, `BAT-024 source minimum-score ties use the seeded battle RNG`, `BAT-024 source switch policy rates differ for the same opportunity`, `BAT-024 trapped and Mean Looked trainers cannot switch`, `BAT-024 source trainer item context uses seeded thresholds and preserves Full Heal confusion`, `BAT-024 source AI skips zero PP and disabled moves when another move is legal`, `BAT-024 legal Mewtwo defeats every generated Will party member through real turns`, and the generated-profile/Falkner/Lance/Red tests.
 
 ### Epic 1 acceptance
 
 Epic 1 is complete when a fresh party can fight and legitimately defeat representative wild encounters, ordinary trainers, a gym leader, a multi-mon Elite Four trainer, and Red while preserving exact party identity and progression. Losses must blackout and never execute victory-only script commands.
 
-**Open Epic 1 correction audit:** BAT-024 remains partial. BAT-019 also requires a legal-party retry fixture, and an explicit runtime acceptance matrix must prove legitimate wild, ordinary-trainer, gym-leader, Elite Four, and Red victories without fabricated battle statistics or direct progression mutation. The continuous fresh-save route remains the separate Epic 3 and release gate.
+**Acceptance matrix: ✅** `EPIC1 matrix legal wild and ordinary trainer victories synchronize persistent battle state`, `EPIC1 matrix legal Will runtime victory synchronizes all five generated defeats`, `EPIC1 matrix legal Red runtime victory synchronizes generated six member battle`, `BAT-021 real Falkner battle requires replacement before repeated trainer cycles`, `A21 Silver Cave warps reach Red and credits roll after battle`, the BAT-018 boss-loss blackout tests, and `BAT-019 Falkner loss save reload and retry awards progression once` use legal levels, source-compatible moves, normal PP, and real battle transitions. They prove wild, ordinary trainer, gym leader, multi-mon Elite Four, and Red component paths, identity/HP/status/PP/held-item synchronization, EXP/stat-EXP/money settlement, victory-only rewards, blackout, and retry persistence. Direct map and actor setup is isolated component staging; the continuous fresh-save route remains the separate Epic 3/release gate.
 
 ---
 
