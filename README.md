@@ -17,7 +17,7 @@ This is an active port, not a finished game release. The plan documents track a
 large amount of engine work as complete, including source-asset data generation,
 overworld systems, script VM work, battle systems, save/load, audio, UI scenes,
 and a substantial xUnit conformance suite. The current desktop suite has
-1,355/1,355 tests green as of 2026-07-13, including a script-VM golden path from
+1,361/1,361 tests green as of 2026-07-13, including a script-VM golden path from
 New Bark bedroom to post-Red credits, source-authentic trainer/wild construction,
 visible failure for missing production battle data, stable party identity, and
 source-exact persistent DV/stat-experience calculations and complete identity-safe
@@ -25,9 +25,10 @@ battle-state round-tripping, engine-owned per-defeat progression history, and
 source-defined blackout behavior that heals the party, floors lost money, and
 prevents Falkner, Lance, and Red defeats from continuing as victories, plus a
 real Falkner loss-save-reload-retry path that grants progression exactly once,
-source-ordered forced replacement across real multi-mon trainer battles, and
+source-ordered forced replacement across real multi-mon trainer battles,
 source-backed battle items plus held-item consumption/persistence coverage across
-runtime battle cleanup and save reload.
+runtime battle cleanup and save reload, and generated trainer-class AI profiles that
+select real moves, honor class switch/item policy, and consume source trainer items.
 
 The remaining public bar is stronger than "tests exist": prove the route through
 the real runtime with real inputs, movement, collision, warps, triggers, battles,

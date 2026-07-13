@@ -698,6 +698,66 @@ module Parsers =
         flush ()
         Map.ofList (List.ofSeq result)
 
+    type TrainerAiProfile =
+        { Items: string list
+          MoveFlags: string list
+          ItemSwitchFlags: string list }
+
+    let private parseTrainerAiFlags (raw: string) =
+        raw.Split('|')
+        |> Array.map (fun flag -> flag.Trim())
+        |> Array.filter (fun flag -> flag <> "")
+        |> Array.toList
+
+    let trainerAiProfiles : Map<string, TrainerAiProfile> =
+        let lines = Repo.readText("data/trainers/attributes.asm").Split('\n')
+        let result = ResizeArray<string * TrainerAiProfile>()
+        let mutable currentClass = ""
+        let mutable items: string list = []
+        let mutable moveFlags: string list = []
+        let mutable itemSwitchFlags: string list = []
+        let mutable dwIndex = 0
+
+        let flush () =
+            if currentClass <> "" then
+                result.Add(currentClass, { Items = items; MoveFlags = moveFlags; ItemSwitchFlags = itemSwitchFlags })
+
+        for raw in lines do
+            let cleanLine =
+                let i = raw.IndexOf(';')
+                if i >= 0 then raw.Substring(0, i) else raw
+
+            let classMatch = trainerCommentRx.Match(raw.Trim())
+
+            if classMatch.Success then
+                flush ()
+                currentClass <- normalizeTrainerClass classMatch.Groups.[1].Value
+                items <- []
+                moveFlags <- []
+                itemSwitchFlags <- []
+                dwIndex <- 0
+            elif currentClass <> "" then
+                let itemMatch = Regex(@"^\s*db\s+([^,\s]+)\s*,\s*([^,\s]+)").Match(cleanLine)
+                let dwMatch = Regex(@"^\s*dw\s+(.+?)\s*$").Match(cleanLine)
+
+                if itemMatch.Success then
+                    items <-
+                        [ itemMatch.Groups.[1].Value
+                          itemMatch.Groups.[2].Value ]
+                        |> List.filter (fun item -> item <> "NO_ITEM")
+                elif dwMatch.Success then
+                    let flags = parseTrainerAiFlags dwMatch.Groups.[1].Value
+
+                    if dwIndex = 0 then
+                        moveFlags <- flags
+                    elif dwIndex = 1 then
+                        itemSwitchFlags <- flags
+
+                    dwIndex <- dwIndex + 1
+
+        flush ()
+        result |> Seq.toList |> Map.ofList
+
     let trainerDvs : Map<string, int> =
         let dvRx =
             Regex(@"^\s*dn\s+(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*;\s*([A-Za-z0-9_]+)\s*$")

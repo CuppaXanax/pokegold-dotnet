@@ -449,6 +449,7 @@ let ``BAT-001 runtime trainer parties match source moves and held items`` () =
 
         match (scene :> Scene).Update Buttons.none with
         | Push (:? BattleScene as battle) ->
+            let trainer = Trainers.lookup group 1 |> Option.defaultWith (fun () -> failwith $"{group} not found")
             let actual =
                 battle.CurrentState.EnemyTeam
                 |> List.map (fun mon ->
@@ -458,6 +459,7 @@ let ``BAT-001 runtime trainer parties match source moves and held items`` () =
                     (mon.Moves |> List.map (fun move -> move.Name)))
 
             Assert.Equal<(string * int * string option * string list) list>(expected, actual)
+            Assert.Equal<string list>(trainer.AiItems, battle.CurrentState.EnemyAiItems)
         | transition -> failwithf "expected %s battle scene, got %A" group transition
 
 [<Fact>]

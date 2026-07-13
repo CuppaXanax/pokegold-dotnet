@@ -113,6 +113,146 @@ let ``BAT-016 defeat is an explicit script-facing battle result`` () =
     Assert.Equal(BattleEscape, BattleScriptResult.ofOutcome Ran)
 
 [<Fact>]
+let ``BAT-024 real Red AI uses generated Full Restore at critical HP`` () =
+    let red = Trainers.lookupByName "RED" "RED1" |> Option.defaultWith (fun () -> failwith "RED1 not found")
+    let redLead = red.Party.Head
+    let redMoves = MoveLearn.trainerMoveNames redLead |> List.map Moves.byName
+    let enemy =
+        { BattleMon.ofSpeciesWithStats (Species.byName redLead.Species) redLead.Level redMoves red.Dvs StatExperience.zero with
+            Hp = 1 }
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { BattleMon.ofSpecies (Species.byName "SNORLAX") 100 [ splash ] with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let context =
+        { Group = "RED"
+          Id = "RED1"
+          Name = red.Name
+          ClassName = "RED"
+          WinText = None
+          LossText = None
+          BaseReward = Some red.BaseReward }
+
+    let after = Battle.createTrainer context [ player ] [ enemy ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal(enemy.MaxHp, after.Enemy.Hp)
+    Assert.Contains(after.Messages, fun message -> message.Contains("used FULL RESTORE"))
+    Assert.Equal<string list>([ "FULL_RESTORE" ], after.EnemyAiItems)
+    Assert.Equal(0, after.EnemyTurnsTaken)
+
+let private sourceTrainerBattleMon (trainer: TrainerData) (trainerMon: TrainerMon) : BattleMon =
+    let stats = Species.byName trainerMon.Species
+    let moves = MoveLearn.trainerMoveNames trainerMon |> List.map Moves.byName
+    { BattleMon.ofSpeciesWithStats stats trainerMon.Level moves trainer.Dvs StatExperience.zero with
+        HeldItem = trainerMon.HeldItem
+        Dvs = trainer.Dvs
+        Gender = BattleMon.genderFromDvs stats trainer.Dvs }
+
+let private sourceTrainerContext (trainer: TrainerData) =
+    { Group = trainer.Group
+      Id = string trainer.Id
+      Name = trainer.Name
+      ClassName = trainer.Group.Replace("_", " ")
+      WinText = None
+      LossText = None
+      BaseReward = Some trainer.BaseReward }
+
+let private durableSplashPlayer () =
+    let splash = Moves.byName "SPLASH"
+    { BattleMon.ofSpecies (Species.byName "MEWTWO") 100 [ splash ] with
+        MaxHp = 10000
+        Hp = 10000
+        Defense = 999
+        SpDefense = 999
+        Speed = 1
+        Pp = [ splash.Pp ] }
+
+[<Fact>]
+let ``BAT-024 generated trainer profiles select only real source moves`` () =
+    for group, id in [ "FALKNER", 1; "WILL", 1; "CHAMPION", 1; "RED", 1 ] do
+        let trainer = Trainers.lookup group id |> Option.defaultWith (fun () -> failwith $"{group} not found")
+        let enemy = sourceTrainerBattleMon trainer trainer.Party.Head
+        let initial = Battle.createTrainer (sourceTrainerContext trainer) [ durableSplashPlayer () ] [ enemy ] 0u
+        let after = Battle.chooseMove 0 initial
+        let sourceMoveMessages = enemy.Moves |> List.map (fun move -> $"{enemy.Species.Name} used {move.Name}!")
+
+        Assert.Equal<string list>(trainer.AiItems, initial.EnemyAiItems)
+        Assert.Contains(after.Messages, fun message -> sourceMoveMessages |> List.contains message)
+        Assert.Equal(1, after.EnemyTurnsTaken)
+
+[<Fact>]
+let ``BAT-024 Falkner source switch policy changes to real Pidgeotto`` () =
+    let falkner = Trainers.lookup "FALKNER" 1 |> Option.defaultWith (fun () -> failwith "FALKNER not found")
+    let lead = { sourceTrainerBattleMon falkner falkner.Party.[0] with Hp = 1 }
+    let bench = sourceTrainerBattleMon falkner falkner.Party.[1]
+    let player = BattleMon.ofSpecies (Species.byName "CHIKORITA") 20 [ Moves.byName "SPLASH" ]
+
+    let after =
+        Battle.createTrainer (sourceTrainerContext falkner) [ player ] [ lead; bench ] 0u
+        |> Battle.chooseMove 0
+
+    Assert.Equal("PIDGEOTTO", after.Enemy.Species.Name)
+    Assert.Equal(0, after.EnemyTurnsTaken)
+    Assert.Contains(after.Messages, fun message -> message.Contains("Enemy withdrew PIDGEY"))
+
+[<Fact>]
+let ``BAT-024 Lance source item priority uses Full Restore before Full Heal`` () =
+    let lance = Trainers.lookup "CHAMPION" 1 |> Option.defaultWith (fun () -> failwith "LANCE not found")
+    let highestLevelMon = lance.Party |> List.maxBy (fun trainerMon -> trainerMon.Level)
+    let enemy = { sourceTrainerBattleMon lance highestLevelMon with Hp = 1; Status = Poison }
+
+    let after =
+        Battle.createTrainer (sourceTrainerContext lance) [ durableSplashPlayer () ] [ enemy ] 0u
+        |> Battle.chooseMove 0
+
+    Assert.Equal(enemy.MaxHp, after.Enemy.Hp)
+    Assert.Equal(Healthy, after.Enemy.Status)
+    Assert.Equal<string list>([ "FULL_HEAL" ], after.EnemyAiItems)
+    Assert.Contains(after.Messages, fun message -> message.Contains("used FULL RESTORE"))
+
+[<Fact>]
+let ``BAT-024 real Will team cycles every generated Elite Four member`` () =
+    let will = Trainers.lookup "WILL" 1 |> Option.defaultWith (fun () -> failwith "WILL not found")
+    let finisher =
+        { Moves.byName "PSYCHIC_M" with
+            Name = "BAT024_FINISHER"
+            Effect = "EFFECT_NORMAL_HIT"
+            Power = 255
+            Accuracy = 255
+            Pp = 99 }
+    let player =
+        { BattleMon.ofSpecies (Species.byName "MEWTWO") 100 [ finisher ] with
+            PersistentId = Some(System.Guid.NewGuid())
+            MaxHp = 10000
+            Hp = 10000
+            Attack = 999
+            Defense = 999
+            Speed = 999
+            SpAttack = 999
+            SpDefense = 999
+            Pp = [ finisher.Pp ] }
+    let initial =
+        Battle.createTrainer
+            (sourceTrainerContext will)
+            [ player ]
+            (will.Party |> List.map (sourceTrainerBattleMon will))
+            0u
+
+    let rec resolve turns (state: BattleState) =
+        match state.Outcome with
+        | Some _ -> state
+        | None when turns = 0 -> state
+        | None when Battle.requiresPlayerReplacement state -> failwith "The prepared player should not need a replacement"
+        | None -> resolve (turns - 1) (Battle.chooseMove 0 state)
+
+    let final = resolve 10 initial
+
+    Assert.Equal(Some Win, final.Outcome)
+    Assert.Equal<string list>(will.Party |> List.map (fun trainerMon -> trainerMon.Species), final.DefeatEvents |> List.map (fun defeat -> defeat.DefeatedSpecies.Name))
+    Assert.Equal(will.Party.Length, final.DefeatEvents.Length)
+
+[<Fact>]
 let ``BAT-011 Amulet Coin activates only after its holder is sent out and stays active`` () =
     let splash = Moves.byName "SPLASH"
     let lead = { BattleMon.ofSpecies (Species.byName "PIDGEY") 10 [ splash ] with PersistentId = Some(System.Guid.NewGuid()) }

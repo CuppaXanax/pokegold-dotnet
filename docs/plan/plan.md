@@ -264,7 +264,7 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
 
 ## Story 1.6 — The battle command shell supports a normal playthrough
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
 FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, and broad move-effect behavior exist.
 
@@ -286,13 +286,16 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - Consumable held healing/status/PP effects activate once, remain unconsumed when a holder faints before residual handling, and do not resurrect through switching, capture cleanup, battle synchronization, or save/reload. Nonconsumables retain their item state across turns and cleanup; existing source-effect tests cover type damage, priority, critical, survival, PP, and status behavior. Source held stat-up entries are explicitly unused by the original battle core.
   - Proved by `BAT-023 fainted Berry holder retains item and Leftovers remains held across turns` and `BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`, together with existing `type boosting held item increases matching move damage`, `Quick Claw lets a slower holder move first on a successful roll`, `Focus Band can leave the holder at 1 HP against lethal damage`, `MysteryBerry restores PP when a move reaches zero`, and status-berry tests.
 
-- 🟡 **BAT-024 — Audit trainer AI at the integration layer.**
-  - Gym leaders, Elite Four, Lance, and Red must select from their real moves and switch/use items where the source requires it.
-  - “Simplified AI” is acceptable only if explicitly excluded from the release definition; it cannot invalidate ordinary battle outcomes.
+- ✅ **BAT-024 — Audit trainer AI at the integration layer.**
+  - Generated trainer-class profiles now carry source move-layer flags, switch/item flags, and item slots from `data/trainers/attributes.asm` into every staged trainer battle. The deterministic native policy selects PP-bearing source moves, preserves the source Disable fallback when it is the only choice, resets per-active-opponent turn state on a switch, gates tactical switches by source class flags, and consumes one highest-level trainer item in source priority order before the player acts.
+  - Real staged Falkner, Will, Lance, and Red paths prove source move selection, Falkner's class switch policy, Elite Four party progression and defeat events, Lance's Full Restore priority, Red's duplicate Full Restore consumption, and the overworld-to-battle generated item inventory boundary. The policy is deterministic rather than reproducing the ROM's random tie rolls; it is the supported runtime behavior, not a silent generic fallback.
+  - Proved by `BAT-024 generated trainer AI profiles preserve boss source attributes`, `BAT-024 generated trainer profiles select only real source moves`, `BAT-024 Falkner source switch policy changes to real Pidgeotto`, `BAT-024 Lance source item priority uses Full Restore before Full Heal`, `BAT-024 real Red AI uses generated Full Restore at critical HP`, `BAT-024 real Will team cycles every generated Elite Four member`, and `BAT-001 runtime trainer parties match source moves and held items`.
 
 ### Epic 1 acceptance
 
 Epic 1 is complete when a fresh party can fight and legitimately defeat representative wild encounters, ordinary trainers, a gym leader, a multi-mon Elite Four trainer, and Red while preserving exact party identity and progression. Losses must blackout and never execute victory-only script commands.
+
+**Work-item audit: ✅ BAT-001 through BAT-024 are complete.** Representative wild, ordinary-trainer, Falkner, Will, Lance, and Red paths; identity/state synchronization; progression; blackout/retry; battle items; forced replacement; and source-profile trainer AI all have passing tests. The continuous fresh-save route remains the separate Epic 3 and release gate, so this audit does not claim that route is complete.
 
 ---
 

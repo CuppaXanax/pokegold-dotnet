@@ -114,12 +114,19 @@ type TrainerMon =
       ExplicitMoves: string list }
 
 /// A trainer's full data.
-type TrainerData =
-    { Group: string
-      Id: int
-      Name: string
-      PartyType: TrainerPartyType
-      Party: TrainerMon list
-      BaseReward: int
-      /// Packed Attack/Defense/Speed/Special DVs shared by this trainer class.
-      Dvs: int }
+type TrainerData = {
+  Group: string
+  Id: int
+  Name: string
+  PartyType: TrainerPartyType
+  Party: TrainerMon list
+  BaseReward: int
+  /// Packed Attack/Defense/Speed/Special DVs shared by this trainer class.
+  Dvs: int
+  /// Source trainer-class AI move-scoring layers.
+  AiMoveFlags: string list
+  /// Source trainer-class item-use and switching policy flags.
+  AiItemSwitchFlags: string list
+  /// Source trainer-class AI item slots, excluding NO_ITEM.
+  AiItems: string list
+}

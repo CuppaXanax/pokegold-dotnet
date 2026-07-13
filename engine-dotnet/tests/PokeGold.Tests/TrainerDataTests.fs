@@ -91,6 +91,18 @@ let ``boss trainer classes preserve source packed DVs`` () =
         Assert.Equal(expectedDvs, trainer.Dvs))
 
 [<Fact>]
+let ``BAT-024 generated trainer AI profiles preserve boss source attributes`` () =
+    let falkner = Trainers.lookup "FALKNER" 1 |> Option.defaultWith (fun () -> failwith "FALKNER not found")
+    let lance = Trainers.lookup "CHAMPION" 1 |> Option.defaultWith (fun () -> failwith "LANCE not found")
+    let red = Trainers.lookup "RED" 1 |> Option.defaultWith (fun () -> failwith "RED not found")
+
+    Assert.Equal<string list>([ "AI_BASIC"; "AI_SETUP"; "AI_SMART"; "AI_AGGRESSIVE"; "AI_CAUTIOUS"; "AI_STATUS"; "AI_RISKY" ], falkner.AiMoveFlags)
+    Assert.Equal<string list>([ "CONTEXT_USE"; "SWITCH_SOMETIMES" ], falkner.AiItemSwitchFlags)
+    Assert.Empty(falkner.AiItems)
+    Assert.Equal<string list>([ "FULL_HEAL"; "FULL_RESTORE" ], lance.AiItems)
+    Assert.Equal<string list>([ "FULL_RESTORE"; "FULL_RESTORE" ], red.AiItems)
+
+[<Fact>]
 let ``trainer lookup by constant resolves exact group id`` () =
     let trainer = Trainers.lookupByName "HIKER" "ANTHONY2" |> Option.defaultWith (fun () -> failwith "ANTHONY2 not found")
 

@@ -322,6 +322,10 @@ module Emit =
                 Parsers.trainerDvs
                 |> Map.tryFind trainer.Group
                 |> Option.defaultWith (fun () -> failwithf "Missing trainer DVs for %s" trainer.Group)
+            let ai =
+                Parsers.trainerAiProfiles
+                |> Map.tryFind trainer.Group
+                |> Option.defaultWith (fun () -> failwithf "Missing trainer AI attributes for %s" trainer.Group)
             let partyType =
                 match trainer.PartyType with
                 | "TRAINERTYPE_NORMAL" -> "TrainerPartyType.Normal"
@@ -347,10 +351,13 @@ module Emit =
                         heldItem
                         moves)
                 |> String.concat ";\n"
+            let aiItems = ai.Items |> List.map (sprintf "\"%s\"") |> String.concat "; "
+            let aiMoveFlags = ai.MoveFlags |> List.map (sprintf "\"%s\"") |> String.concat "; "
+            let aiItemSwitchFlags = ai.ItemSwitchFlags |> List.map (sprintf "\"%s\"") |> String.concat "; "
 
             sb.AppendLine(sprintf "            ((\"%s\", %d), { Group = \"%s\"; Id = %d; Name = \"%s\"; PartyType = %s; Party = [" trainer.Group trainer.Id trainer.Group trainer.Id trainer.Name partyType) |> ignore
             sb.AppendLine(party) |> ignore
-            sb.AppendLine(sprintf "            ]; BaseReward = %d; Dvs = 0x%04X })" reward dvs) |> ignore
+            sb.AppendLine(sprintf "            ]; BaseReward = %d; Dvs = 0x%04X; AiMoveFlags = [ %s ]; AiItemSwitchFlags = [ %s ]; AiItems = [ %s ] })" reward dvs aiMoveFlags aiItemSwitchFlags aiItems) |> ignore
 
         sb.AppendLine("        ]") |> ignore
         sb.AppendLine() |> ignore

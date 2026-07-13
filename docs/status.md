@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1355/1355) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1361/1361) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -77,6 +77,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Consumable and nonconsumable held items now retain source-consistent state through
   residual activation, fainting, switching, capture cleanup, battle synchronization,
   and save/reload.
+  Trainer AI now reads generated class profiles from `data/trainers/attributes.asm`:
+  it selects real PP-bearing moves, preserves the source Disable fallback, honors
+  class switch policy, tracks turn state per active opponent, and uses highest-level
+  trainer items in source priority order. Falkner, Will, Lance, and Red integration
+  tests cover those paths, including Red's duplicate Full Restores.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -91,10 +96,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete BAT-024: trainer AI integration.
-2. Complete route-required overworld and script semantics, then extend the
+1. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
-3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
+2. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
    source.
-4. After the route gate is proven, update public docs with the exact command,
+3. After the route gate is proven, update public docs with the exact command,
    current test count, and a host screenshot or GIF.

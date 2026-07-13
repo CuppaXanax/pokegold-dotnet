@@ -48,18 +48,7 @@ let ``BAT-002 source starting moves skip duplicates and retain the latest four``
 
 [<Fact>]
 let ``BAT-002 synthetic item plus moves trainer keeps explicit source slots`` () =
-    let trainer : TrainerData =
-        { Group = "SYNTHETIC"
-          Id = 1
-          Name = "SYNTHETIC"
-          PartyType = TrainerPartyType.ItemMoves
-          Party =
-            [ { Species = "RAICHU"
-                Level = 14
-                HeldItem = Some "BERRY"
-                ExplicitMoves = [ "THUNDER_WAVE"; "QUICK_ATTACK"; "NO_MOVE"; "NO_MOVE" ] } ]
-          BaseReward = 1
-          Dvs = 0x8888 }
+    let trainer : TrainerData = { Group = "SYNTHETIC"; Id = 1; Name = "SYNTHETIC"; PartyType = TrainerPartyType.ItemMoves; Party = [ { Species = "RAICHU"; Level = 14; HeldItem = Some "BERRY"; ExplicitMoves = [ "THUNDER_WAVE"; "QUICK_ATTACK"; "NO_MOVE"; "NO_MOVE" ] } ]; BaseReward = 1; Dvs = 0x8888; AiMoveFlags = []; AiItemSwitchFlags = []; AiItems = [] }
 
     Assert.Equal<string list>(
         [ "THUNDER_WAVE"; "QUICK_ATTACK" ],
