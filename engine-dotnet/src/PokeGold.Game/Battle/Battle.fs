@@ -64,6 +64,7 @@ type BattleState = {
     PayDayMoney: int
     Kind: BattleKind
     ReplacementState: ReplacementState
+    SkipNextPlayerAction: bool
     Messages: string list
     Outcome: Outcome option
     Rng: Rng
@@ -112,6 +113,7 @@ module Battle =
           PayDayMoney = 0
           Kind = WildBattle
           ReplacementState = NoReplacementRequired
+          SkipNextPlayerAction = false
           Messages = openingMessages WildBattle enemy
           Outcome = None
           Rng = Rng.create seed
@@ -133,6 +135,7 @@ module Battle =
           PayDayMoney = 0
           Kind = kind
           ReplacementState = NoReplacementRequired
+          SkipNextPlayerAction = false
           Messages = openingMessages kind enemy
           Outcome = None
           Rng = Rng.create seed
@@ -344,7 +347,7 @@ module Battle =
     /// `engine/battle/effect_commands.asm`. Returns `(hit, rng')`.
     let private checkHit (user: BattleMon) (foe: BattleMon) (move: MoveData) (rng: Rng) (weatherType: string option)
         : bool * Rng =
-        if move.Effect = "EFFECT_ALWAYS_HIT" then
+        if user.Volatile.XAccuracy || move.Effect = "EFFECT_ALWAYS_HIT" then
             (true, rng)
         elif move.Effect = "EFFECT_THUNDER" && weatherType = Some "RAIN" then
             (true, rng)
@@ -1152,7 +1155,7 @@ module Battle =
                 |> Set.ofList
             participants <- Set.intersect participants livingIds
             if enemyFainted && not playerFainted then participants <- activeParticipant player
-        let mutable skipPlayerAction = false
+        let mutable skipPlayerAction = s.SkipNextPlayerAction
         let mutable skipEnemyAction = false
         let mutable playerDamageTaken = 0
         let mutable enemyDamageTaken = 0
@@ -1741,6 +1744,7 @@ module Battle =
             DefeatEvents = defeatEvents
             AmuletCoinActivated = s.AmuletCoinActivated || player.HeldItem = Some "AMULET_COIN"
             PayDayMoney = payDayMoney; ReplacementState = if BattleMon.isFainted player && (playerTeam |> List.exists (BattleMon.isFainted >> not)) then PlayerReplacementRequired(BattleMon.isFainted enemy) else NoReplacementRequired
+            SkipNextPlayerAction = false
             Messages = msgs
             Outcome = outcome
             Rng = rng
@@ -1748,6 +1752,14 @@ module Battle =
             WeatherType = weatherType
             PlayerSide = playerSide
             EnemySide = enemySide }
+
+    /// Resolve a consumed player turn, such as a successful bag-item use,
+    /// without executing a player move.
+    let useItemTurn (s: BattleState) : BattleState =
+        if isOver s || requiresPlayerReplacement s then
+            s
+        else
+            { s with SkipNextPlayerAction = true } |> chooseMove 0
 
     /// The player flees the battle. Blocked if the player is trapped (Wrap/Bind)
     /// or locked in by Mean Look / Spider Web.

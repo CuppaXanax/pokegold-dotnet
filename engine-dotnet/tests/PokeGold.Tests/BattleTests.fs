@@ -1096,6 +1096,275 @@ let ``BattleScene PACK command can target a benched Pokemon with Potion`` () =
     Assert.Equal(0, Bag.count potion scene.CurrentBag)
 
 [<Fact>]
+let ``BAT-022 Revive restores a fainted bench target consumes once and costs a turn`` () =
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 20 200 50 50 50 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let fainted =
+        { mon "FAINTED" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 20 with
+            Hp = 0
+            Status = Poison
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 200 100 50 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let scene =
+        BattleScene(
+            Content().Font,
+            { Battle.createTeam [ active; fainted ] [ enemy ] 0u with Messages = [] },
+            bag = (Bag.empty |> Bag.add "REVIVE" 1))
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("PackMenu", scene.CurrentModeName)
+
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("TargetMenu", scene.CurrentModeName)
+
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+
+    for _ in 1 .. 20 do
+        tick { Buttons.none with A = true }
+        tick Buttons.none
+
+    let revived = scene.CurrentState.PlayerTeam.[1]
+    Assert.Equal(50, revived.Hp)
+    Assert.Equal(Healthy, revived.Status)
+    Assert.Equal(0, Bag.count "REVIVE" scene.CurrentBag)
+    Assert.True(scene.CurrentState.Player.Hp < active.Hp, "A successful battle item should allow the enemy's turn")
+
+[<Fact>]
+let ``BAT-022 source battle item table enforces revive status PP and direct effects`` () =
+    let tackle = Moves.byName "TACKLE"
+    let ember = Moves.byName "EMBER"
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 50 with
+            Status = Poison
+            Volatile = { VolatileStatus.empty with Confusion = Some 2 }
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let fainted =
+        { mon "FAINTED" (ty "NORMAL") (ty "NORMAL") 20 101 50 50 20 with
+            Hp = 0
+            Status = Burn
+            Moves = [ tackle; ember ]
+            Pp = [ 0; 1 ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 10 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let wild = Battle.createTeam [ active; fainted ] [ enemy ] 0u
+    let trainer =
+        { Group = "TEST"
+          Id = "ITEMS"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+    let requireUse item target state =
+        BattleItems.tryUse item target state
+        |> Option.defaultWith (fun () -> failwithf "expected %s to be usable" item)
+
+    let maxRevived = requireUse "MAX_REVIVE" (PartyTarget 1) wild
+    Assert.Equal(101, maxRevived.PlayerTeam.[1].Hp)
+    Assert.Equal(Healthy, maxRevived.PlayerTeam.[1].Status)
+    Assert.Equal(None, BattleItems.tryUse "REVIVE" (PartyTarget 0) wild)
+    Assert.Equal(None, BattleItems.tryUse "FULL_RESTORE" (PartyTarget 1) wild)
+
+    let cured = requireUse "ANTIDOTE" (PartyTarget 0) wild
+    Assert.Equal(Healthy, cured.Player.Status)
+    Assert.Equal(None, BattleItems.tryUse "BURN_HEAL" (PartyTarget 0) wild)
+    let fullHealed = requireUse "FULL_HEAL" (PartyTarget 0) wild
+    Assert.Equal(Healthy, fullHealed.Player.Status)
+    Assert.True(fullHealed.Player.Volatile.Confusion.IsNone)
+    let fullyRestored = requireUse "FULL_RESTORE" (PartyTarget 0) wild
+    Assert.Equal(active.MaxHp, fullyRestored.Player.Hp)
+    Assert.True(fullyRestored.Player.Volatile.Confusion.IsNone)
+
+    let ether = requireUse "ETHER" (MoveTarget(1, 0)) wild
+    Assert.Equal(10, ether.PlayerTeam.[1].Pp.[0])
+    let maxEther = requireUse "MAX_ETHER" (MoveTarget(1, 1)) wild
+    Assert.Equal(ember.Pp, maxEther.PlayerTeam.[1].Pp.[1])
+    let elixer = requireUse "ELIXER" (PartyTarget 1) wild
+    Assert.Equal<int list>([ 10; min ember.Pp 11 ], elixer.PlayerTeam.[1].Pp)
+    let maxElixer = requireUse "MAX_ELIXER" (PartyTarget 1) wild
+    Assert.Equal<int list>([ tackle.Pp; ember.Pp ], maxElixer.PlayerTeam.[1].Pp)
+
+    let xAttack = requireUse "X_ATTACK" ActiveTarget wild
+    let xDefend = requireUse "X_DEFEND" ActiveTarget wild
+    let xSpeed = requireUse "X_SPEED" ActiveTarget wild
+    let xSpecial = requireUse "X_SPECIAL" ActiveTarget wild
+    Assert.Equal(1, xAttack.Player.AtkStage)
+    Assert.Equal(1, xDefend.Player.DefStage)
+    Assert.Equal(1, xSpeed.Player.SpdStage)
+    Assert.Equal(1, xSpecial.Player.SpAtkStage)
+    let guardSpec = requireUse "GUARD_SPEC" ActiveTarget wild
+    Assert.True(guardSpec.Player.Volatile.Mist)
+    let xAccuracy = requireUse "X_ACCURACY" ActiveTarget wild
+    Assert.True(xAccuracy.Player.Volatile.XAccuracy)
+    Assert.Equal(Some Ran, (requireUse "POKE_DOLL" ActiveTarget wild).Outcome)
+    Assert.Equal(None, BattleItems.tryUse "POKE_DOLL" ActiveTarget (Battle.createTrainer trainer [ active ] [ enemy ] 0u))
+
+[<Fact>]
+let ``BAT-022 X Accuracy and Guard Spec alter source battle checks`` () =
+    let alwaysMiss = { move "MISS" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") with Accuracy = 0 }
+    let growl = Moves.byName "GROWL"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 200 with
+            Moves = [ alwaysMiss ]
+            Pp = [ alwaysMiss.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 100 100 100 with
+            Moves = [ growl ]
+            Pp = [ growl.Pp ] }
+    let state = Battle.createTeam [ player ] [ enemy ] 0u
+    let accurate =
+        BattleItems.tryUse "X_ACCURACY" ActiveTarget state
+        |> Option.defaultWith (fun () -> failwith "X Accuracy should apply")
+        |> Battle.chooseMove 0
+    Assert.True(accurate.Enemy.Hp < enemy.Hp)
+
+    let guarded =
+        BattleItems.tryUse "GUARD_SPEC" ActiveTarget state
+        |> Option.defaultWith (fun () -> failwith "Guard Spec should apply")
+        |> Battle.chooseMove 0
+    Assert.Equal(0, guarded.Player.AtkStage)
+    Assert.Contains(guarded.Messages, fun message -> message.Contains("protected by mist"))
+
+[<Fact>]
+let ``BAT-022 X Attack consumes at capped stats while Guard Spec rejection preserves bag and turn`` () =
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 20 200 50 50 50 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 200 100 50 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let scene =
+        BattleScene(
+            Content().Font,
+            { Battle.createTeam [ active ] [ enemy ] 0u with Messages = [] },
+            bag = (Bag.empty |> Bag.add "X_ATTACK" 1))
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+
+    for _ in 1 .. 20 do
+        tick { Buttons.none with A = true }
+        tick Buttons.none
+
+    Assert.Equal(1, scene.CurrentState.Player.AtkStage)
+    Assert.Equal(0, Bag.count "X_ATTACK" scene.CurrentBag)
+    Assert.True(scene.CurrentState.Player.Hp < active.Hp)
+
+    let useDirect item state =
+        let direct = BattleScene(Content().Font, state, bag = (Bag.empty |> Bag.add item 1))
+        let directTick buttons = (direct :> Scene).Update buttons |> ignore
+        directTick { Buttons.none with Down = true }
+        directTick Buttons.none
+        directTick { Buttons.none with A = true }
+        directTick Buttons.none
+        directTick { Buttons.none with A = true }
+        direct
+
+    let capped = { Battle.createTeam [ { active with AtkStage = 6 } ] [ enemy ] 0u with Messages = [] }
+    let cappedScene = useDirect "X_ATTACK" capped
+    for _ in 1 .. 20 do
+        (cappedScene :> Scene).Update { Buttons.none with A = true } |> ignore
+        (cappedScene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(0, Bag.count "X_ATTACK" cappedScene.CurrentBag)
+    Assert.True(cappedScene.CurrentState.Player.Hp < active.Hp)
+
+    let guarded =
+        { Battle.createTeam [ { active with Volatile = { active.Volatile with Mist = true } } ] [ enemy ] 0u with Messages = [] }
+    let rejected = useDirect "GUARD_SPEC" guarded
+    Assert.Equal(1, Bag.count "GUARD_SPEC" rejected.CurrentBag)
+    Assert.Equal(active.Hp, rejected.CurrentState.Player.Hp)
+
+[<Fact>]
+let ``BAT-022 Ether uses move targeting and restores PP without restoring a full slot`` () =
+    let tackle = Moves.byName "TACKLE"
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 20 200 50 50 50 with
+            Moves = [ tackle ]
+            Pp = [ 0 ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 200 100 50 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let scene =
+        BattleScene(
+            Content().Font,
+            { Battle.createTeam [ active ] [ enemy ] 0u with Messages = [] },
+            bag = (Bag.empty |> Bag.add "ETHER" 1))
+    let tick buttons = (scene :> Scene).Update buttons |> ignore
+
+    tick { Buttons.none with Down = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("TargetMenu", scene.CurrentModeName)
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+    Assert.Equal("MoveTargetMenu", scene.CurrentModeName)
+    tick { Buttons.none with A = true }
+
+    for _ in 1 .. 20 do
+        tick { Buttons.none with A = true }
+        tick Buttons.none
+
+    Assert.Equal(10, scene.CurrentState.Player.Pp.[0])
+    Assert.Equal(0, Bag.count "ETHER" scene.CurrentBag)
+    Assert.True(scene.CurrentState.Player.Hp < active.Hp)
+
+[<Fact>]
+let ``BAT-022 Poke Doll escapes wild battles but is rejected by trainers`` () =
+    let splash = Moves.byName "SPLASH"
+    let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 50 with Moves = [ splash ]; Pp = [ splash.Pp ] }
+    let enemy = { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 20 100 50 50 20 with Moves = [ splash ]; Pp = [ splash.Pp ] }
+    let useDoll state =
+        let scene = BattleScene(Content().Font, { state with Messages = [] }, bag = (Bag.empty |> Bag.add "POKE_DOLL" 1))
+        let tick buttons = (scene :> Scene).Update buttons |> ignore
+        tick { Buttons.none with Down = true }
+        tick Buttons.none
+        tick { Buttons.none with A = true }
+        tick Buttons.none
+        tick { Buttons.none with A = true }
+        scene
+
+    let wild = useDoll (Battle.createTeam [ player ] [ enemy ] 0u)
+    Assert.Equal(Some Ran, wild.CurrentState.Outcome)
+    Assert.Equal(0, Bag.count "POKE_DOLL" wild.CurrentBag)
+
+    let trainer =
+        { Group = "TEST"
+          Id = "DOLL"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+    let trainerScene = useDoll (Battle.createTrainer trainer [ player ] [ enemy ] 0u)
+    Assert.True(trainerScene.CurrentState.Outcome.IsNone)
+    Assert.Equal(1, Bag.count "POKE_DOLL" trainerScene.CurrentBag)
+
+[<Fact>]
 let ``trainer battle RUN and ball use are blocked`` () =
     let tackle = Moves.byName "TACKLE"
     let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }

@@ -126,6 +126,7 @@
     <Compile Include="Battle\BattleAI.fs" />
     <Compile Include="Battle\BattleAnim.fs" />
     <Compile Include="Battle\Battle.fs" />
+    <Compile Include="Battle\BattleItems.fs" />
     <Compile Include="Battle\Experience.fs" />
     <Compile Include="Battle\Catch.fs" />
     <!-- Player: persistent party, bag, dex state. -->

@@ -986,6 +986,75 @@ let ``BAT-021 real Falkner battle requires replacement before repeated trainer c
     Assert.True(World.hasFlag "ENGINE_ZEPHYRBADGE" scene.DebugWorld)
 
 [<Fact>]
+let ``BAT-022 Ether battle use persists PP and bag state after runtime victory`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "EtherBattle"
+            [| Loadwildmon("RATTATA", 5)
+               Startbattle
+               End |]
+    let tackle = Moves.byName "TACKLE"
+    let dragonRage = Moves.byName "DRAGON_RAGE"
+    let playerMon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "TACKLE", 0; moveId "DRAGON_RAGE", dragonRage.Pp ] }
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ playerMon ]
+            Bag = Bag.empty |> Bag.add "ETHER" 1 }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable finalBattle: BattleState option = None
+
+    while frame < 2000 && stack.Count > 1 do
+        frame <- frame + 1
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        if battle.CurrentState.Outcome.IsSome then finalBattle <- Some battle.CurrentState
+        let snap = battle.RuntimeSnapshot
+
+        let buttons =
+            if frame % 2 <> 0 then
+                Buttons.none
+            elif snap.MessageActive || not snap.PendingMessages.IsEmpty then
+                { Buttons.none with A = true }
+            elif snap.Mode = "CommandMenu" then
+                if Bag.count "ETHER" battle.CurrentBag > 0 then
+                    if battle.CommandCursor = 2 then { Buttons.none with A = true }
+                    else { Buttons.none with Down = true }
+                elif battle.CommandCursor = 0 then
+                    { Buttons.none with A = true }
+                else
+                    { Buttons.none with Down = true }
+            elif snap.Mode = "PackMenu" || snap.Mode = "TargetMenu" || snap.Mode = "MoveTargetMenu" then
+                { Buttons.none with A = true }
+            elif snap.Mode = "MoveMenu" then
+                if battle.MoveCursor = 0 then { Buttons.none with Down = true }
+                else { Buttons.none with A = true }
+            else
+                Buttons.none
+
+        applyTransition stack ((battle :> Scene).Update buttons)
+
+    Assert.Equal(1, stack.Count)
+    (scene :> Scene).Update Buttons.none |> ignore
+    let battle = finalBattle |> Option.defaultWith (fun () -> failwith "Ether battle never resolved")
+    Assert.Equal(Some Win, battle.Outcome)
+    Assert.Equal(0, Bag.count "ETHER" scene.DebugPlayer.Bag)
+    Assert.Equal<(int * int) list>([ moveId "TACKLE", 10; moveId "DRAGON_RAGE", dragonRage.Pp - 1 ], scene.DebugPlayer.Party.[0].Moves)
+
+[<Fact>]
 let ``phone contact script effects mutate player state`` () =
     let content = Content()
     let state =

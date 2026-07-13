@@ -58,91 +58,94 @@ type PersistentBattleData =
 /// M13.0 defined the data shape; M13.4 added Mist/CantEscape and implements
 /// confusion, flinch, leech seed, trap/wrap, substitute, focus energy, mist,
 /// and mean look. M13.7 will implement charging/recharge/rampage.
-type VolatileStatus =
-    { /// Confusion turns remaining; None = not confused.
-      /// Set by EFFECT_CONFUSE (2-5 turns). Each pre-move gate decrements;
-      /// at 0 the mon snaps out. While confused, 50% chance of self-hit.
-      Confusion: int option
-      /// Set when a move with a flinch secondary fires; cleared each turn.
-      /// Flinch only blocks if the flincher moved first that turn.
-      Flinch: bool
-      /// Leech Seed is active on this mon. End-of-turn: drain MaxHP/8 (min 1),
-      /// heal the other side by that amount.
-      LeechSeed: bool
-      /// Substitute HP remaining; None = no substitute.
-      /// Absorbs damage and blocks incoming status + stat drops while up.
-      Substitute: int option
-      /// Trapped/wrapped turns remaining; None = not trapped.
-      /// Internal counter 3-6 (2-5 damaging turns). End-of-turn: decrement;
-      /// at 0 release, else chip MaxHP/16 (min 1). Prevents fleeing.
-      Trapped: int option
-      /// Focus Energy is active (crit stage +1). Read by CriticalHit.critStage.
-      FocusEnergy: bool
-      /// Charging a two-turn move (e.g. Fly, Dig); None = not charging.
-      /// Stores the countdown for the second-turn execution window.
-      Charging: int option
-      /// The move that is currently charging; cleared once it resolves.
-      ChargingMove: MoveData option
-      /// Must recharge this turn (e.g. after Hyper Beam).
-      Recharge: bool
-      /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
-      Rampage: int option
-      /// Rage mode: this mon's damage counter rises each time it is hit.
-      Rage: bool
-      /// Rage damage counter, incremented when a raging mon is hit.
-      RageCounter: int
-      /// Future Sight countdown and move for the end-of-turn payoff.
-      FutureSightCounter: int option
-      FutureSightMove: MoveData option
-      FutureSightDamage: int option
-      /// Last move that reached the move animation path.
-      LastMove: MoveData option
-      /// Last move eligible for Counter/Disable targeting.
-      LastCounterMove: MoveData option
-      /// Mist is active: blocks opponent's stat-lowering moves.
-      /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
-      /// Accuracy, and Evasion.
-      Mist: bool
-      /// Mean Look / Spider Web: prevents fleeing. Cleared on switch-out.
-      /// Extension point for M13.7 (multi-turn family) and M14 (switching).
-      CantEscape: bool
-      /// Nightmare is active on this mon; it chips sleeping targets for MaxHP/4.
-      Nightmare: bool
-      /// Curse is active on this mon; it chips cursed targets for MaxHP/4 each turn.
-      Curse: bool
-      /// Protect is active for one turn.
-      Protect: bool
-      /// Endure is active for one turn.
-      Endure: bool
-      /// Consecutive Protect/Endure uses; shared by both moves.
-      ProtectCount: int
-      /// Destiny Bond will faint the attacker when this mon faints.
-      DestinyBond: bool
-      /// Encore countdown on this mon; 0 means inactive.
-      EncoreTimer: int option
-      /// The move index forced by Encore.
-      EncoreMoveIndex: int option
-      /// Disable countdown on this mon; 0 means inactive.
-      DisableTimer: int option
-      /// The move index disabled by Disable.
-      DisabledMoveIndex: int option
-      /// Lock On guarantees the next move hits.
-      LockOn: bool
-      /// Foresight bypasses Ghost/Evasion interaction.
-      Foresight: bool
-      /// Attract infatuation: the mon is attracted to its opponent and has a
-      /// 50% chance to fail its move on the pre-move gate.
-      Attracted: bool
-      /// Bide lock-in turns remaining; damage taken while active is released at
-      /// double power when the counter expires.
-      BideTurns: int option
-      BideDamage: int
-      /// Defense Curl substatus, used to double Rollout's damage ramp.
-      Curled: bool
-      /// Minimize substatus, used by Stomp's double-damage check.
-      Minimized: bool
-      /// Transform substatus. Sketch fails if the opponent has this flag set.
-      Transformed: bool }
+type VolatileStatus = {
+    /// Confusion turns remaining; None = not confused.
+    /// Set by EFFECT_CONFUSE (2-5 turns). Each pre-move gate decrements;
+    /// at 0 the mon snaps out. While confused, 50% chance of self-hit.
+    Confusion: int option
+    /// Set when a move with a flinch secondary fires; cleared each turn.
+    /// Flinch only blocks if the flincher moved first that turn.
+    Flinch: bool
+    /// Leech Seed is active on this mon. End-of-turn: drain MaxHP/8 (min 1),
+    /// heal the other side by that amount.
+    LeechSeed: bool
+    /// Substitute HP remaining; None = no substitute.
+    /// Absorbs damage and blocks incoming status + stat drops while up.
+    Substitute: int option
+    /// Trapped/wrapped turns remaining; None = not trapped.
+    /// Internal counter 3-6 (2-5 damaging turns). End-of-turn: decrement;
+    /// at 0 release, else chip MaxHP/16 (min 1). Prevents fleeing.
+    Trapped: int option
+    /// Focus Energy is active (crit stage +1). Read by CriticalHit.critStage.
+    FocusEnergy: bool
+    /// Charging a two-turn move (e.g. Fly, Dig); None = not charging.
+    /// Stores the countdown for the second-turn execution window.
+    Charging: int option
+    /// The move that is currently charging; cleared once it resolves.
+    ChargingMove: MoveData option
+    /// Must recharge this turn (e.g. after Hyper Beam).
+    Recharge: bool
+    /// Rampage (Thrash/Petal Dance) turns remaining; None = not rampaging.
+    Rampage: int option
+    /// Rage mode: this mon's damage counter rises each time it is hit.
+    Rage: bool
+    /// Rage damage counter, incremented when a raging mon is hit.
+    RageCounter: int
+    /// Future Sight countdown and move for the end-of-turn payoff.
+    FutureSightCounter: int option
+    FutureSightMove: MoveData option
+    FutureSightDamage: int option
+    /// Last move that reached the move animation path.
+    LastMove: MoveData option
+    /// Last move eligible for Counter/Disable targeting.
+    LastCounterMove: MoveData option
+    /// Mist is active: blocks opponent's stat-lowering moves.
+    /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
+    /// Accuracy, and Evasion.
+    Mist: bool
+    /// X Accuracy is active: the user's moves bypass the accuracy check.
+    XAccuracy: bool
+    /// Mean Look / Spider Web: prevents fleeing. Cleared on switch-out.
+    /// Extension point for M13.7 (multi-turn family) and M14 (switching).
+    CantEscape: bool
+    /// Nightmare is active on this mon; it chips sleeping targets for MaxHP/4.
+    Nightmare: bool
+    /// Curse is active on this mon; it chips cursed targets for MaxHP/4 each turn.
+    Curse: bool
+    /// Protect is active for one turn.
+    Protect: bool
+    /// Endure is active for one turn.
+    Endure: bool
+    /// Consecutive Protect/Endure uses; shared by both moves.
+    ProtectCount: int
+    /// Destiny Bond will faint the attacker when this mon faints.
+    DestinyBond: bool
+    /// Encore countdown on this mon; 0 means inactive.
+    EncoreTimer: int option
+    /// The move index forced by Encore.
+    EncoreMoveIndex: int option
+    /// Disable countdown on this mon; 0 means inactive.
+    DisableTimer: int option
+    /// The move index disabled by Disable.
+    DisabledMoveIndex: int option
+    /// Lock On guarantees the next move hits.
+    LockOn: bool
+    /// Foresight bypasses Ghost/Evasion interaction.
+    Foresight: bool
+    /// Attract infatuation: the mon is attracted to its opponent and has a
+    /// 50% chance to fail its move on the pre-move gate.
+    Attracted: bool
+    /// Bide lock-in turns remaining; damage taken while active is released at
+    /// double power when the counter expires.
+    BideTurns: int option
+    BideDamage: int
+    /// Defense Curl substatus, used to double Rollout's damage ramp.
+    Curled: bool
+    /// Minimize substatus, used by Stomp's double-damage check.
+    Minimized: bool
+    /// Transform substatus. Sketch fails if the opponent has this flag set.
+    Transformed: bool
+}
 
 module VolatileStatus =
     /// Neutral/empty volatile status -- no flags set.
@@ -165,6 +168,7 @@ module VolatileStatus =
           LastMove = None
           LastCounterMove = None
           Mist = false
+          XAccuracy = false
           CantEscape = false
           Nightmare = false
           Curse = false

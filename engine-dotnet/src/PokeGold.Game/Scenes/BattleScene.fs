@@ -13,6 +13,7 @@ type private BattleMenuMode =
     | MoveMenu
     | ItemMenu
     | ItemTargetMenu of item: string
+    | ItemMoveTargetMenu of item: string * partyIndex: int
     | PartyMenu of forced: bool
 
 /// The battle scene shell. It owns the Gen-2 command flow (FIGHT/PKMN/PACK/RUN),
@@ -53,6 +54,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
         | MoveMenu -> "MoveMenu"
         | ItemMenu -> "PackMenu"
         | ItemTargetMenu _ -> "TargetMenu"
+        | ItemMoveTargetMenu _ -> "MoveTargetMenu"
         | PartyMenu forced -> if forced then "ForcedSwitch" else "PartyMenu"
 
     member _.CommandCursor = commandCursor
@@ -82,21 +84,10 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
           Outcome = outcome }
 
     member private _.BattleItems =
-        let hpRestoreItems =
-            Set.ofList
-                [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION"; "FULL_RESTORE"
-                  "FRESH_WATER"; "SODA_POP"; "LEMONADE"; "MOOMOO_MILK"; "BERRY_JUICE"
-                  "RAGECANDYBAR"; "BERRY"; "GOLD_BERRY" ]
-
         let usableItems =
             bag.Items
             |> List.choose (fun (item, qty) ->
-                if qty <= 0 then None
-                elif Set.contains item hpRestoreItems then Some item
-                else
-                    match item with
-                    | "ANTIDOTE" | "PARLYZ_HEAL" | "BURN_HEAL" | "ICE_HEAL" | "AWAKENING" | "FULL_HEAL" | "FULL_RESTORE" -> Some item
-                    | _ -> None)
+                if qty > 0 && BattleItems.isSupported item then Some item else None)
 
         let balls =
             bag.Balls
@@ -118,47 +109,32 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
 
         state <- { state with Player = player; PlayerTeam = team }
 
-    member private this.TryUseHealingItem(item: string) (targetIndex: int) : bool =
-        if targetIndex < 0 || targetIndex >= state.PlayerTeam.Length then
-            queue <- [ "That can't be used here!" ]
+    member private this.TryUseItem(item: string) target : bool =
+        match BattleItems.tryUse item target state with
+        | None ->
+            queue <- [ "It won't have any effect!" ]
             false
-        else
-            let current = state.PlayerTeam.[targetIndex]
-            let itemData = Items.byId |> Map.tryFind item
+        | Some updated ->
+            bag <- Bag.remove item 1 bag
+            onBagChange bag
 
-            let healHp (mon: BattleMon) =
-                match itemData |> Option.map (fun data -> data.Param) with
-                | Some amount when amount < 0 -> { mon with Hp = mon.MaxHp }
-                | Some amount when amount > 0 && mon.Hp < mon.MaxHp -> { mon with Hp = min mon.MaxHp (mon.Hp + amount) }
-                | _ -> mon
-
-            let cureStatus (mon: BattleMon) =
-                match item, mon.Status with
-                | "ANTIDOTE", Poison
-                | "ANTIDOTE", BadPoison _
-                | "PARLYZ_HEAL", Paralysis
-                | "BURN_HEAL", Burn
-                | "ICE_HEAL", Freeze
-                | "AWAKENING", Sleep _ -> { mon with Status = Healthy }
-                | "FULL_HEAL", status when status <> Healthy -> { mon with Status = Healthy }
-                | "FULL_RESTORE", status when status <> Healthy -> { mon with Status = Healthy }
-                | _ -> mon
-
-            let healed = healHp current |> cureStatus
-
-            if healed = current then
-                queue <- [ "It won't have any effect!" ]
-                false
+            if Battle.isOver updated then
+                state <- updated
+                queue <- [ $"{this.ItemLabel item} was used!" ]
             else
-                let team =
-                    state.PlayerTeam
-                    |> List.mapi (fun i mon -> if i = targetIndex then healed else mon)
+                state <- Battle.useItemTurn updated
+                queue <- [ $"{this.ItemLabel item} was used!" ] @ state.Messages
 
-                this.SetBattlePlayerTeam team
-                bag <- Bag.remove item 1 bag
-                onBagChange bag
-                queue <- [ $"{this.ItemLabel item} was used on {current.Species.Name}!" ]
-                true
+            true
+
+    member private this.TryUsePartyItem(item: string) (targetIndex: int) =
+        this.TryUseItem item (PartyTarget targetIndex)
+
+    member private this.TryUseMoveItem(item: string) (targetIndex: int) (moveIndex: int) =
+        this.TryUseItem item (MoveTarget(targetIndex, moveIndex))
+
+    member private this.TryUseDirectItem(item: string) =
+        this.TryUseItem item ActiveTarget
 
     member private _.TryUseBall(ball: string) =
         if Battle.isTrainerBattle state then
@@ -309,6 +285,10 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                                             mode <- CommandMenu
                                             itemCursor <- 0
                                             this.TryUseBall item
+                                        elif BattleItems.isDirect item then
+                                            mode <- CommandMenu
+                                            itemCursor <- 0
+                                            this.TryUseDirectItem item |> ignore
                                         else
                                             mode <- ItemTargetMenu item
                                             partyCursor <- 0
@@ -322,10 +302,35 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                                     elif edge buttons.Up prev.Up then
                                         partyCursor <- max 0 (partyCursor - 1)
                                     elif edge buttons.A prev.A then
+                                        if BattleItems.requiresMoveTarget item then
+                                            mode <- ItemMoveTargetMenu(item, partyCursor)
+                                            moveCursor <- 0
+                                        else
+                                            mode <- CommandMenu
+                                            this.TryUsePartyItem item partyCursor |> ignore
+                                            partyCursor <- 0
+                                            itemCursor <- 0
+                                    Stay
+
+                                | ItemMoveTargetMenu(item, partyIndex) ->
+                                    let moves =
+                                        state.PlayerTeam
+                                        |> List.tryItem partyIndex
+                                        |> Option.map (fun mon -> mon.Moves)
+                                        |> Option.defaultValue []
+
+                                    if edge buttons.B prev.B then
+                                        mode <- ItemTargetMenu item
+                                    elif edge buttons.Down prev.Down then
+                                        moveCursor <- min (moves.Length - 1) (moveCursor + 1)
+                                    elif edge buttons.Up prev.Up then
+                                        moveCursor <- max 0 (moveCursor - 1)
+                                    elif edge buttons.A prev.A && not moves.IsEmpty then
                                         mode <- CommandMenu
-                                        this.TryUseHealingItem item partyCursor |> ignore
+                                        this.TryUseMoveItem item partyIndex moveCursor |> ignore
                                         partyCursor <- 0
                                         itemCursor <- 0
+                                        moveCursor <- 0
                                     Stay
 
                                 | PartyMenu forced ->
@@ -361,6 +366,10 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                     | MoveMenu -> BattleRenderer.drawMenu fb font state.Player.Moves state.Player.Pp moveCursor
                     | ItemMenu -> BattleRenderer.drawItemMenu fb font this.BattleItems itemCursor
                     | ItemTargetMenu _ -> BattleRenderer.drawPartyMenu fb font state.PlayerTeam partyCursor false
+                    | ItemMoveTargetMenu(_, partyIndex) ->
+                        match state.PlayerTeam |> List.tryItem partyIndex with
+                        | Some mon -> BattleRenderer.drawMenu fb font mon.Moves mon.Pp moveCursor
+                        | None -> BattleRenderer.drawPartyMenu fb font state.PlayerTeam partyCursor false
                     | PartyMenu forced -> BattleRenderer.drawPartyMenu fb font state.PlayerTeam partyCursor (not forced)
 
     /// Word-wrap a battle message into the two-line box, inserting `<LINE>` for

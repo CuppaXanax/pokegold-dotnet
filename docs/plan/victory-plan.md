@@ -13,7 +13,7 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-12:** 1346/1346 tests green. The script-VM golden path is verified
+**State as of 2026-07-12:** 1353/1353 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
@@ -31,9 +31,10 @@ Falkner, Lance, and Red loss paths now prove their generated victory continuatio
 run after a defeat. A real Falkner loss-save-reload-retry path preserves the trainer until
 a later legitimate victory awards its progression exactly once. Forced player replacement
 now blocks action until a legal choice, with source ordering and repeated multi-mon cycles
-covered through the real Falkner battle. The remaining battle-critical path is battle-item
-coverage, held-item persistence, and trainer AI integration before extending the continuous
-Red route.
+covered through the real Falkner battle. Source-backed battle-item use now covers healing,
+revives, PP restoration, X/Guard/Dire effects, and Poké Doll restrictions with runtime
+persistence proof. The remaining battle-critical path is held-item persistence and trainer
+AI integration before extending the continuous Red route.
 
 ---
 
@@ -71,7 +72,7 @@ Red route.
 
 | Item | Current | Target |
 |---|---|---|
-| Battle command/trainer UX | trainer/wild context, trainer-shaped opening text, FIGHT/PKMN/PACK/RUN menu, player-selected forced replacement, multi-mon trainer flow, party-targeted basic items, and trainer RUN/ball rejection are covered by `BattleTests` plus real Falkner and Cherrygrove rival runtime script paths | complete battle-item coverage, held-item persistence, trainer-AI integration, rewards/EXP audit, and runtime boss-battle proofs |
+| Battle command/trainer UX | trainer/wild context, trainer-shaped opening text, FIGHT/PKMN/PACK/RUN menu, player-selected forced replacement, multi-mon trainer flow, source-backed party/direct/PP-targeted battle items, and trainer RUN/ball/Poké Doll rejection are covered by `BattleTests` plus real Falkner and Cherrygrove rival runtime script paths | held-item persistence, trainer-AI integration, rewards/EXP audit, and runtime boss-battle proofs |
 
 ### The debt ledger is the to-do list
 

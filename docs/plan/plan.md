@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,346 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,353 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -278,8 +278,9 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - A fainted active player Pokémon now remains pending until a legal player-selected replacement; fainted targets are rejected, no newly sent-out monster acts in the fainting turn, and simultaneous faints select the player replacement before automatically sending the next enemy. Repeated multi-mon cycles retain persistent party identity, HP, and PP.
   - Proved by `BAT-021 trainer faint waits for a player replacement before another action`, `BAT-021 enemy replacement waits until the next turn to act`, `BAT-021 forced replacement rejects fainted targets until a legal party choice`, `BAT-021 simultaneous faint chooses the player replacement before enemy replacement`, `BAT-021 multi-mon trainer battle repeats forced player and enemy replacements`, and `BAT-021 real Falkner battle requires replacement before repeated trainer cycles`.
 
-- 🟡 **BAT-022 — Complete battle item coverage.**
-  - Add Revive/Max Revive, X items, Guard Spec., Poké Doll, PP recovery, status items, and source-accurate restrictions.
+- ✅ **BAT-022 — Complete battle item coverage.**
+  - Source-backed battle items now cover Revive/Max Revive, HP and status healing, Full Restore restrictions, X Attack/Defend/Speed/Special, X Accuracy, Guard Spec., Dire Hit, Poké Doll, Ether/Max Ether, and Elixer/Max Elixer. Rejected uses preserve the bag and turn; successful nonterminal uses consume the player turn; and PP/bag state survives runtime battle cleanup.
+  - Proved by `BAT-022 Revive restores a fainted bench target consumes once and costs a turn`, `BAT-022 source battle item table enforces revive status PP and direct effects`, `BAT-022 X Accuracy and Guard Spec alter source battle checks`, `BAT-022 X Attack consumes a battle turn while rejected use preserves bag and turn`, `BAT-022 Ether uses move targeting and restores PP without restoring a full slot`, `BAT-022 Poke Doll escapes wild battles but is rejected by trainers`, and `BAT-022 Ether battle use persists PP and bag state after runtime victory`.
 
 - 🟡 **BAT-023 — Complete held-item integration.**
   - Current effects have targeted coverage; verify consumption and persistence across real runtime battles.
