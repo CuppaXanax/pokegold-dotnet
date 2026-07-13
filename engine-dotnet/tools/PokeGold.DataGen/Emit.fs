@@ -475,7 +475,7 @@ module Emit =
           "TmHm.Generated.fs", tmHmFile ()
           "EvosAttacks.Generated.fs", evosAttacksFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
-          "Maps.Generated.fs", EmitMaps.render MapParsers.maps
+          "Maps.Generated.fs", EmitMaps.render MapParsers.maps MapParsers.spawnPoints
           "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
           "Music.Generated.fs", musicFile ()
           "Songs.Generated.fs", EmitSongs.render ()

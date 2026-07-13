@@ -848,8 +848,11 @@ let ``caught Pokemon goes to PC when party is full`` () =
     Assert.Equal(6, scene.DebugPlayer.Party.Length)
     Assert.Single(scene.DebugPlayer.Pc.Boxes.[scene.DebugPlayer.Pc.CurrentBox].Mons)
 
-[<Fact>]
-let ``BAT-016 defeated battle aborts the suspended script continuation`` () =
+[<Theory>]
+[<InlineData("CHERRYGROVE_CITY", "CherrygroveCity", 29, 4)>]
+[<InlineData("NOT_A_SPAWN", "PlayersHouse2F", 3, 3)>]
+let ``BAT-017 defeat applies source blackout spawn and aborts continuation``
+    (blackoutMap: string, expectedMap: string, expectedX: int, expectedY: int) =
     let content = Content()
     let state =
         scriptedScene
@@ -859,7 +862,8 @@ let ``BAT-016 defeated battle aborts the suspended script continuation`` () =
             5
             Down
             "WhiteoutScene"
-            [| Loadwildmon("MEWTWO", 100)
+            [| Blackoutmod blackoutMap
+               Loadwildmon("MEWTWO", 100)
                Startbattle
                Writetext "AfterLoss"
                End |]
@@ -869,10 +873,11 @@ let ``BAT-016 defeated battle aborts the suspended script continuation`` () =
     let faintable =
         { PartyMon.create (Species.byName "CYNDAQUIL").Dex 2 with
             Hp = 1
+            Status = "PSN"
             Moves = [ moveId "SPLASH", splash.Pp ] }
     let player =
         { PlayerStateOps.initial with
-            Money = 2000
+            Money = 2001
             Party = [ faintable ] }
     let scene = OverworldScene(content, SilentSound(), state)
     scene.Restore(World.empty, player)
@@ -890,8 +895,12 @@ let ``BAT-016 defeated battle aborts the suspended script continuation`` () =
     Assert.Equal(1, stack.Count)
 
     Assert.Equal(Stay, (scene :> Scene).Update Buttons.none)
-    Assert.Equal(2000, scene.DebugPlayer.Money)
-    Assert.Equal(0, scene.DebugPlayer.Party.[0].Hp)
+    Assert.Equal(expectedMap, scene.RuntimeSnapshot.MapId)
+    Assert.Equal((expectedX, expectedY), (scene.RuntimeSnapshot.Player.CellX, scene.RuntimeSnapshot.Player.CellY))
+    Assert.Equal(1000, scene.DebugPlayer.Money)
+    Assert.Equal(scene.DebugPlayer.Party.[0].MaxHp, scene.DebugPlayer.Party.[0].Hp)
+    Assert.Equal("", scene.DebugPlayer.Party.[0].Status)
+    Assert.Equal(splash.Pp, snd scene.DebugPlayer.Party.[0].Moves.[0])
     Assert.NotEqual(Some "AfterLoss", scene.RuntimeSnapshot.LastTextLabel)
     for _ in 1..5 do Assert.Equal(Stay, (scene :> Scene).Update Buttons.none)
 

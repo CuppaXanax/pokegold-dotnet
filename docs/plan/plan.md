@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,310 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,336 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -242,7 +242,7 @@ Level-up move learning preserves source order and suspends battle-script resumpt
 
 **Status: 🟡 PARTIAL**
 
-Defeat now has an explicit result and aborts the suspended post-battle continuation. The remaining work is to apply the source blackout destination, healing, money, boss-loss, and retry semantics at that boundary.
+Defeat now has an explicit result, source-defined blackout transition, and aborts the suspended post-battle continuation. The remaining work is to prove boss-loss and retry semantics at that boundary.
 
 ### Work items
 
@@ -250,12 +250,9 @@ Defeat now has an explicit result and aborts the suspended post-battle continuat
   - A loss must not be represented as an ordinary script result that resumes post-victory commands.
   - Proved by `BAT-016 battle outcomes map to explicit script results` and `BAT-016 defeated battle aborts the suspended script continuation`; victory resumes with the source `wBattleResult = 0`, while defeat has an explicit result and discards the suspended post-battle continuation.
 
-- ⬜ **BAT-017 — Implement blackout destination and abort semantics.**
-  - Apply the configured blackout/spawn map.
-  - Deduct the correct money amount.
-  - Heal the party.
-  - Clear transient battle/script state.
-  - Abort the defeated script’s normal continuation.
+- ✅ **BAT-017 — Implement blackout destination and abort semantics.**
+  - Source-defined spawn data resolves a valid `blackoutmod` map and falls back to `PLAYERS_HOUSE_2F` at `(3, 3)` when it is invalid. Defeat heals party HP, status, and PP; floors money-halving; clears transient battle/script state; warps; and aborts the defeated script’s normal continuation.
+  - Proved by `BAT-017 defeat applies source blackout spawn and aborts continuation`, a runtime theory covering `CHERRYGROVE_CITY` at `(29, 4)`, the home fallback, odd-money flooring, party healing, and stable post-loss idle behavior.
 
 - ⬜ **BAT-018 — Protect every boss script from loss-as-victory.**
   - Losing to Falkner grants no badge or TM.

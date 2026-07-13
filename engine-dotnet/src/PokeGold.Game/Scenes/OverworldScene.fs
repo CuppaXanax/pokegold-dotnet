@@ -564,6 +564,39 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
         resetObjectPresence ()
 
+    member private this.ApplyBlackout() : Transition =
+        let home = MapsData.spawnPoints.["PLAYERS_HOUSE_2F"]
+        let configured = World.getBuffer "__blackout_map" world
+        let mapId, x, y = Map.tryFind configured MapsData.spawnPoints |> Option.defaultValue home
+
+        player <-
+            { player with
+                Party = Heal.healParty player.Party
+                Money = player.Money / 2 }
+
+        pending <- None
+        pendingMoveRequests <- []
+        pendingEvolutionRequests <- []
+        stagedWild <- None
+        stagedTrainer <- None
+        stagedWinText <- ""
+        stagedLossText <- ""
+        lastBattleResult <- None
+        world <- World.setVar "VAR_BATTLETYPE" 0 world
+        scriptQueue.Clear()
+        runningMove <- None
+        pauseFrames <- 0
+        pauseVm <- None
+        fadeOverlay <- None
+        fadeRun <- None
+        fadeVm <- None
+        followPair <- None
+        lastTalkedActor <- None
+        restoreTransition <- None
+
+        OverworldState.loadByIdAt content mapId x y Down
+        |> fun next -> this.EnterMap(next, true)
+
     member private this.ContinueQueuedScripts() : Transition =
         if scriptQueue.Count > 0 then
             let vm, value = scriptQueue.Dequeue()
@@ -2015,17 +2048,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                             DexOwn = Set.add evolved.SpeciesId player.DexOwn }
                                     pendingMoveRequests <- pendingMoveRequests @ requests) :> Scene)
             | Some(_, StartBattle) when lastBattleResult = Some BattleDefeat ->
-                // Defeat replaces the suspended battle script; it is never
-                // resumed with an ordinary zero result. BAT-017 performs the
-                // whiteout mutation/warp at this explicit abort boundary.
-                pending <- None
-                stagedWild <- None
-                stagedTrainer <- None
-                world <- World.setVar "VAR_BATTLETYPE" 0 world
-                stagedWinText <- ""
-                stagedLossText <- ""
-                lastBattleResult <- None
-                Stay
+                // Script_BattleWhiteout replaces (rather than resumes) the
+                // defeated script and ends it after healing, money loss, and
+                // the source-configured spawn-point warp.
+                this.ApplyBlackout()
             // A pushed child scene popped — resume the suspended script with its result.
             | Some(vm, effect) ->
                 pending <- None

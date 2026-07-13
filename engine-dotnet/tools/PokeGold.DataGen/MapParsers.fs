@@ -1,6 +1,7 @@
 namespace PokeGold.DataGen
 
 open System.IO
+open System.Text.RegularExpressions
 open PokeGold.Game.Overworld.Script
 
 /// Build-time loading of every map's static data using the shared `PokeGold.MapData`
@@ -17,6 +18,22 @@ module MapParsers =
             (Repo.readText "data/maps/maps.asm")
             (Repo.readText "data/maps/attributes.asm")
             (Repo.readText "data/maps/blocks.asm")
+
+    /// Source-defined whiteout destinations from data/maps/spawn_points.asm.
+    /// Each entry retains the ROM map constant and resolves its runtime map id.
+    let spawnPoints : (string * string * int * int) list =
+        let pattern = Regex(@"^\s*spawn\s+([A-Z0-9_]+),\s*(-?\d+),\s*(-?\d+)", RegexOptions.Multiline)
+        let source = Repo.readText "data/maps/spawn_points.asm"
+
+        [ for m in pattern.Matches(source) do
+              let mapConst = m.Groups.[1].Value
+              if mapConst <> "N_A" then
+                  let runtimeName =
+                      metas
+                      |> List.tryFind (fun meta -> meta.Const = mapConst)
+                      |> Option.map (fun meta -> meta.Name)
+                      |> Option.defaultWith (fun () -> failwithf "Unknown spawn-point map %s" mapConst)
+                  yield mapConst, runtimeName, int m.Groups.[2].Value, int m.Groups.[3].Value ]
 
     let private addFirst (key: string) (value: int) (map: Map<string, int>) =
         if Map.containsKey key map then map else Map.add key value map
