@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1361/1361) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1367/1367) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -71,17 +71,18 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Fainted player Pokémon now wait for a legal chosen replacement; replacement timing
   blocks extra actions, handles simultaneous faint ordering, and is proven through
   repeated multi-mon cycles plus the real Falkner runtime battle.
-  Battle PACK now applies source-backed healing, revive, PP restoration, stat/volatile,
-  and Poké Doll effects with rejected-use preservation, turn consumption, and runtime
-  PP/bag persistence coverage.
+  Battle PACK now retains fainted reserves as targetable battle-team members while
+  selecting a conscious active battler. Its source battle-menu item set is covered by
+  a generated-data support guard and staged UI tests for Revive/Max Revive, status
+  cures, PP recovery, direct X-items, and trainer-restricted Poké Doll use; bitter
+  medicine friendship changes persist through post-battle synchronization.
   Consumable and nonconsumable held items now retain source-consistent state through
   residual activation, fainting, switching, capture cleanup, battle synchronization,
   and save/reload.
-  Trainer AI now reads generated class profiles from `data/trainers/attributes.asm`:
-  it selects real PP-bearing moves, preserves the source Disable fallback, honors
-  class switch policy, tracks turn state per active opponent, and uses highest-level
-  trainer items in source priority order. Falkner, Will, Lance, and Red integration
-  tests cover those paths, including Red's duplicate Full Restores.
+  Trainer AI profile data now reads generated class flags from
+  `data/trainers/attributes.asm`, but its decision policy is not yet source-conformant:
+  generated scoring layers, randomized ties, distinct switch rates/restrictions, and
+  trainer item context/probability behavior need an ASM-backed correction pass.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -96,9 +97,13 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Complete route-required overworld and script semantics, then extend the
+1. Replace the BAT-024 AI approximation with source-conformant scoring, switching,
+  item behavior, and discriminating seeded tests.
+2. Repair BAT-019's legal-party retry proof and add the explicit Epic 1 runtime
+  acceptance matrix without fabricated battle fixtures.
+3. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
-2. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
+4. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
    source.
-3. After the route gate is proven, update public docs with the exact command,
+5. After the route gate is proven, update public docs with the exact command,
    current test count, and a host screenshot or GIF.

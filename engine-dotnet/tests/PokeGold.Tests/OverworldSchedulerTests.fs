@@ -1057,6 +1057,279 @@ let ``BAT-022 Ether battle use persists PP and bag state after runtime victory``
     Assert.Equal<(int * int) list>([ moveId "TACKLE", 10; moveId "DRAGON_RAGE", dragonRage.Pp - 1 ], scene.DebugPlayer.Party.[0].Moves)
 
 [<Fact>]
+let ``BAT-022 runtime Revive targets fainted bench consumes a turn and synchronizes identity`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "RuntimeReviveBattle"
+            [| Loadwildmon("MAGIKARP", 2)
+               Startbattle
+               End |]
+    let ember = Moves.byName "EMBER"
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "EMBER", ember.Pp ] }
+    let faintedBase = PartyMon.create (Species.byName "CHIKORITA").Dex 18
+    let fainted =
+        { faintedBase with
+            Hp = 0
+            Status = "PSN"
+            Moves = [ moveId "TACKLE", (Moves.byName "TACKLE").Pp ] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ active; fainted ]; Bag = Bag.add "REVIVE" 1 Bag.empty })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let battleAtStart = stack.[stack.Count - 1] :?> BattleScene
+    Assert.Equal(2, battleAtStart.CurrentState.PlayerTeam.Length)
+    Assert.Equal(Some fainted.Id, battleAtStart.CurrentState.PlayerTeam.[1].PersistentId)
+    Assert.True(BattleMon.isFainted battleAtStart.CurrentState.PlayerTeam.[1])
+
+    let mutable frame = 0
+    let mutable sawBenchTarget = false
+    let mutable enemyActedForRevive = false
+    let mutable finalBattle: BattleState option = None
+
+    while frame < 3000 && stack.Count > 1 do
+        frame <- frame + 1
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        let snapshot = battle.RuntimeSnapshot
+
+        if battle.CurrentState.Outcome.IsSome then
+            finalBattle <- Some battle.CurrentState
+
+        if snapshot.Mode = "TargetMenu" && battle.PartyCursor = 1 then
+            sawBenchTarget <- true
+
+        if Bag.count "REVIVE" battle.CurrentBag = 0
+           && battle.CurrentState.Enemy.Moves.Head.Name = "SPLASH"
+           && battle.CurrentState.Enemy.Pp.Head = splash.Pp - 1 then
+            enemyActedForRevive <- true
+
+        let buttons =
+            if frame % 2 <> 0 then
+                Buttons.none
+            elif snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                { Buttons.none with A = true }
+            elif snapshot.Mode = "CommandMenu" && Bag.count "REVIVE" battle.CurrentBag > 0 then
+                if battle.CommandCursor = 2 then { Buttons.none with A = true }
+                else { Buttons.none with Down = true }
+            elif snapshot.Mode = "CommandMenu" then
+                if battle.CommandCursor = 0 then { Buttons.none with A = true }
+                else { Buttons.none with Down = true }
+            elif snapshot.Mode = "PackMenu" then
+                { Buttons.none with A = true }
+            elif snapshot.Mode = "TargetMenu" then
+                if battle.PartyCursor = 0 then { Buttons.none with Down = true }
+                else { Buttons.none with A = true }
+            elif snapshot.Mode = "MoveMenu" then
+                { Buttons.none with A = true }
+            else
+                Buttons.none
+
+        applyTransition stack ((battle :> Scene).Update buttons)
+
+    Assert.Equal(1, stack.Count)
+    (scene :> Scene).Update Buttons.none |> ignore
+    Assert.True(sawBenchTarget, "The real PACK target menu must expose the fainted bench member")
+    Assert.True(enemyActedForRevive, "A successful Revive must consume the player's battle turn")
+
+    let battle = finalBattle |> Option.defaultWith (fun () -> failwith "runtime Revive battle never resolved")
+    Assert.Equal(Some Win, battle.Outcome)
+    let revived = scene.DebugPlayer.Party |> List.find (fun mon -> mon.Id = fainted.Id)
+    Assert.Equal(fainted.Id, revived.Id)
+    Assert.Equal(max 1 (fainted.MaxHp / 2), revived.Hp)
+    Assert.Equal("", revived.Status)
+    Assert.Equal(0, Bag.count "REVIVE" scene.DebugPlayer.Bag)
+    Assert.Equal<(int * int) list>([ moveId "EMBER", ember.Pp - 1 ], scene.DebugPlayer.Party.[0].Moves)
+
+[<Fact>]
+let ``BAT-022 runtime Max Revive targets a fainted bench at full HP`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "RuntimeMaxReviveBattle"
+            [| Loadwildmon("MAGIKARP", 2)
+               Startbattle
+               End |]
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "EMBER", (Moves.byName "EMBER").Pp ] }
+    let faintedBase = PartyMon.create (Species.byName "CHIKORITA").Dex 18
+    let fainted =
+        { faintedBase with
+            Hp = 0
+            Status = "BRN"
+            Moves = [ moveId "TACKLE", (Moves.byName "TACKLE").Pp ] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ active; fainted ]; Bag = Bag.add "MAX_REVIVE" 1 Bag.empty })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable sawBenchTarget = false
+    while frame < 2000 && Bag.count "MAX_REVIVE" ((stack.[stack.Count - 1] :?> BattleScene).CurrentBag) > 0 do
+        frame <- frame + 1
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        let snapshot = battle.RuntimeSnapshot
+
+        if snapshot.Mode = "TargetMenu" && battle.PartyCursor = 1 then
+            sawBenchTarget <- true
+
+        let buttons =
+            if frame % 2 <> 0 then
+                Buttons.none
+            elif snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                { Buttons.none with A = true }
+            elif snapshot.Mode = "CommandMenu" then
+                if battle.CommandCursor = 2 then { Buttons.none with A = true }
+                else { Buttons.none with Down = true }
+            elif snapshot.Mode = "PackMenu" then
+                { Buttons.none with A = true }
+            elif snapshot.Mode = "TargetMenu" then
+                if battle.PartyCursor = 0 then { Buttons.none with Down = true }
+                else { Buttons.none with A = true }
+            else
+                Buttons.none
+
+        applyTransition stack ((battle :> Scene).Update buttons)
+
+    let battle = stack.[stack.Count - 1] :?> BattleScene
+    let revived = battle.CurrentState.PlayerTeam.[1]
+    Assert.True(sawBenchTarget)
+    Assert.Equal(fainted.MaxHp, revived.Hp)
+    Assert.Equal(Healthy, revived.Status)
+    Assert.Equal(Some fainted.Id, revived.PersistentId)
+    Assert.Equal(0, Bag.count "MAX_REVIVE" battle.CurrentBag)
+    Assert.Equal(splash.Pp - 1, battle.CurrentState.Enemy.Pp.Head)
+
+[<Fact>]
+let ``BAT-022 runtime Pack status and direct items consume a turn and persist`` () =
+    let run item status expectedStage =
+        let content = Content()
+        let state =
+            scriptedScene
+                content
+                "NewBarkTown"
+                5
+                5
+                Down
+                $"Runtime{item}Battle"
+                [| Loadwildmon("MAGIKARP", 2)
+                   Startbattle
+                   End |]
+        let splash = Moves.byName "SPLASH"
+        let ember = Moves.byName "EMBER"
+        let playerMon =
+            { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+                Status = status
+                Moves = [ moveId "EMBER", ember.Pp ] }
+        let scene = OverworldScene(content, SilentSound(), state)
+        scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ playerMon ]; Bag = Bag.add item 1 Bag.empty })
+
+        let stack = ResizeArray<Scene>()
+        stack.Add(scene :> Scene)
+        applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+        let mutable frame = 0
+        while frame < 2000 && Bag.count item ((stack.[stack.Count - 1] :?> BattleScene).CurrentBag) > 0 do
+            frame <- frame + 1
+            let battle = stack.[stack.Count - 1] :?> BattleScene
+            let snapshot = battle.RuntimeSnapshot
+            let buttons =
+                if frame % 2 <> 0 then
+                    Buttons.none
+                elif snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                    { Buttons.none with A = true }
+                elif snapshot.Mode = "CommandMenu" then
+                    if battle.CommandCursor = 2 then { Buttons.none with A = true }
+                    else { Buttons.none with Down = true }
+                elif snapshot.Mode = "PackMenu" || snapshot.Mode = "TargetMenu" then
+                    { Buttons.none with A = true }
+                else
+                    Buttons.none
+
+            applyTransition stack ((battle :> Scene).Update buttons)
+
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        Assert.Equal(0, Bag.count item battle.CurrentBag)
+        Assert.Equal(Healthy, battle.CurrentState.Player.Status)
+        Assert.Equal(expectedStage, battle.CurrentState.Player.AtkStage)
+        Assert.Equal(splash.Pp - 1, battle.CurrentState.Enemy.Pp.Head)
+
+    run "PSNCUREBERRY" "PSN" 0
+    run "X_ATTACK" "" 1
+
+[<Fact>]
+let ``BAT-022 runtime trainer battle rejects Poke Doll without consuming a turn`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "TrainerDollBattle"
+            [| Loadtrainer("YOUNGSTER", "JOEY1")
+               Startbattle
+               End |]
+    let ember = Moves.byName "EMBER"
+    let playerMon =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Moves = [ moveId "EMBER", ember.Pp ] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ playerMon ]; Bag = Bag.add "POKE_DOLL" 1 Bag.empty })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    let mutable attempted = false
+    while frame < 2000 && not attempted do
+        frame <- frame + 1
+        let battle = stack.[stack.Count - 1] :?> BattleScene
+        let snapshot = battle.RuntimeSnapshot
+        let buttons =
+            if frame % 2 <> 0 then
+                Buttons.none
+            elif snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                { Buttons.none with A = true }
+            elif snapshot.Mode = "CommandMenu" then
+                if battle.CommandCursor = 2 then { Buttons.none with A = true }
+                else { Buttons.none with Down = true }
+            elif snapshot.Mode = "PackMenu" then
+                attempted <- true
+                { Buttons.none with A = true }
+            else
+                Buttons.none
+
+        applyTransition stack ((battle :> Scene).Update buttons)
+
+    let battle = stack.[stack.Count - 1] :?> BattleScene
+    Assert.True(attempted)
+    Assert.Equal(1, Bag.count "POKE_DOLL" battle.CurrentBag)
+    Assert.Equal((Moves.byName "TACKLE").Pp, battle.CurrentState.Enemy.Pp.Head)
+    Assert.True(battle.CurrentState.Outcome.IsNone)
+
+[<Fact>]
 let ``BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`` () =
     let content = Content()
     let state =

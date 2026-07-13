@@ -126,6 +126,8 @@ Epic 0 is complete when all later epics can use generated source data, save stat
 
 This epic is the first critical-path blocker. Route extension beyond early Johto is not meaningful until real battles produce trustworthy persistent results.
 
+**Status: 🟡 PARTIAL**
+
 ## Story 1.1 — Trainers and wild encounters use authentic battle parties
 
 **Status: ✅ COMPLETE**
@@ -264,7 +266,7 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
 
 ## Story 1.6 — The battle command shell supports a normal playthrough
 
-**Status: ✅ COMPLETE**
+**Status: 🟡 PARTIAL**
 
 FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, and broad move-effect behavior exist.
 
@@ -279,23 +281,24 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - Proved by `BAT-021 trainer faint waits for a player replacement before another action`, `BAT-021 enemy replacement waits until the next turn to act`, `BAT-021 forced replacement rejects fainted targets until a legal party choice`, `BAT-021 simultaneous faint chooses the player replacement before enemy replacement`, `BAT-021 multi-mon trainer battle repeats forced player and enemy replacements`, and `BAT-021 real Falkner battle requires replacement before repeated trainer cycles`.
 
 - ✅ **BAT-022 — Complete battle item coverage.**
-  - Source-backed battle items now cover Revive/Max Revive, HP and status healing, Full Restore restrictions, X Attack/Defend/Speed/Special, X Accuracy, Guard Spec., Dire Hit, Poké Doll, Ether/Max Ether, and Elixer/Max Elixer. Rejected uses preserve the bag and turn; successful nonterminal uses consume the player turn; and PP/bag state survives runtime battle cleanup.
-  - Proved by `BAT-022 Revive restores a fainted bench target consumes once and costs a turn`, `BAT-022 source battle item table enforces revive status PP and direct effects`, `BAT-022 X Accuracy and Guard Spec alter source battle checks`, `BAT-022 X Attack consumes a battle turn while rejected use preserves bag and turn`, `BAT-022 Ether uses move targeting and restores PP without restoring a full slot`, `BAT-022 Poke Doll escapes wild battles but is rejected by trainers`, and `BAT-022 Ether battle use persists PP and bag state after runtime victory`.
+  - `BuildBattle` retains every persistent party member while selecting the first conscious member as active, so fainted reserves are visible to the real battle PACK target menu without becoming active battlers. Revive/Max Revive, all source status berries, Bitter Berry, MiracleBerry, EnergyPowder, Energy Root, Heal Powder, Revival Herb, MysteryBerry, HP/status/PP recovery, X-items, Guard Spec., Dire Hit, and Poké Doll now use source target, amount, rejection, consumption, and turn semantics. Bitter medicines apply their source friendship penalty only after a successful effect and persist it through battle synchronization.
+  - The source-menu guard verifies every generated `ITEMMENU_PARTY`/`ITEMMENU_CLOSE` item-pocket entry has a battle transition. Real staged input tests prove Revive identity/status/PP/bag synchronization after victory, Max Revive full recovery, status cure, direct X-item turn consumption, Ether PP recovery, and trainer Poké Doll rejection.
+  - Proved by `BAT-022 runtime Revive targets fainted bench consumes a turn and synchronizes identity`, `BAT-022 runtime Max Revive targets a fainted bench at full HP`, `BAT-022 runtime Pack status and direct items consume a turn and persist`, `BAT-022 runtime trainer battle rejects Poke Doll without consuming a turn`, `BAT-022 source berries bitter medicine and Revival Herb preserve battle item semantics`, `BAT-022 every source battle-menu item has a supported battle transition`, `BAT-022 Ether battle use persists PP and bag state after runtime victory`, and the existing item transition tests.
 
 - ✅ **BAT-023 — Complete held-item integration.**
   - Consumable held healing/status/PP effects activate once, remain unconsumed when a holder faints before residual handling, and do not resurrect through switching, capture cleanup, battle synchronization, or save/reload. Nonconsumables retain their item state across turns and cleanup; existing source-effect tests cover type damage, priority, critical, survival, PP, and status behavior. Source held stat-up entries are explicitly unused by the original battle core.
   - Proved by `BAT-023 fainted Berry holder retains item and Leftovers remains held across turns` and `BAT-023 Berry consumption persists through runtime switch capture cleanup and save reload`, together with existing `type boosting held item increases matching move damage`, `Quick Claw lets a slower holder move first on a successful roll`, `Focus Band can leave the holder at 1 HP against lethal damage`, `MysteryBerry restores PP when a move reaches zero`, and status-berry tests.
 
-- ✅ **BAT-024 — Audit trainer AI at the integration layer.**
-  - Generated trainer-class profiles now carry source move-layer flags, switch/item flags, and item slots from `data/trainers/attributes.asm` into every staged trainer battle. The deterministic native policy selects PP-bearing source moves, preserves the source Disable fallback when it is the only choice, resets per-active-opponent turn state on a switch, gates tactical switches by source class flags, and consumes one highest-level trainer item in source priority order before the player acts.
-  - Real staged Falkner, Will, Lance, and Red paths prove source move selection, Falkner's class switch policy, Elite Four party progression and defeat events, Lance's Full Restore priority, Red's duplicate Full Restore consumption, and the overworld-to-battle generated item inventory boundary. The policy is deterministic rather than reproducing the ROM's random tie rolls; it is the supported runtime behavior, not a silent generic fallback.
-  - Proved by `BAT-024 generated trainer AI profiles preserve boss source attributes`, `BAT-024 generated trainer profiles select only real source moves`, `BAT-024 Falkner source switch policy changes to real Pidgeotto`, `BAT-024 Lance source item priority uses Full Restore before Full Heal`, `BAT-024 real Red AI uses generated Full Restore at critical HP`, `BAT-024 real Will team cycles every generated Elite Four member`, and `BAT-001 runtime trainer parties match source moves and held items`.
+- 🟡 **BAT-024 — Audit trainer AI at the integration layer.**
+  - Generated trainer-class profiles preserve source move, item, and switch flags, but the current battle policy is an approximation rather than a source-conformant AI implementation. It does not yet model every generated scoring layer, source score direction and randomized ties, distinct switch probabilities and restrictions, or trainer-item context and probability behavior.
+  - Completion requires an ASM-backed implementation and discriminating seeded tests for every generated scoring layer, tie selection, switch policy and switching restrictions, trainer-item thresholds/probabilities, and real generated Falkner, Elite Four/Lance, and Red decisions. Loading a source move is not sufficient evidence that source AI selected it.
+  - Existing profile-generation and integration tests remain valuable regression coverage but are not acceptance evidence for the complete source AI contract.
 
 ### Epic 1 acceptance
 
 Epic 1 is complete when a fresh party can fight and legitimately defeat representative wild encounters, ordinary trainers, a gym leader, a multi-mon Elite Four trainer, and Red while preserving exact party identity and progression. Losses must blackout and never execute victory-only script commands.
 
-**Work-item audit: ✅ BAT-001 through BAT-024 are complete.** Representative wild, ordinary-trainer, Falkner, Will, Lance, and Red paths; identity/state synchronization; progression; blackout/retry; battle items; forced replacement; and source-profile trainer AI all have passing tests. The continuous fresh-save route remains the separate Epic 3 and release gate, so this audit does not claim that route is complete.
+**Open Epic 1 correction audit:** BAT-024 remains partial. BAT-019 also requires a legal-party retry fixture, and an explicit runtime acceptance matrix must prove legitimate wild, ordinary-trainer, gym-leader, Elite Four, and Red victories without fabricated battle statistics or direct progression mutation. The continuous fresh-save route remains the separate Epic 3 and release gate.
 
 ---
 

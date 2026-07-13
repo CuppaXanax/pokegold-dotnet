@@ -375,6 +375,13 @@ module BattleMon =
     let friendship (m: BattleMon) =
         m.Persistent |> Option.map (fun p -> p.Friendship) |> Option.defaultValue 0
 
+    let adjustFriendship delta (m: BattleMon) =
+        let persistent =
+            m.Persistent
+            |> Option.map (fun data ->
+                { data with Friendship = max 0 (min 255 (data.Friendship + delta)) })
+        { m with Persistent = persistent }
+
     /// Switching reloads the party record, discarding Transform/Mimic battle form.
     let restorePersistentForm (m: BattleMon) : BattleMon =
         match m.Persistent with

@@ -1383,6 +1383,80 @@ let ``BAT-022 source battle item table enforces revive status PP and direct effe
     Assert.Equal(None, BattleItems.tryUse "POKE_DOLL" ActiveTarget (Battle.createTrainer trainer [ active ] [ enemy ] 0u))
 
 [<Fact>]
+let ``BAT-022 source berries bitter medicine and Revival Herb preserve battle item semantics`` () =
+    let splash = Moves.byName "SPLASH"
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+    let persistentMon friendship =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 with
+            Friendship = friendship }
+        |> PartyMon.toBattleMon
+    let state player = Battle.createTeam [ player ] [ enemy ] 0u
+    let requireUse item target battle =
+        BattleItems.tryUse item target battle
+        |> Option.defaultWith (fun () -> failwithf "expected %s to be usable" item)
+    let assertStatusCure item status =
+        let player = { persistentMon 70 with Status = status }
+        let updated = requireUse item (PartyTarget 0) (state player)
+        Assert.Equal(Healthy, updated.Player.Status)
+
+    let sourceItems =
+        [ "PSNCUREBERRY"; "PRZCUREBERRY"; "BURNT_BERRY"; "ICE_BERRY"; "MINT_BERRY"
+          "MIRACLEBERRY"; "BITTER_BERRY"; "MYSTERYBERRY"; "ENERGYPOWDER"; "ENERGY_ROOT"; "REVIVAL_HERB" ]
+    sourceItems |> List.iter (fun item -> Assert.True(BattleItems.isSupported item, $"{item} must be usable in battle"))
+
+    assertStatusCure "PSNCUREBERRY" Poison
+    assertStatusCure "PRZCUREBERRY" Paralysis
+    assertStatusCure "BURNT_BERRY" Freeze
+    assertStatusCure "ICE_BERRY" Burn
+    assertStatusCure "MINT_BERRY" (Sleep 3)
+
+    let confused =
+        { persistentMon 70 with
+            Volatile = { VolatileStatus.empty with Confusion = Some 2 } }
+    let miracle = requireUse "MIRACLEBERRY" (PartyTarget 0) (state confused)
+    Assert.True(miracle.Player.Volatile.Confusion.IsNone)
+    let bitter = requireUse "BITTER_BERRY" ActiveTarget (state confused)
+    Assert.True(bitter.Player.Volatile.Confusion.IsNone)
+    Assert.True(BattleItems.isDirect "BITTER_BERRY")
+
+    let ppDepleted = { persistentMon 70 with Moves = [ splash ]; Pp = [ 0 ] }
+    let mysteryBerry = requireUse "MYSTERYBERRY" (MoveTarget(0, 0)) (state ppDepleted)
+    Assert.Equal(5, mysteryBerry.Player.Pp.Head)
+
+    let damaged = { persistentMon 70 with Hp = 1 }
+    let energyPowder = requireUse "ENERGYPOWDER" (PartyTarget 0) (state damaged)
+    Assert.Equal(min damaged.MaxHp (damaged.Hp + 50), energyPowder.Player.Hp)
+    Assert.Equal(65, BattleMon.friendship energyPowder.Player)
+
+    let energyRoot = requireUse "ENERGY_ROOT" (PartyTarget 0) (state { persistentMon 205 with Hp = 1 })
+    Assert.Equal(190, BattleMon.friendship energyRoot.Player)
+
+    let healPowder = requireUse "HEAL_POWDER" (PartyTarget 0) (state { persistentMon 70 with Status = Poison })
+    Assert.Equal(65, BattleMon.friendship healPowder.Player)
+
+    let fainted = { persistentMon 205 with Hp = 0; Status = Burn }
+    let revivalHerb = requireUse "REVIVAL_HERB" (PartyTarget 0) (state fainted)
+    Assert.Equal(fainted.MaxHp, revivalHerb.Player.Hp)
+    Assert.Equal(Healthy, revivalHerb.Player.Status)
+    Assert.Equal(185, BattleMon.friendship revivalHerb.Player)
+
+[<Fact>]
+let ``BAT-022 every source battle-menu item has a supported battle transition`` () =
+    let sourceBattleItems =
+        Items.byId
+        |> Map.toSeq
+        |> Seq.choose (fun (item, data) ->
+            if data.Pocket = Item
+               && (data.BattleMenu = "ITEMMENU_PARTY" || data.BattleMenu = "ITEMMENU_CLOSE") then
+                Some item
+            else
+                None)
+        |> Set.ofSeq
+    let unsupported = sourceBattleItems |> Set.filter (BattleItems.isSupported >> not)
+
+    Assert.Empty(unsupported)
+
+[<Fact>]
 let ``BAT-022 X Accuracy and Guard Spec alter source battle checks`` () =
     let alwaysMiss = { move "MISS" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL") with Accuracy = 0 }
     let growl = Moves.byName "GROWL"

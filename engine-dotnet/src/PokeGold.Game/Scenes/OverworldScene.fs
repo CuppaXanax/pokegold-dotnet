@@ -1108,13 +1108,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private this.BuildBattle() : BattleScene =
         let playerTeam =
             player.Party
-            |> List.filter (fun m -> m.Hp > 0)
             |> List.map PartyMon.toBattleMon
-            |> function
-                | [] when allowDebugBattleFixture ->
+            |> fun team ->
+                team
+                |> List.tryFindIndex (BattleMon.isFainted >> not)
+                |> Option.map (fun activeIndex ->
+                    let active = team.[activeIndex]
+                    let reserves =
+                        team
+                        |> List.indexed
+                        |> List.choose (fun (index, mon) -> if index = activeIndex then None else Some mon)
+                    active :: reserves)
+                |> function
+                | Some team -> team
+                | None when allowDebugBattleFixture ->
                     [ BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 5 [ Moves.byName "TACKLE" ] ]
-                | [] -> invalidOp $"Cannot start battle on {state.MapId}: no usable player Pokemon"
-                | t -> t
+                | None -> invalidOp $"Cannot start battle on {state.MapId}: no usable player Pokemon"
 
         let playerIds = playerTeam |> List.choose (fun mon -> mon.PersistentId)
         if not allowDebugBattleFixture && playerIds.Length <> playerTeam.Length then
