@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,339 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,340 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -240,9 +240,9 @@ Level-up move learning preserves source order and suspends battle-script resumpt
 
 ## Story 1.5 — Losing a battle causes a real blackout
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ COMPLETE**
 
-Defeat now has an explicit result, source-defined blackout transition, and aborts the suspended post-battle continuation. Real generated boss scripts now prove that loss cannot execute victory-only mutations. The remaining work is retry persistence at that boundary.
+Defeat now has an explicit result, source-defined blackout transition, and aborts the suspended post-battle continuation. Real generated boss scripts prove that loss cannot execute victory-only mutations, and a loss-save-reload-retry cycle preserves trainer availability until a legitimate later victory.
 
 ### Work items
 
@@ -258,8 +258,9 @@ Defeat now has an explicit result, source-defined blackout transition, and abort
   - Real generated-map battle transitions with a level-2 Magikarp using Splash record actual losses, blackout to `PLAYERS_HOUSE_2F` at `(3, 3)`, and abort the victory continuation. Falkner grants no Zephyr Badge or TM31; Lance does not enter the Hall of Fame; and Red remains present without credits.
   - Proved by `BAT-018 Falkner loss blackouts without ZephyrBadge or TM31`, `BAT-018 Lance loss blackouts before Hall of Fame`, and `BAT-018 Red loss blackouts without removal or credits`.
 
-- ⬜ **BAT-019 — Prove retry behavior.**
-  - After blackout and save/reload, the trainer remains available and can later be defeated normally.
+- ✅ **BAT-019 — Prove retry behavior.**
+  - A real Falkner loss blackouts, saves only after the runtime is capturable, reloads in a new runtime, retains Falkner and no beaten/badge/TM state, then retries with a real victory. The later victory grants and persists exactly one TM31 with the Zephyr Badge and beaten flag.
+  - Proved by `BAT-019 Falkner loss save reload and retry awards progression once`.
 
 ## Story 1.6 — The battle command shell supports a normal playthrough
 

@@ -3263,3 +3263,76 @@ let ``BAT-018 Red loss blackouts without removal or credits`` () =
     let afterBlackout = owOf driver.Snapshot
     Assert.True(hasActor "Red" true afterBlackout, "Red must remain after a real loss")
     driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
+let ``BAT-019 Falkner loss save reload and retry awards progression once`` () =
+    let saveDirectory =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pokegold-bat019-" + System.Guid.NewGuid().ToString("N"))
+
+    System.IO.Directory.CreateDirectory(saveDirectory) |> ignore
+
+    try
+        let losingDriver = GameDriver(PokeGold.Game.Game(saveDirectory = saveDirectory))
+        losingDriver.Apply(StartNewGame "A")
+        seedBattleLoser losingDriver
+        losingDriver.Apply(Warp("VioletGym", 5, 2, Some Up))
+        Assert.True(hasActor "VioletGymFalknerScript" true (owOf losingDriver.Snapshot))
+
+        losingDriver.Talk()
+        let blackout = driveBossLossToBlackout losingDriver
+        Assert.False(blackout.Events |> List.contains "EVENT_BEAT_FALKNER")
+        Assert.False(blackout.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE")
+        Assert.False(blackout.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP")
+        losingDriver.Game.Save()
+
+        let retryDriver = GameDriver(PokeGold.Game.Game(saveDirectory = saveDirectory))
+        retryDriver.Game.Load()
+
+        let loaded = owOf retryDriver.Snapshot
+        Assert.Equal("PlayersHouse2F", loaded.MapId)
+        Assert.Equal((3, 3), (loaded.Player.CellX, loaded.Player.CellY))
+        Assert.True(loaded.CanCapture)
+        Assert.False(loaded.Events |> List.contains "EVENT_BEAT_FALKNER")
+        Assert.False(loaded.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE")
+
+        retryDriver.Apply(Warp("VioletGym", 5, 2, Some Up))
+        Assert.True(hasActor "VioletGymFalknerScript" true (owOf retryDriver.Snapshot), "Falkner must remain available after the blackout reload")
+        seedBattleWinner retryDriver
+        retryDriver.Talk()
+
+        advanceRuntimeUntil
+            retryDriver
+            15000
+            (fun snapshot ->
+                match snapshot.Overworld with
+                | Some ow ->
+                    ow.CanCapture
+                    && ow.Events |> List.contains "EVENT_BEAT_FALKNER"
+                    && ow.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP"
+                    && ow.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE"
+                | None -> false)
+
+        let victory = owOf retryDriver.Snapshot
+        Assert.True(victory.Events |> List.contains "EVENT_BEAT_FALKNER")
+        Assert.True(victory.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP")
+        Assert.True(victory.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE")
+
+        retryDriver.Game.Save()
+        let finalDriver = GameDriver(PokeGold.Game.Game(saveDirectory = saveDirectory))
+        finalDriver.Game.Load()
+
+        let persisted = owOf finalDriver.Snapshot
+        Assert.True(persisted.Events |> List.contains "EVENT_BEAT_FALKNER")
+        Assert.True(persisted.Events |> List.contains "EVENT_GOT_TM31_MUD_SLAP")
+        Assert.True(persisted.EngineFlags |> List.contains "ENGINE_ZEPHYRBADGE")
+
+        let saved =
+            SaveFile.tryReadFrom saveDirectory
+            |> Option.defaultWith (fun () -> failwith "expected persisted retry victory save")
+
+        Assert.Equal(1, Bag.count "TM_MUD_SLAP" (SaveData.playerOf saved).Bag)
+        losingDriver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+        retryDriver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+    finally
+        if System.IO.Directory.Exists(saveDirectory) then
+            System.IO.Directory.Delete(saveDirectory, true)
