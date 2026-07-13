@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1340/1340) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1346/1346) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host` could not be repeated in this environment:
   its MonoGame assets were not restored and NuGet access failed with `NU1301`.
 
@@ -68,6 +68,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Falkner, Lance, and Red losses now prove that no victory-only mutation occurs.
   A saved Falkner blackout reloads with the trainer still available and settles its
   later legitimate victory exactly once, including badge, event, and TM persistence.
+  Fainted player Pokémon now wait for a legal chosen replacement; replacement timing
+  blocks extra actions, handles simultaneous faint ordering, and is proven through
+  repeated multi-mon cycles plus the real Falkner runtime battle.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first
@@ -82,8 +85,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 
 ## Next high-value tasks
 
-1. Verify BAT-020's move-effect ledger evidence, then complete BAT-021 through
-  BAT-024: forced switch timing, battle items, held-item persistence, and trainer AI.
+1. Complete BAT-022 through BAT-024: battle items, held-item persistence, and trainer AI.
 2. Complete route-required overworld and script semantics, then extend the
    no-shortcuts route one earned checkpoint at a time.
 3. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`

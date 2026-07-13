@@ -905,6 +905,87 @@ let ``BAT-017 defeat applies source blackout spawn and aborts continuation``
     for _ in 1..5 do Assert.Equal(Stay, (scene :> Scene).Update Buttons.none)
 
 [<Fact>]
+let ``BAT-021 real Falkner battle requires replacement before repeated trainer cycles`` () =
+    let content = Content()
+    let splash = Moves.byName "SPLASH"
+    let dragonRage = Moves.byName "DRAGON_RAGE"
+    let lead =
+        { PartyMon.create (Species.byName "CYNDAQUIL").Dex 2 with
+            Hp = 1
+            Moves = [ moveId "SPLASH", splash.Pp ] }
+    let finisher =
+        { PartyMon.create (Species.byName "MEWTWO").Dex 100 with
+            Moves = [ moveId "DRAGON_RAGE", dragonRage.Pp ] }
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "VioletGym" 5 2 Up)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ lead; finisher ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update { Buttons.none with A = true })
+
+    let mutable frame = 0
+    let mutable forcedSelections = 0
+    let mutable enemySequence: string list = []
+    let mutable finalBattle: BattleState option = None
+
+    let completed () =
+        stack.Count = 1
+        && scene.CanCapture
+        && World.hasEvent "EVENT_BEAT_FALKNER" scene.DebugWorld
+        && World.hasEvent "EVENT_GOT_TM31_MUD_SLAP" scene.DebugWorld
+
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+
+        let buttons =
+            match top with
+            | :? BattleScene as battle ->
+                let snap = battle.RuntimeSnapshot
+                if not (List.contains snap.EnemySpecies enemySequence) then
+                    enemySequence <- enemySequence @ [ snap.EnemySpecies ]
+
+                if battle.CurrentState.Outcome.IsSome then
+                    finalBattle <- Some battle.CurrentState
+
+                if frame % 2 <> 0 then
+                    Buttons.none
+                elif snap.MessageActive || not snap.PendingMessages.IsEmpty then
+                    { Buttons.none with A = true }
+                elif snap.Mode = "ForcedSwitch" && battle.PartyCursor = 0 then
+                    { Buttons.none with Down = true }
+                elif snap.Mode = "ForcedSwitch" then
+                    forcedSelections <- forcedSelections + 1
+                    { Buttons.none with A = true }
+                elif snap.Mode = "CommandMenu" || snap.Mode = "MoveMenu" then
+                    { Buttons.none with A = true }
+                else
+                    Buttons.none
+            | :? TextBoxScene when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (top.Update buttons)
+
+    Assert.True(completed (), "Falkner's real map script should settle after both source party members faint")
+    Assert.Equal(1, forcedSelections)
+    Assert.Equal<string list>([ "PIDGEY"; "PIDGEOTTO" ], enemySequence)
+
+    let battle = finalBattle |> Option.defaultWith (fun () -> failwith "Falkner battle never resolved")
+    let finalFinisher = battle.PlayerTeam |> List.find (fun mon -> mon.PersistentId = Some finisher.Id)
+    let actualLead, actualFinisher = scene.DebugPlayer.Party.[0], scene.DebugPlayer.Party.[1]
+
+    Assert.Equal(lead.Id, actualLead.Id)
+    Assert.Equal(0, actualLead.Hp)
+    Assert.Equal(finisher.Id, actualFinisher.Id)
+    Assert.Equal(finalFinisher.Hp, actualFinisher.Hp)
+    Assert.Equal<(int * int) list>([ moveId "DRAGON_RAGE", dragonRage.Pp - 2 ], actualFinisher.Moves)
+    Assert.True(World.hasFlag "ENGINE_ZEPHYRBADGE" scene.DebugWorld)
+
+[<Fact>]
 let ``phone contact script effects mutate player state`` () =
     let content = Content()
     let state =

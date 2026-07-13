@@ -35,6 +35,12 @@ type BattleKind =
     | WildBattle
     | TrainerBattle of TrainerBattleContext
 
+/// Replacement state at the boundary between one completed battle turn and the
+/// next player decision.
+type ReplacementState =
+    | NoReplacementRequired
+    | PlayerReplacementRequired of enemyAlsoFainted: bool
+
 type DefeatProgressionEvent =
     { DefeatedSpecies: BaseStats
       DefeatedLevel: int
@@ -47,23 +53,25 @@ type DefeatProgressionEvent =
 /// The full state of a wild battle. Immutable: each turn produces a new state.
 /// `Messages` is the queue of lines the battle scene reveals one at a time;
 /// `Outcome` is set once the battle resolves.
-type BattleState =
-    { Player: BattleMon
-      Enemy: BattleMon
-      PlayerTeam: BattleMon list
-      EnemyTeam: BattleMon list
-      Participants: Set<Guid>
-      DefeatEvents: DefeatProgressionEvent list
-      AmuletCoinActivated: bool
-      PayDayMoney: int
-      Kind: BattleKind
-      Messages: string list
-      Outcome: Outcome option
-      Rng: Rng
-      WeatherTimer: int option
-      WeatherType: string option
-      PlayerSide: SideState
-      EnemySide: SideState }
+type BattleState = {
+    Player: BattleMon
+    Enemy: BattleMon
+    PlayerTeam: BattleMon list
+    EnemyTeam: BattleMon list
+    Participants: Set<Guid>
+    DefeatEvents: DefeatProgressionEvent list
+    AmuletCoinActivated: bool
+    PayDayMoney: int
+    Kind: BattleKind
+    ReplacementState: ReplacementState
+    Messages: string list
+    Outcome: Outcome option
+    Rng: Rng
+    WeatherTimer: int option
+    WeatherType: string option
+    PlayerSide: SideState
+    EnemySide: SideState
+}
 
 module Battle =
 
@@ -103,6 +111,7 @@ module Battle =
           AmuletCoinActivated = player.HeldItem = Some "AMULET_COIN"
           PayDayMoney = 0
           Kind = WildBattle
+          ReplacementState = NoReplacementRequired
           Messages = openingMessages WildBattle enemy
           Outcome = None
           Rng = Rng.create seed
@@ -123,6 +132,7 @@ module Battle =
           AmuletCoinActivated = player.HeldItem = Some "AMULET_COIN"
           PayDayMoney = 0
           Kind = kind
+          ReplacementState = NoReplacementRequired
           Messages = openingMessages kind enemy
           Outcome = None
           Rng = Rng.create seed
@@ -148,6 +158,11 @@ module Battle =
         match s.Kind with
         | TrainerBattle _ -> true
         | WildBattle -> false
+
+    let requiresPlayerReplacement (s: BattleState) =
+        match s.ReplacementState with
+        | PlayerReplacementRequired _ -> true
+        | NoReplacementRequired -> false
 
     let private heldItemData (m: BattleMon) =
         m.HeldItem |> Option.bind (fun itemId -> Items.byId |> Map.tryFind itemId)
@@ -869,7 +884,18 @@ module Battle =
         let enemyFainted = BattleMon.isFainted state.Enemy
         let playerFainted = BattleMon.isFainted state.Player
 
-        if enemyFainted then
+        if enemyFainted && playerFainted then
+            let survivingEnemy = state.EnemyTeam |> List.filter (fun m -> not (BattleMon.isFainted m))
+            let survivingPlayer = state.PlayerTeam |> List.filter (fun m -> not (BattleMon.isFainted m))
+            let event = defeatEvent state
+
+            if survivingPlayer.IsEmpty then
+                (Some Lose, [ $"{state.Player.Species.Name} fainted!"; faintedEnemyText state.Kind state.Enemy; "You lost!" ], true, true, event)
+            elif survivingEnemy.IsEmpty then
+                (Some Win, [ $"{state.Player.Species.Name} fainted!"; faintedEnemyText state.Kind state.Enemy; "You won!" ], true, true, event)
+            else
+                (None, [ $"{state.Player.Species.Name} fainted!"; faintedEnemyText state.Kind state.Enemy ], true, true, event)
+        elif enemyFainted then
             let survivingEnemy = state.EnemyTeam |> List.filter (fun m -> not (BattleMon.isFainted m))
             let event = defeatEvent state
             if survivingEnemy.IsEmpty then
@@ -896,31 +922,26 @@ module Battle =
     let private chargingMoveOf (m: BattleMon) : MoveData option =
         if m.Volatile.Charging.IsSome then m.Volatile.ChargingMove else None
 
-    let private nextMon (state: BattleState) : BattleState * string list =
-        let moveHealthyToFront (team: BattleMon list) =
-            team
-            |> List.tryFindIndex (BattleMon.isFainted >> not)
-            |> Option.map (fun index ->
-                let mon = BattleMon.restorePersistentForm team.[index]
-                let reordered =
-                    mon
-                    :: (team
-                        |> List.indexed
-                        |> List.choose (fun (i, existing) -> if i = index then None else Some existing))
-                mon, reordered)
+    let private nextEnemyMon (state: BattleState) : BattleState * string list =
+        state.EnemyTeam
+        |> List.tryFindIndex (BattleMon.isFainted >> not)
+        |> Option.map (fun index ->
+            let mon = BattleMon.restorePersistentForm state.EnemyTeam.[index]
+            let reordered =
+                mon
+                :: (state.EnemyTeam
+                    |> List.indexed
+                    |> List.choose (fun (i, existing) -> if i = index then None else Some existing))
+            { state with Enemy = mon; EnemyTeam = reordered }, [ sentOutEnemyText state.Kind mon ])
+        |> Option.defaultValue (state, [])
 
-        if BattleMon.isFainted state.Enemy then
-            match moveHealthyToFront state.EnemyTeam with
-            | Some(mon, team) ->
-                ({ state with Enemy = mon; EnemyTeam = team }, [ sentOutEnemyText state.Kind mon ])
-            | None -> (state, [])
-        elif BattleMon.isFainted state.Player then
-            match moveHealthyToFront state.PlayerTeam with
-            | Some(mon, team) ->
-                ({ state with Player = mon; PlayerTeam = team }, [ $"Go, {mon.Species.Name}!" ])
-            | None -> (state, [])
+    let private nextMon (state: BattleState) : BattleState * string list =
+        if BattleMon.isFainted state.Player then
+            state, []
+        elif BattleMon.isFainted state.Enemy then
+            nextEnemyMon state
         else
-            (state, [])
+            state, []
 
     let private isChargingEffect (move: MoveData) : bool =
         [ "EFFECT_FLY"; "EFFECT_DIG"; "EFFECT_CHARGE"; "EFFECT_SOLAR_BEAM";
@@ -1013,11 +1034,36 @@ module Battle =
                     loop rng'
             loop rng
 
+    /// Commit a legal player-selected replacement after a faint. If both active
+    /// monsters fainted, source ordering chooses the player replacement first,
+    /// then automatically sends the next opposing monster.
+    let choosePlayerReplacement (teamIndex: int) (s: BattleState) : BattleState =
+        match s.ReplacementState with
+        | NoReplacementRequired -> s
+        | PlayerReplacementRequired enemyAlsoFainted ->
+            match switchTeamTo teamIndex s.Player s.PlayerTeam (fun _ target -> clearSwitchVolatile target) with
+            | None -> s
+            | Some(incoming, playerTeam) ->
+                let selected =
+                    { s with
+                        Player = incoming
+                        PlayerTeam = playerTeam
+                        Participants = Set.union s.Participants (activeParticipant incoming)
+                        AmuletCoinActivated = s.AmuletCoinActivated || incoming.HeldItem = Some "AMULET_COIN"
+                        ReplacementState = NoReplacementRequired
+                        Messages = [ $"Go, {incoming.Species.Name}!" ] }
+
+                if enemyAlsoFainted then
+                    let switched, enemyMessages = nextEnemyMon selected
+                    { switched with Messages = selected.Messages @ enemyMessages }
+                else
+                    selected
+
     /// The player selects a move (by index into their move list). This resolves a
     /// whole turn: both sides act in speed order, faints are checked between
     /// actions, end-of-turn residuals run, and the outcome is set if the battle ends.
     let chooseMove (index: int) (s: BattleState) : BattleState =
-        if isOver s then
+        if isOver s || requiresPlayerReplacement s then
             s
         else
 
@@ -1105,8 +1151,7 @@ module Battle =
                 |> List.choose (fun mon -> mon.PersistentId)
                 |> Set.ofList
             participants <- Set.intersect participants livingIds
-            if enemyFainted then participants <- activeParticipant player
-            elif playerFainted then participants <- Set.union participants (activeParticipant player)
+            if enemyFainted && not playerFainted then participants <- activeParticipant player
         let mutable skipPlayerAction = false
         let mutable skipEnemyAction = false
         let mutable playerDamageTaken = 0
@@ -1154,7 +1199,7 @@ module Battle =
 
         // Run one side's action (pre-move gate -> execute -> PP deduct -> mid-turn faint check).
         let act (playerIsUser: bool) : bool =
-            if outcome.IsSome then
+            if outcome.IsSome || (BattleMon.isFainted player && (playerTeam |> List.exists (BattleMon.isFainted >> not))) then
                 false
             elif playerIsUser && skipPlayerAction then
                 skipPlayerAction <- false
@@ -1654,10 +1699,10 @@ module Battle =
             if enemySwitched then [ true ]
             elif playerFirst then [ true; false ]
             else [ false; true ]
-        order |> List.iter (fun who -> act who |> ignore)
+        order |> List.iter (fun who -> if not (BattleMon.isFainted player && (playerTeam |> List.exists (BattleMon.isFainted >> not))) then act who |> ignore)
 
         // Phase: end-of-turn residuals (only if nobody fainted mid-turn)
-        if outcome.IsNone then
+        if outcome.IsNone && not (BattleMon.isFainted player && (playerTeam |> List.exists (BattleMon.isFainted >> not))) then
             let p, e, playerSide', enemySide', weatherTimer', weatherType', residualMsgs, rng' = betweenTurns player enemy rng weatherTimer weatherType playerSide enemySide
             player <- p
             enemy <- e
@@ -1695,7 +1740,7 @@ module Battle =
             Participants = participants
             DefeatEvents = defeatEvents
             AmuletCoinActivated = s.AmuletCoinActivated || player.HeldItem = Some "AMULET_COIN"
-            PayDayMoney = payDayMoney
+            PayDayMoney = payDayMoney; ReplacementState = if BattleMon.isFainted player && (playerTeam |> List.exists (BattleMon.isFainted >> not)) then PlayerReplacementRequired(BattleMon.isFainted enemy) else NoReplacementRequired
             Messages = msgs
             Outcome = outcome
             Rng = rng

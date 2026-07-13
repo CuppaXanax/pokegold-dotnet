@@ -1204,6 +1204,191 @@ let ``team battle continues after enemy lead faints`` () =
     Assert.True(after.Outcome.IsNone || after.Enemy.Species.Name <> "PIDGEY")
 
 [<Fact>]
+let ``BAT-021 trainer faint waits for a player replacement before another action`` () =
+    let splash = Moves.byName "SPLASH"
+    let lead =
+        { mon "LEAD" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let bench =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 20 100 40 40 20 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let trainer =
+        { Group = "TEST"
+          Id = "FORCED_SWITCH"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+
+    let after = Battle.createTrainer trainer [ lead; bench ] [ enemy ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal("LEAD", after.Player.Species.Name)
+    Assert.True(BattleMon.isFainted after.Player)
+    Assert.True(Battle.requiresPlayerReplacement after)
+    Assert.DoesNotContain(after.Messages, fun message -> message.Contains("BENCH used"))
+
+[<Fact>]
+let ``BAT-021 enemy replacement waits until the next turn to act`` () =
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let enemyLead =
+        { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemyBench =
+        { mon "SECOND" (ty "NORMAL") (ty "NORMAL") 30 200 100 100 100 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let trainer =
+        { Group = "TEST"
+          Id = "ENEMY_REPLACEMENT"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+
+    let after = Battle.createTrainer trainer [ player ] [ enemyLead; enemyBench ] 0u |> Battle.chooseMove 0
+
+    Assert.Equal("SECOND", after.Enemy.Species.Name)
+    Assert.DoesNotContain(after.Messages, fun message -> message.Contains("SECOND used"))
+
+[<Fact>]
+let ``BAT-021 forced replacement rejects fainted targets until a legal party choice`` () =
+    let splash = Moves.byName "SPLASH"
+    let lead =
+        { mon "LEAD" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let faintedBench =
+        { mon "FAINTED" (ty "NORMAL") (ty "NORMAL") 20 100 40 40 20 with
+            Hp = 0
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let healthyBench =
+        { mon "HEALTHY" (ty "NORMAL") (ty "NORMAL") 20 100 40 40 20 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let trainer =
+        { Group = "TEST"
+          Id = "LEGAL_REPLACEMENT"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+
+    let pending = Battle.createTrainer trainer [ lead; faintedBench; healthyBench ] [ enemy ] 0u |> Battle.chooseMove 0
+    let rejected = Battle.choosePlayerReplacement 1 pending
+    let accepted = Battle.choosePlayerReplacement 2 pending
+
+    Assert.True(Battle.requiresPlayerReplacement rejected)
+    Assert.Equal("LEAD", rejected.Player.Species.Name)
+    Assert.False(Battle.requiresPlayerReplacement accepted)
+    Assert.Equal("HEALTHY", accepted.Player.Species.Name)
+
+[<Fact>]
+let ``BAT-021 simultaneous faint chooses the player replacement before enemy replacement`` () =
+    let explosion = { move "EXPLOSION" "EFFECT_SELFDESTRUCT" 250 (ty "NORMAL") with Accuracy = 100; Pp = 5 }
+    let splash = Moves.byName "SPLASH"
+    let playerLead =
+        { mon "PLAYER_LEAD" (ty "NORMAL") (ty "NORMAL") 50 100 200 100 200 with
+            Moves = [ explosion ]
+            Pp = [ explosion.Pp ] }
+    let playerBench =
+        { mon "PLAYER_BENCH" (ty "NORMAL") (ty "NORMAL") 30 100 100 100 100 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemyLead =
+        { mon "ENEMY_LEAD" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let enemyBench =
+        { mon "ENEMY_BENCH" (ty "NORMAL") (ty "NORMAL") 30 100 100 100 100 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let trainer =
+        { Group = "TEST"
+          Id = "SIMULTANEOUS_FAINT"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+
+    let pending = Battle.createTrainer trainer [ playerLead; playerBench ] [ enemyLead; enemyBench ] 0u |> Battle.chooseMove 0
+
+    Assert.True(Battle.requiresPlayerReplacement pending)
+    Assert.Equal("PLAYER_LEAD", pending.Player.Species.Name)
+    Assert.Equal("ENEMY_LEAD", pending.Enemy.Species.Name)
+
+    let resumed = Battle.choosePlayerReplacement 1 pending
+    Assert.False(Battle.requiresPlayerReplacement resumed)
+    Assert.Equal("PLAYER_BENCH", resumed.Player.Species.Name)
+    Assert.Equal("ENEMY_BENCH", resumed.Enemy.Species.Name)
+
+[<Fact>]
+let ``BAT-021 multi-mon trainer battle repeats forced player and enemy replacements`` () =
+    let splash = Moves.byName "SPLASH"
+    let lead =
+        { mon "LEAD" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let middle =
+        { mon "MIDDLE" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let finisher =
+        { mon "FINISHER" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 300 with
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let firstEnemy =
+        { mon "FIRST" (ty "NORMAL") (ty "NORMAL") 50 200 200 100 200 with
+            MaxHp = 1
+            Hp = 1
+            Moves = [ strongHit ]
+            Pp = [ strongHit.Pp ] }
+    let secondEnemy =
+        { mon "SECOND" (ty "NORMAL") (ty "NORMAL") 5 1 1 1 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let trainer =
+        { Group = "TEST"
+          Id = "REPEATED_REPLACEMENT"
+          Name = "TESTER"
+          ClassName = "TESTER"
+          WinText = None
+          LossText = None
+          BaseReward = None }
+
+    let firstFaint = Battle.createTrainer trainer [ lead; middle; finisher ] [ firstEnemy; secondEnemy ] 0u |> Battle.chooseMove 0
+    let secondFaint = firstFaint |> Battle.choosePlayerReplacement 1 |> Battle.chooseMove 0
+    let firstEnemyFaint = secondFaint |> Battle.choosePlayerReplacement 2 |> Battle.chooseMove 0
+    let victory = firstEnemyFaint |> Battle.chooseMove 0
+
+    Assert.True(Battle.requiresPlayerReplacement firstFaint)
+    Assert.True(Battle.requiresPlayerReplacement secondFaint)
+    Assert.Equal("FINISHER", firstEnemyFaint.Player.Species.Name)
+    Assert.Equal("SECOND", firstEnemyFaint.Enemy.Species.Name)
+    Assert.Equal(Some Win, victory.Outcome)
+    Assert.Equal(0, victory.PlayerTeam |> List.find (fun mon -> mon.Species.Name = "LEAD") |> fun mon -> mon.Hp)
+    Assert.Equal(0, victory.PlayerTeam |> List.find (fun mon -> mon.Species.Name = "MIDDLE") |> fun mon -> mon.Hp)
+
+[<Fact>]
 let ``team battle ends when all enemies faint`` () =
     let p = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 99 [ Moves.byName "EMBER" ]
     let e1 = { BattleMon.ofSpecies (Species.byName "PIDGEY") 2 [ Moves.byName "TACKLE" ] with Hp = 1 }

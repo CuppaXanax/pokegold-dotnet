@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,340 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,346 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -274,9 +274,9 @@ FIGHT/PKMN/PACK/RUN, switching, basic items, capture, trainer ball rejection, an
   - All generated move effects currently have explicit ledger classification and worked tests.
   - Do not restart this audit unless route failures expose integration problems.
 
-- 🟡 **BAT-021 — Complete forced-switch and replacement timing.**
-  - A fainted active Pokémon must require a legal replacement before battle proceeds.
-  - Trainer and player replacement ordering must match source behavior.
+- ✅ **BAT-021 — Complete forced-switch and replacement timing.**
+  - A fainted active player Pokémon now remains pending until a legal player-selected replacement; fainted targets are rejected, no newly sent-out monster acts in the fainting turn, and simultaneous faints select the player replacement before automatically sending the next enemy. Repeated multi-mon cycles retain persistent party identity, HP, and PP.
+  - Proved by `BAT-021 trainer faint waits for a player replacement before another action`, `BAT-021 enemy replacement waits until the next turn to act`, `BAT-021 forced replacement rejects fainted targets until a legal party choice`, `BAT-021 simultaneous faint chooses the player replacement before enemy replacement`, `BAT-021 multi-mon trainer battle repeats forced player and enemy replacements`, and `BAT-021 real Falkner battle requires replacement before repeated trainer cycles`.
 
 - 🟡 **BAT-022 — Complete battle item coverage.**
   - Add Revive/Max Revive, X items, Guard Spec., Poké Doll, PP recovery, status items, and source-accurate restrictions.

@@ -185,6 +185,11 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                 queue <- [ $"{target.Species.Name} has no energy left!" ]
             elif partyCursor = 0 then
                 queue <- [ $"{target.Species.Name} is already in battle!" ]
+            elif forced then
+                state <- Battle.choosePlayerReplacement partyCursor state
+                queue <- state.Messages
+                mode <- CommandMenu
+                partyCursor <- 0
             else
                 state <- Battle.switchMon partyCursor state
                 queue <- state.Messages
@@ -192,9 +197,7 @@ type BattleScene(font: Font, initial: BattleState, ?onBattleEnd: BattleState -> 
                 partyCursor <- 0
 
     member private _.AfterBattleAction() =
-        if state.Outcome.IsNone
-           && BattleMon.isFainted state.Player
-           && state.PlayerTeam |> List.exists (fun mon -> not (BattleMon.isFainted mon)) then
+        if state.Outcome.IsNone && Battle.requiresPlayerReplacement state then
             mode <- PartyMenu true
             partyCursor <- 0
         elif state.Outcome.IsNone then
