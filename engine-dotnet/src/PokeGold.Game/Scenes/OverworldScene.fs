@@ -769,6 +769,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
            |> withBuffers
            |> withRamBuffers
 
+    member private _.ItemNotificationText() =
+        let itemId = World.getBuffer "__current_item" world
+        let item =
+            Items.byId
+            |> Map.tryFind itemId
+            |> Option.defaultWith (fun () -> invalidOp $"itemnotify has no valid current item: {itemId}")
+        let pocket =
+            match item.Pocket with
+            | Item -> "ITEM POCKET"
+            | KeyItem -> "KEY POCKET"
+            | Ball -> "BALL POCKET"
+            | TmHm -> "TM POCKET"
+        $"{player.Name} put the<LINE>{item.Name} in<CONT>the {pocket}.<PROMPT>"
+
     /// Add `qty` of an item to the bag.
     member private _.AddItem (item: string) (qty: int) =
         player <- { player with Bag = Bag.add item qty player.Bag }
@@ -1242,6 +1256,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let rendered = this.ResolveText label
                         lastText <- Some(label, rendered)
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
+                    | ShowItemNotification ->
+                        pending <- Some(vm, effect)
+                        let rendered = this.ItemNotificationText()
+                        lastText <- Some("ItemNotify", rendered)
+                        stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
                     | HallOfFame ->
                         let hallOfFameCount = World.getVar "__hall_of_fame_count" world
                         let allowCreditsSkip = hallOfFameCount > 0
@@ -1310,6 +1329,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             invalidOp $"catchtutorial on {state.MapId} requires loadwildmon staging"
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
+                        world <- World.setBuffer "__current_item" item world
                         pending <- Some(vm, effect)
                         let rendered = item.Replace("_", " ") + "<DONE>"
                         lastText <- Some("VerboseGiveItem", rendered)
@@ -1459,6 +1479,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
                         this.AddItem item qty
+                        world <- World.setBuffer "__current_item" item world
                         resume (Some 1) vm
                     | TakeItem(item, qty) ->
                         this.RemoveItem item qty

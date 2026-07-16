@@ -374,8 +374,9 @@ Generated commands are typed, but many are approximate and several required comm
   - `catchtutorial` preserves its battle-type operand and runs the Route 29 Dude's automated ordinary battle flow with a temporary level-5 Rattata, staged wild opponent, and one Poké Ball without mutating the real player.
 
 - ⬜ **SCR-003 — Implement required side-system command stubs.**
+  - ✅ `Itemnotify` renders the source item and pocket names from the current `giveitem`, waits for dismissal, and resumes the script.
   - Audit and implement or accurately exclude:
-    - `Pokepic`, `Closepokepic`, `Itemnotify`
+    - `Pokepic`, `Closepokepic`
     - `Elevator`, `Elevfloor`
     - `Trade`
     - `Givepokemail`, `Checkpokemail`

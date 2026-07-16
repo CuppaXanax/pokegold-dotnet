@@ -36,6 +36,8 @@ type ScriptEffect =
     /// `writetext` / `jumptext` / `jumptextfaceplayer` — print a text label
     /// (face the player first when `faceFirst`), wait for a button, close.
     | ShowText of text: string * faceFirst: bool
+    /// `itemnotify` — show the current item and its source bag pocket.
+    | ShowItemNotification
     /// `yesorno` — yes/no menu. → resume value: 1 (yes) / 0 (no).
     | AskYesNo
     /// `giveitem` / `verbosegiveitem` — add to the bag. → resume value: success.
@@ -533,8 +535,8 @@ module Script =
             | Loadmenu menu -> run (World.setBuffer "__loaded_menu" menu world) next
             | MenuCoords coords -> run (World.setBuffer "__menu_coords" (String.concat "," coords) world) next
             | Pokepic _
-            | Closepokepic
-            | Itemnotify -> run world next
+            | Closepokepic -> run world next
+            | Itemnotify -> suspend next world ShowItemNotification
             | Closewindow -> suspend next world CloseWindow
             | Elevator _ -> run world { next with ScriptVar = 1 }
             | Checkpokemail _

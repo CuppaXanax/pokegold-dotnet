@@ -85,8 +85,10 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "Catchtutorial" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "Route 29 preserves the source battle-type operand, stages the scripted wild Rattata, and runs an automated ordinary BattleScene with Dude's temporary level-5 Rattata and one Poke Ball without mutating the real player."
 
+          yield entry ScriptCommandCase "Itemnotify" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime test proves giveitem stages the current item, itemnotify renders the source item and pocket names, waits in a textbox, and resumes the script."
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
+            [ "Pokepic"; "Closepokepic"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
               "Checkjustbattled"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Elevfloor" ]
 

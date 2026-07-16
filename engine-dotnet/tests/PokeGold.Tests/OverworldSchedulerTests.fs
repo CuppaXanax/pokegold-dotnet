@@ -186,6 +186,54 @@ let private renderBrightness (scene: Scene) =
     averageBrightness fb
 
 [<Fact>]
+let ``itemnotify shows the current item and source pocket then resumes`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "CeladonCafe"
+            4
+            3
+            Up
+            "ItemNotifyScript"
+            [| Giveitem("POKE_BALL", 1)
+               Itemnotify
+               Setevent "EVENT_TEST_ITEM_NOTIFY_COMPLETE"
+               End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    let initialPlayer = { PlayerStateOps.initial with Name = "GOLD" }
+    scene.Restore(World.empty, initialPlayer)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    Assert.Equal(2, stack.Count)
+    Assert.IsType<TextBoxScene>(stack.[1]) |> ignore
+    Assert.False(World.hasEvent "EVENT_TEST_ITEM_NOTIFY_COMPLETE" scene.DebugWorld)
+
+    let mutable sawTextBox = true
+    let mutable frame = 0
+
+    while frame < 1000 && (stack.Count > 1 || not (World.hasEvent "EVENT_TEST_ITEM_NOTIFY_COMPLETE" scene.DebugWorld)) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        if top :? TextBoxScene then sawTextBox <- true
+        let buttons = if top :? TextBoxScene && frame % 2 = 0 then { Buttons.none with A = true } else Buttons.none
+        applyTransition stack (top.Update buttons)
+
+    if stack.Count = 1 then
+        (scene :> Scene).Update Buttons.none |> ignore
+
+    let rendered = scene.RuntimeSnapshot.LastRenderedText |> Option.defaultValue ""
+    Assert.True(sawTextBox)
+    Assert.Contains("GOLD put the", rendered)
+    Assert.Contains("# BALL", rendered)
+    Assert.Contains("BALL POCKET", rendered)
+    Assert.True(World.hasEvent "EVENT_TEST_ITEM_NOTIFY_COMPLETE" scene.DebugWorld)
+    Assert.Equal(1, Bag.count "POKE_BALL" scene.DebugPlayer.Bag)
+
+[<Fact>]
 let ``catchtutorial pushes an automated demo and resumes without mutating the player`` () =
     let content = Content()
     let state =
