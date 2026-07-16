@@ -99,6 +99,8 @@ type VolatileStatus = {
     LastMove: MoveData option
     /// Last move eligible for Counter/Disable targeting.
     LastCounterMove: MoveData option
+    /// Unique rolling player move history used by the trainer switch AI.
+    PlayerUsedMoves: MoveData list
     /// Mist is active: blocks opponent's stat-lowering moves.
     /// M13.6 stage helpers cover Attack/Defense/Speed, SpAttack/SpDefense,
     /// Accuracy, and Evasion.
@@ -167,6 +169,7 @@ module VolatileStatus =
           FutureSightDamage = None
           LastMove = None
           LastCounterMove = None
+          PlayerUsedMoves = []
           Mist = false
           XAccuracy = false
           CantEscape = false

@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-16.
 
 ## Current goal
 
@@ -39,7 +39,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1380/1380) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1395/1395) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
@@ -78,11 +78,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   Consumable and nonconsumable held items now retain source-consistent state through
   residual activation, fainting, switching, capture cleanup, battle synchronization,
   and save/reload.
-  Trainer AI now runs source-directional, seeded profile scoring for every generated
-  move layer and every `AI_Smart_EffectHandlers` entry, randomized minimum-score ties,
-  profile-specific switching rates and restrictions, and source trainer-item
-  eligibility/context/probability behavior. Legal generated Falkner, Will, Lance, and
-  Red fixtures cover the integration path.
+  Trainer AI dispatch covers every generated move layer and every
+  `AI_Smart_EffectHandlers` entry. Named branch tests verify seeded minimum-score ties,
+  switch candidate masks/categories and probabilities, locked-action move history,
+  good-weather branches, and trainer-item context/RNG behavior. Legal generated Falkner,
+  Will, Lance, and Red fixtures cover the integration path.
 - One persistent runtime save has not yet acquired all 251 species through
   playable channels.
 - Off-route play is not exhaustively covered; the golden route is the first

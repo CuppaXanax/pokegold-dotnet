@@ -79,6 +79,14 @@ type BattleState = {
 
 module Battle =
 
+    let private recordPlayerUsedMove (move: MoveData) (user: BattleMon) =
+        let used = user.Volatile.PlayerUsedMoves
+        let updated =
+            if used |> List.exists (fun prior -> prior.Name = move.Name) then used
+            elif used.Length < 4 then used @ [ move ]
+            else (List.tail used) @ [ move ]
+        { user with Volatile = { user.Volatile with PlayerUsedMoves = updated } }
+
     let private activeParticipant (mon: BattleMon) =
         mon.PersistentId |> Option.toList |> Set.ofList
 
@@ -1012,7 +1020,8 @@ module Battle =
                 EncoreTimer = None
                 EncoreMoveIndex = None
                 LastMove = None
-                Trapped = None }
+                Trapped = None
+                PlayerUsedMoves = [] }
         { target with
             AtkStage = source.AtkStage
             DefStage = source.DefStage
@@ -1396,6 +1405,7 @@ module Battle =
                         | None -> true
 
                     | None ->
+                        let user = if playerIsUser then recordPlayerUsedMove moveToUse user else user
                         // First turn of a charging move: set the charge flag and skip the action.
                         if not chargeTurn && isChargingEffect move && user.Volatile.Charging.IsNone then
                             let user' = { user with Volatile = { user.Volatile with Charging = Some 1; ChargingMove = Some move } }

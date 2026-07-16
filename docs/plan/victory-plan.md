@@ -13,7 +13,7 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-13:** 1380/1380 tests green. The script-VM golden path is verified
+**State as of 2026-07-16:** 1395/1395 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
@@ -36,8 +36,10 @@ revives, PP restoration, X/Guard/Dire effects, and Poké Doll restrictions with 
 persistence proof. Held-item consumption and nonconsumable persistence now survive runtime
 battle cleanup and save/reload. BAT-022 now retains fainted reserves for real Revive
 targeting and covers every source battle-menu item family. BAT-024 now executes generated
-source AI layers with seeded source-direction scores, full Smart-handler dispatch, tie selection,
-switching, and trainer item rules. A legal-party component acceptance matrix covers wild,
+source AI layers with seeded source-direction scores, Smart-handler dispatch, and tie selection.
+Named branch tests cover locked-action player move history, switch candidate masks and matchup
+categories, Perish/tier probabilities, both good-weather type branches, and X-item rolls. A
+legal-party component acceptance matrix covers wild,
 ordinary trainer, gym, Elite Four, and Red battle paths; extending the continuous Red route
 remains the next critical path.
 

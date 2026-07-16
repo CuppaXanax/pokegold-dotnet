@@ -181,19 +181,22 @@ let ``BAT-024 generated trainer profiles select only real source moves`` () =
         Assert.Equal(1, after.EnemyTurnsTaken)
 
 [<Fact>]
-let ``BAT-024 Falkner source switch policy changes to real Pidgeotto`` () =
+let ``BAT-024 Falkner source switch policy does not use low HP alone`` () =
     let falkner = Trainers.lookup "FALKNER" 1 |> Option.defaultWith (fun () -> failwith "FALKNER not found")
-    let lead = { sourceTrainerBattleMon falkner falkner.Party.[0] with Hp = 1 }
-    let bench = sourceTrainerBattleMon falkner falkner.Party.[1]
     let player = BattleMon.ofSpecies (Species.byName "CHIKORITA") 20 [ Moves.byName "TACKLE" ]
+    let lead =
+        { BattleMon.ofSpecies (Species.byName "PIDGEY") 20 [ Moves.byName "GUST" ] with
+            Hp = 1
+        }
+    let bench = BattleMon.ofSpecies (Species.byName "RATTATA") 20 [ Moves.byName "TACKLE" ]
 
     let after =
         Battle.createTrainer (sourceTrainerContext falkner) [ player ] [ lead; bench ] 0u
         |> Battle.chooseMove 0
 
-    Assert.Equal("PIDGEOTTO", after.Enemy.Species.Name)
+    Assert.Equal("RATTATA", after.Enemy.Species.Name)
     Assert.Equal(0, after.EnemyTurnsTaken)
-    Assert.Contains(after.Messages, fun message -> message.Contains("Enemy withdrew PIDGEY"))
+    Assert.DoesNotContain(after.Messages, fun message -> message.Contains("Enemy withdrew PIDGEY"))
 
 [<Fact>]
 let ``BAT-024 Lance source item priority uses Full Restore before Full Heal`` () =
@@ -490,13 +493,19 @@ let ``BAT-024 source switch policy rates differ for the same opportunity`` () =
         [ 0u .. 255u ]
         |> List.find (fun candidate ->
             let roll, _ = Rng.next (Rng.create candidate)
-            roll >= 30 && roll < 128)
+            roll >= 50 && roll < 128)
     let profile flags : BattleAI.TrainerProfile =
         { MoveFlags = []
           ItemSwitchFlags = flags
           Items = [] }
     let context: BattleAI.AiContext =
-                { EnemyTurnsTaken = 0; PlayerTurnsTaken = 0; EnemySide = SideState.Empty; PlayerSide = SideState.Empty; WeatherType = None; EnemyTeam = [ active; bench ]; PlayerTeam = [ player ] }
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = { SideState.Empty with PerishCounter = Some 1 }
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = [ active; bench ]
+          PlayerTeam = [ player ] }
     let choose flags =
         BattleAI.chooseSwitchWithProfileAndRng
             (profile flags)
@@ -523,17 +532,359 @@ let ``BAT-024 source switch policy rates differ for the same opportunity`` () =
         |> fst
     Assert.Equal(None, heldChoice)
 
-    let perishContext = { context with EnemySide = { SideState.Empty with PerishCounter = Some 1 } }
-    let perishChoice =
+[<Fact>]
+let ``BAT-024 source tier 30 switch policies use the inverse cutoff branch`` () =
+    let splash = Moves.byName "SPLASH"
+    let active =
+        { mon "WALLED" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
+            Moves = [ Moves.byName "TACKLE" ] }
+    let player = { mon "GHOST" (ty "GHOST") (ty "GHOST") 30 120 70 70 50 with Moves = [ splash ] }
+    let bench = { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with Moves = [ Moves.byName "BITE" ] }
+    let profile flags : BattleAI.TrainerProfile =
+        { MoveFlags = []
+          ItemSwitchFlags = flags
+          Items = [] }
+    let context: BattleAI.AiContext =
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = { SideState.Empty with PerishCounter = Some 1 }
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = [ active; bench ]
+          PlayerTeam = [ player ] }
+    let seedWith predicate =
+        [ 0u .. 255u ]
+        |> List.find (fun seed -> fst (Rng.next (Rng.create seed)) |> predicate)
+    let choose flags seed =
         BattleAI.chooseSwitchWithProfileAndRng
-            (profile [ "SWITCH_RARELY" ])
-            perishContext
-            { active with Hp = active.MaxHp }
+            (profile [ flags ])
+            context
+            active
             player
             [ active; bench ]
-            (Rng.create 0u)
+            (Rng.create seed)
         |> fst
-    Assert.Equal(Some 1, perishChoice)
+    let assertTier30 policy cutoff =
+        let below = seedWith (fun roll -> roll < cutoff)
+        let atOrAbove = seedWith (fun roll -> roll >= cutoff)
+        Assert.Equal(None, choose policy below)
+        Assert.Equal(Some 1, choose policy atOrAbove)
+
+    assertTier30 "SWITCH_OFTEN" (4 * 255 / 100)
+    assertTier30 "SWITCH_RARELY" (79 * 255 / 100 - 1)
+    assertTier30 "SWITCH_SOMETIMES" (20 * 255 / 100 - 1)
+
+[<Fact>]
+let ``BAT-024 player used move history is unique rolling and resets on replacement`` () =
+    let moves =
+        [ 1 .. 5 ]
+        |> List.map (fun index -> move $"MOVE_{index}" "EFFECT_NORMAL_HIT" 1 (ty "NORMAL"))
+    let player =
+        { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 30 200 1 1 100 with
+            Moves = moves
+            Pp = moves |> List.map _.Pp }
+    let bench =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 30 200 1 1 50 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Pp = [ 40 ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 10000 1 255 1 with
+            Moves = [ Moves.byName "SPLASH" ]
+            Pp = [ 40 ] }
+    let afterMoves =
+        [ 0; 0; 1; 2; 3; 4 ]
+        |> List.fold (fun state moveIndex -> Battle.chooseMove moveIndex state) (Battle.createTeam [ player; bench ] [ enemy ] 0u)
+
+    Assert.Equal<string list>([ "MOVE_2"; "MOVE_3"; "MOVE_4"; "MOVE_5" ], afterMoves.Player.Volatile.PlayerUsedMoves |> List.map _.Name)
+
+    let afterSwitch = Battle.switchMon 1 afterMoves
+    Assert.Empty(afterSwitch.Player.Volatile.PlayerUsedMoves)
+
+[<Fact>]
+let ``BAT-024 locked Bide records the executed move instead of later selections`` () =
+    let bide = Moves.byName "BIDE"
+    let tackle = Moves.byName "TACKLE"
+    let splash = Moves.byName "SPLASH"
+    let player = BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ bide; tackle ]
+    let enemy = BattleMon.ofSpecies (Species.byName "MAGIKARP") 5 [ splash ]
+
+    let afterBide = Battle.chooseMove 0 (Battle.createWild player enemy 0u)
+    let duringBide = Battle.chooseMove 1 afterBide
+
+    Assert.Equal<string list>([ "BIDE" ], duringBide.Player.Volatile.PlayerUsedMoves |> List.map _.Name)
+
+[<Fact>]
+let ``BAT-024 charge and recharge history records only source-equivalent executed moves`` () =
+    let fly = Moves.byName "FLY"
+    let tackle = Moves.byName "TACKLE"
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" (ty "FLYING") (ty "FLYING") 30 200 40 40 100 with
+            Moves = [ fly; tackle ]
+            Pp = [ fly.Pp; tackle.Pp ] }
+    let enemy =
+        { mon "ENEMY" (ty "NORMAL") (ty "NORMAL") 30 10000 1 255 1 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+
+    let charging = Battle.chooseMove 0 (Battle.createWild player enemy 0u)
+    let released = Battle.chooseMove 1 charging
+
+    Assert.Equal<string list>([ "FLY" ], charging.Player.Volatile.PlayerUsedMoves |> List.map _.Name)
+    Assert.Equal<string list>([ "FLY" ], released.Player.Volatile.PlayerUsedMoves |> List.map _.Name)
+
+    let rechargingPlayer =
+        { player with
+            Volatile =
+                { VolatileStatus.empty with
+                    Recharge = true
+                    PlayerUsedMoves = [ fly ] } }
+    let recharged = Battle.chooseMove 1 (Battle.createWild rechargingPlayer enemy 0u)
+
+    Assert.False(recharged.Player.Volatile.Recharge)
+    Assert.Equal<string list>([ "FLY" ], recharged.Player.Volatile.PlayerUsedMoves |> List.map _.Name)
+
+[<Fact>]
+let ``BAT-024 source switch scoring uses player move history before unused move coverage`` () =
+    let waterGun = move "WATER_GUN" "EFFECT_NORMAL_HIT" 40 (ty "WATER")
+    let tackle = move "TACKLE" "EFFECT_NORMAL_HIT" 40 (ty "NORMAL")
+    let vineWhip = move "VINE_WHIP" "EFFECT_NORMAL_HIT" 40 (ty "GRASS")
+    let active =
+        { mon "ACTIVE" (ty "FIRE") (ty "FIRE") 30 120 60 60 40 with
+            Moves = [ vineWhip ]
+            Pp = [ vineWhip.Pp ] }
+    let player =
+        { mon "PLAYER" (ty "WATER") (ty "WATER") 30 120 70 70 50 with
+            Moves = [ waterGun; tackle ]
+            Pp = [ waterGun.Pp; tackle.Pp ]
+            Volatile = { VolatileStatus.empty with PlayerUsedMoves = [ tackle ] } }
+    let bench =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 30 120 80 60 30 with
+            Moves = [ vineWhip ]
+            Pp = [ vineWhip.Pp ] }
+    let profile: BattleAI.TrainerProfile =
+        { MoveFlags = []
+          ItemSwitchFlags = [ "SWITCH_OFTEN" ]
+          Items = [] }
+    let context: BattleAI.AiContext =
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = SideState.Empty
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = [ active; bench ]
+          PlayerTeam = [ player ] }
+    let seed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate -> fst (Rng.next (Rng.create candidate)) < 200)
+
+    let selected, _ =
+        BattleAI.chooseSwitchWithProfileAndRng profile context active player [ active; bench ] (Rng.create seed)
+
+    Assert.Equal(None, selected)
+
+[<Fact>]
+let ``BAT-024 source switch scoring distinguishes neutral from not very effective offense`` () =
+    let normal = ty "NORMAL"
+    let water = ty "WATER"
+    let grass = ty "GRASS"
+    let fire = ty "FIRE"
+    let tackle = move "TACKLE" "EFFECT_NORMAL_HIT" 40 normal
+    let waterGun = move "WATER_GUN" "EFFECT_NORMAL_HIT" 40 water
+    let ember = move "EMBER" "EFFECT_NORMAL_HIT" 40 fire
+    let player =
+        { mon "PLAYER" grass grass 30 120 70 70 50 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Volatile = { VolatileStatus.empty with PlayerUsedMoves = [ tackle ] } }
+    let activeWith attack =
+        { mon "ACTIVE" fire fire 30 120 60 60 40 with
+            Moves = [ attack ]
+            Pp = [ attack.Pp ] }
+    let bench =
+        { mon "BENCH" fire fire 30 120 80 60 30 with
+            Moves = [ ember ]
+            Pp = [ ember.Pp ] }
+    let profile: BattleAI.TrainerProfile =
+        { MoveFlags = []; ItemSwitchFlags = [ "SWITCH_OFTEN" ]; Items = [] }
+    let choose active =
+        let context: BattleAI.AiContext =
+            { EnemyTurnsTaken = 0
+              PlayerTurnsTaken = 0
+              EnemySide = SideState.Empty
+              PlayerSide = SideState.Empty
+              WeatherType = None
+              EnemyTeam = [ active; bench ]
+              PlayerTeam = [ player ] }
+        BattleAI.chooseSwitchWithProfileAndRng profile context active player [ active; bench ] (Rng.create 0u)
+        |> fst
+
+    Assert.Equal(None, choose (activeWith tackle))
+    Assert.Equal(Some 1, choose (activeWith waterGun))
+
+[<Fact>]
+let ``BAT-024 source switch candidate masks reject weak benches and prefer super effective offense`` () =
+    let normal = ty "NORMAL"
+    let ghost = ty "GHOST"
+    let poison = ty "POISON"
+    let fire = ty "FIRE"
+    let dark = ty "DARK"
+    let tackle = move "TACKLE" "EFFECT_NORMAL_HIT" 40 normal
+    let splash = Moves.byName "SPLASH"
+    let poisonHit = move "POISON_HIT" "EFFECT_NORMAL_HIT" 40 poison
+    let fireHit = move "FIRE_HIT" "EFFECT_NORMAL_HIT" 40 fire
+    let darkHit = move "DARK_HIT" "EFFECT_NORMAL_HIT" 40 dark
+    let player =
+        { mon "PLAYER" ghost ghost 30 120 70 70 50 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Volatile =
+                { VolatileStatus.empty with
+                    LastCounterMove = Some tackle
+                    PlayerUsedMoves = [ tackle ] } }
+    let active =
+        { mon "ACTIVE" normal normal 30 120 60 60 40 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let bench name attack =
+        { mon name ghost ghost 30 120 80 60 30 with
+            Moves = [ attack ]
+            Pp = [ attack.Pp ] }
+    let nve = bench "NVE" poisonHit
+    let neutral = bench "NEUTRAL" fireHit
+    let superEffective = bench "SUPER" darkHit
+    let profile: BattleAI.TrainerProfile =
+        { MoveFlags = []; ItemSwitchFlags = [ "SWITCH_OFTEN" ]; Items = [] }
+    let choose team =
+        let context: BattleAI.AiContext =
+            { EnemyTurnsTaken = 0
+              PlayerTurnsTaken = 0
+              EnemySide = SideState.Empty
+              PlayerSide = SideState.Empty
+              WeatherType = None
+              EnemyTeam = team
+              PlayerTeam = [ player ] }
+        BattleAI.chooseSwitchWithProfileAndRng profile context active player team (Rng.create 0u)
+        |> fst
+
+    Assert.Equal(None, choose [ active; nve; neutral ])
+    Assert.Equal(Some 3, choose [ active; nve; neutral; superEffective ])
+
+    let water = ty "WATER"
+    let grass = ty "GRASS"
+    let waterGun = move "WATER_GUN" "EFFECT_NORMAL_HIT" 40 water
+    let firePlayer =
+        { mon "FIRE_PLAYER" fire fire 30 120 70 70 50 with
+            Moves = [ waterGun ]
+            Pp = [ waterGun.Pp ]
+            Volatile = { VolatileStatus.empty with PlayerUsedMoves = [ waterGun ] } }
+    let fireActive =
+        { mon "FIRE_ACTIVE" fire fire 30 120 60 60 40 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let weakBench =
+        { mon "WEAK" grass grass 30 120 80 60 30 with
+            Moves = [ waterGun ]
+            Pp = [ waterGun.Pp ] }
+    let resistantBench =
+        { mon "RESISTANT" water water 30 120 80 60 30 with
+            Moves = [ waterGun ]
+            Pp = [ waterGun.Pp ] }
+    let defensiveTeam = [ fireActive; weakBench; resistantBench ]
+    let defensiveContext: BattleAI.AiContext =
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = SideState.Empty
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = defensiveTeam
+          PlayerTeam = [ firePlayer ] }
+    let defensiveChoice, _ =
+        BattleAI.chooseSwitchWithProfileAndRng profile defensiveContext fireActive firePlayer defensiveTeam (Rng.create 0u)
+
+    Assert.Equal(Some 2, defensiveChoice)
+
+[<Fact>]
+let ``BAT-024 source switch tier uses the selected candidate matchup score`` () =
+    let normal = ty "NORMAL"
+    let ghost = ty "GHOST"
+    let dark = ty "DARK"
+    let tackle = move "TACKLE" "EFFECT_NORMAL_HIT" 40 normal
+    let bite = move "BITE" "EFFECT_NORMAL_HIT" 40 dark
+    let splash = Moves.byName "SPLASH"
+    let player =
+        { mon "PLAYER" ghost ghost 30 120 70 70 50 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ]
+            Volatile =
+                { VolatileStatus.empty with
+                    LastCounterMove = Some tackle
+                    PlayerUsedMoves = [ tackle ] } }
+    let active =
+        { mon "ACTIVE" normal normal 30 120 60 60 40 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let bench =
+        { mon "BENCH" ghost ghost 30 120 80 60 30 with
+            Moves = [ bite ]
+            Pp = [ bite.Pp ] }
+    let profile: BattleAI.TrainerProfile =
+        { MoveFlags = []; ItemSwitchFlags = [ "SWITCH_OFTEN" ]; Items = [] }
+    let context: BattleAI.AiContext =
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = SideState.Empty
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = [ active; bench ]
+          PlayerTeam = [ player ] }
+    let seed =
+        [ 0u .. 1024u ]
+        |> List.find (fun candidate ->
+            let roll, _ = Rng.next (Rng.create candidate)
+            roll >= (51 * 255 / 100) && roll < (79 * 255 / 100 - 1))
+
+    let selected, _ =
+        BattleAI.chooseSwitchWithProfileAndRng profile context active player [ active; bench ] (Rng.create seed)
+
+    Assert.Equal(None, selected)
+
+[<Fact>]
+let ``BAT-024 source Perish Song switch falls back to the first live bench`` () =
+    let splash = Moves.byName "SPLASH"
+    let tackle = Moves.byName "TACKLE"
+    let active =
+        { mon "ACTIVE" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let player =
+        { mon "PLAYER" (ty "WATER") (ty "WATER") 30 120 70 70 50 with
+            Moves = [ splash ]
+            Pp = [ splash.Pp ] }
+    let bench =
+        { mon "BENCH" (ty "NORMAL") (ty "NORMAL") 30 120 80 60 30 with
+            Moves = [ tackle ]
+            Pp = [ tackle.Pp ] }
+    let profile: BattleAI.TrainerProfile =
+        { MoveFlags = []
+          ItemSwitchFlags = [ "SWITCH_OFTEN" ]
+          Items = [] }
+    let context: BattleAI.AiContext =
+        { EnemyTurnsTaken = 0
+          PlayerTurnsTaken = 0
+          EnemySide = { SideState.Empty with PerishCounter = Some 1 }
+          PlayerSide = SideState.Empty
+          WeatherType = None
+          EnemyTeam = [ active; bench ]
+          PlayerTeam = [ player ] }
+    let seed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate -> fst (Rng.next (Rng.create candidate)) >= 4 * 255 / 100)
+
+    let selected, _ =
+        BattleAI.chooseSwitchWithProfileAndRng profile context active player [ active; bench ] (Rng.create seed)
+
+    Assert.Equal(Some 1, selected)
 
 [<Fact>]
 let ``BAT-024 source Full Heal ignores confusion without a nonvolatile status`` () =
@@ -584,6 +935,18 @@ let ``BAT-024 source trainer item context uses seeded thresholds and preserves F
     Assert.True((attempt "X_ATTACK" baseEnemy 0 rejectionSeed).IsSome)
     Assert.Equal(None, attempt "X_ATTACK" baseEnemy 1 rejectionSeed)
 
+    let noContextProfile: BattleAI.TrainerProfile = { MoveFlags = []; ItemSwitchFlags = []; Items = [] }
+    let xItemSeed predicate =
+        [ 0u .. 255u ]
+        |> List.find (fun seed ->
+            let first, rngAfterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next rngAfterFirst
+            first >= 128 && predicate second)
+    let rejectSecondLow = xItemSeed (fun roll -> roll < 128)
+    let useSecondHigh = xItemSeed (fun roll -> roll >= 128)
+    Assert.Equal(None, BattleAI.tryUseItemWithRng noContextProfile [ "X_ATTACK" ] [ baseEnemy ] baseEnemy 0 (Rng.create rejectSecondLow) |> fst)
+    Assert.True((BattleAI.tryUseItemWithRng noContextProfile [ "X_ATTACK" ] [ baseEnemy ] baseEnemy 0 (Rng.create useSecondHigh) |> fst).IsSome)
+
 let private aiProfile flags : BattleAI.TrainerProfile =
     { MoveFlags = flags
       ItemSwitchFlags = []
@@ -592,16 +955,19 @@ let private aiProfile flags : BattleAI.TrainerProfile =
 let private aiContext enemyTurnsTaken playerTurnsTaken : BattleAI.AiContext =
     { EnemyTurnsTaken = enemyTurnsTaken; PlayerTurnsTaken = playerTurnsTaken; EnemySide = SideState.Empty; PlayerSide = SideState.Empty; WeatherType = None; EnemyTeam = []; PlayerTeam = [] }
 
-let private sourceAiChoice flags enemyTurnsTaken playerTurnsTaken user target seed =
+let private sourceAiChoiceWithContext flags context user target seed =
     BattleAI.chooseMoveWithProfileAndRng
         (aiProfile flags)
-        (aiContext enemyTurnsTaken playerTurnsTaken)
+        context
         user
         target
         (Rng.create seed)
     |> fst
     |> Option.defaultWith (fun () -> failwith "expected a legal source AI move")
     |> fst
+
+let private sourceAiChoice flags enemyTurnsTaken playerTurnsTaken user target seed =
+    sourceAiChoiceWithContext flags (aiContext enemyTurnsTaken playerTurnsTaken) user target seed
 
 [<Fact>]
 let ``BAT-024 source AI skips zero PP and disabled moves when another move is legal`` () =
@@ -631,9 +997,143 @@ let ``BAT-024 source AI skips zero PP and disabled moves when another move is le
 
 [<Fact>]
 let ``BAT-024 Smart handler inventory matches the source scoring dispatch`` () =
-        let expected = Set.ofList [ "EFFECT_SLEEP"; "EFFECT_LEECH_HIT"; "EFFECT_SELFDESTRUCT"; "EFFECT_DREAM_EATER"; "EFFECT_MIRROR_MOVE"; "EFFECT_EVASION_UP"; "EFFECT_ALWAYS_HIT"; "EFFECT_ACCURACY_DOWN"; "EFFECT_RESET_STATS"; "EFFECT_BIDE"; "EFFECT_FORCE_SWITCH"; "EFFECT_HEAL"; "EFFECT_TOXIC"; "EFFECT_LIGHT_SCREEN"; "EFFECT_OHKO"; "EFFECT_RAZOR_WIND"; "EFFECT_SUPER_FANG"; "EFFECT_TRAP_TARGET"; "EFFECT_UNUSED_2B"; "EFFECT_CONFUSE"; "EFFECT_SP_DEF_UP_2"; "EFFECT_REFLECT"; "EFFECT_PARALYZE"; "EFFECT_SPEED_DOWN_HIT"; "EFFECT_SUBSTITUTE"; "EFFECT_HYPER_BEAM"; "EFFECT_RAGE"; "EFFECT_MIMIC"; "EFFECT_LEECH_SEED"; "EFFECT_DISABLE"; "EFFECT_COUNTER"; "EFFECT_ENCORE"; "EFFECT_PAIN_SPLIT"; "EFFECT_SNORE"; "EFFECT_CONVERSION2"; "EFFECT_LOCK_ON"; "EFFECT_DEFROST_OPPONENT"; "EFFECT_SLEEP_TALK"; "EFFECT_DESTINY_BOND"; "EFFECT_REVERSAL"; "EFFECT_SPITE"; "EFFECT_HEAL_BELL"; "EFFECT_PRIORITY_HIT"; "EFFECT_THIEF"; "EFFECT_MEAN_LOOK"; "EFFECT_NIGHTMARE"; "EFFECT_FLAME_WHEEL"; "EFFECT_CURSE"; "EFFECT_PROTECT"; "EFFECT_FORESIGHT"; "EFFECT_PERISH_SONG"; "EFFECT_SANDSTORM"; "EFFECT_ENDURE"; "EFFECT_ROLLOUT"; "EFFECT_SWAGGER"; "EFFECT_FURY_CUTTER"; "EFFECT_ATTRACT"; "EFFECT_SAFEGUARD"; "EFFECT_MAGNITUDE"; "EFFECT_BATON_PASS"; "EFFECT_PURSUIT"; "EFFECT_RAPID_SPIN"; "EFFECT_MORNING_SUN"; "EFFECT_SYNTHESIS"; "EFFECT_MOONLIGHT"; "EFFECT_HIDDEN_POWER"; "EFFECT_RAIN_DANCE"; "EFFECT_SUNNY_DAY"; "EFFECT_BELLY_DRUM"; "EFFECT_PSYCH_UP"; "EFFECT_MIRROR_COAT"; "EFFECT_SKULL_BASH"; "EFFECT_TWISTER"; "EFFECT_EARTHQUAKE"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_STOMP"; "EFFECT_SOLARBEAM"; "EFFECT_THUNDER"; "EFFECT_FLY" ]
+    let expected = Set.ofList [ "EFFECT_SLEEP"; "EFFECT_LEECH_HIT"; "EFFECT_SELFDESTRUCT"; "EFFECT_DREAM_EATER"; "EFFECT_MIRROR_MOVE"; "EFFECT_EVASION_UP"; "EFFECT_ALWAYS_HIT"; "EFFECT_ACCURACY_DOWN"; "EFFECT_RESET_STATS"; "EFFECT_BIDE"; "EFFECT_FORCE_SWITCH"; "EFFECT_HEAL"; "EFFECT_TOXIC"; "EFFECT_LIGHT_SCREEN"; "EFFECT_OHKO"; "EFFECT_RAZOR_WIND"; "EFFECT_SUPER_FANG"; "EFFECT_TRAP_TARGET"; "EFFECT_UNUSED_2B"; "EFFECT_CONFUSE"; "EFFECT_SP_DEF_UP_2"; "EFFECT_REFLECT"; "EFFECT_PARALYZE"; "EFFECT_SPEED_DOWN_HIT"; "EFFECT_SUBSTITUTE"; "EFFECT_HYPER_BEAM"; "EFFECT_RAGE"; "EFFECT_MIMIC"; "EFFECT_LEECH_SEED"; "EFFECT_DISABLE"; "EFFECT_COUNTER"; "EFFECT_ENCORE"; "EFFECT_PAIN_SPLIT"; "EFFECT_SNORE"; "EFFECT_CONVERSION2"; "EFFECT_LOCK_ON"; "EFFECT_DEFROST_OPPONENT"; "EFFECT_SLEEP_TALK"; "EFFECT_DESTINY_BOND"; "EFFECT_REVERSAL"; "EFFECT_SPITE"; "EFFECT_HEAL_BELL"; "EFFECT_PRIORITY_HIT"; "EFFECT_THIEF"; "EFFECT_MEAN_LOOK"; "EFFECT_NIGHTMARE"; "EFFECT_FLAME_WHEEL"; "EFFECT_CURSE"; "EFFECT_PROTECT"; "EFFECT_FORESIGHT"; "EFFECT_PERISH_SONG"; "EFFECT_SANDSTORM"; "EFFECT_ENDURE"; "EFFECT_ROLLOUT"; "EFFECT_SWAGGER"; "EFFECT_FURY_CUTTER"; "EFFECT_ATTRACT"; "EFFECT_SAFEGUARD"; "EFFECT_MAGNITUDE"; "EFFECT_BATON_PASS"; "EFFECT_PURSUIT"; "EFFECT_RAPID_SPIN"; "EFFECT_MORNING_SUN"; "EFFECT_SYNTHESIS"; "EFFECT_MOONLIGHT"; "EFFECT_HIDDEN_POWER"; "EFFECT_RAIN_DANCE"; "EFFECT_SUNNY_DAY"; "EFFECT_BELLY_DRUM"; "EFFECT_PSYCH_UP"; "EFFECT_MIRROR_COAT"; "EFFECT_SKULL_BASH"; "EFFECT_TWISTER"; "EFFECT_EARTHQUAKE"; "EFFECT_FUTURE_SIGHT"; "EFFECT_GUST"; "EFFECT_STOMP"; "EFFECT_SOLARBEAM"; "EFFECT_THUNDER"; "EFFECT_FLY" ]
 
-        Assert.Equal<Set<string>>(expected, BattleAI.smartHandlerEffects)
+    Assert.Equal<Set<string>>(expected, BattleAI.smartHandlerEffects)
+
+[<Fact>]
+let ``BAT-024 Smart weather scoring uses source useful move tables and Sunny Day omission`` () =
+    let sunnyDay = Moves.byName "SUNNY_DAY"
+    let solarBeam = Moves.byName "SOLARBEAM"
+    let flamethrower = Moves.byName "FLAMETHROWER"
+    let tackle = Moves.byName "TACKLE"
+    let target = BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ tackle ]
+    let choose user =
+        BattleAI.chooseMoveWithProfileAndRng (aiProfile [ "AI_SMART" ]) (aiContext 0 0) user target (Rng.create 0u)
+        |> fst
+        |> Option.defaultWith (fun () -> failwith "expected a Smart AI move")
+        |> fst
+    let solarOnly = BattleMon.ofSpecies (Species.byName "VENUSAUR") 30 [ sunnyDay; solarBeam ]
+    let flameSupport = BattleMon.ofSpecies (Species.byName "CHARIZARD") 30 [ sunnyDay; flamethrower ]
+
+    Assert.Equal("SOLARBEAM", (choose solarOnly).Name)
+    Assert.Equal("SUNNY_DAY", (choose flameSupport).Name)
+
+[<Fact>]
+let ``BAT-024 Smart weather strongly favors the source good opponent type on first turn`` () =
+    let splash = Moves.byName "SPLASH"
+    let context = aiContext 0 0
+    let choose weatherMove userSpecies targetSpecies =
+        let user = BattleMon.ofSpecies (Species.byName userSpecies) 30 [ Moves.byName weatherMove; splash ]
+        let target = BattleMon.ofSpecies (Species.byName targetSpecies) 30 [ splash ]
+        sourceAiChoiceWithContext [ "AI_SMART" ] context user target 0u
+
+    Assert.Equal("RAIN_DANCE", (choose "RAIN_DANCE" "POLITOED" "CHARIZARD").Name)
+    Assert.Equal("SUNNY_DAY", (choose "SUNNY_DAY" "CHARIZARD" "POLITOED").Name)
+
+[<Fact>]
+let ``BAT-024 Setup encourages first-turn stat moves only after a noncarry roll`` () =
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies (Species.byName "SCYTHER") 30 [ Moves.byName "SWORDS_DANCE"; tackle ]
+    let target = BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ tackle ]
+    let lowSeed =
+        [ 0u .. 255u ]
+        |> List.find (fun seed -> fst (Rng.next (Rng.create seed)) < 128)
+    let highSeed =
+        [ 0u .. 255u ]
+        |> List.find (fun seed ->
+            let first, afterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next afterFirst
+            first >= 128 && (second &&& 3) = 0)
+
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SETUP"; "AI_OFFENSIVE" ] 0 0 user target lowSeed).Name)
+    Assert.Equal("SWORDS_DANCE", (sourceAiChoice [ "AI_SETUP"; "AI_OFFENSIVE" ] 0 0 user target highSeed).Name)
+
+[<Fact>]
+let ``BAT-024 Smart sleep combination encourages only after a noncarry roll`` () =
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies (Species.byName "HYPNO") 30 [ Moves.byName "HYPNOSIS"; Moves.byName "DREAM_EATER" ]
+    let target = BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ tackle ]
+    let seed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate ->
+            let first, afterFirst = Rng.next (Rng.create candidate)
+            let second, _ = Rng.next afterFirst
+            first >= 128 && (second &&& 3) = 1)
+
+    Assert.Equal("HYPNOSIS", (sourceAiChoice [ "AI_SMART" ] 0 0 user target seed).Name)
+
+[<Fact>]
+let ``BAT-024 Smart Leech Hit discourages not-very-effective moves after the source cutoff`` () =
+    let tackle = Moves.byName "TACKLE"
+    let user = BattleMon.ofSpecies (Species.byName "ZUBAT") 30 [ Moves.byName "LEECH_LIFE"; tackle ]
+    let target = BattleMon.ofSpecies (Species.byName "CYNDAQUIL") 30 [ tackle ]
+    let seed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate ->
+            let first, afterFirst = Rng.next (Rng.create candidate)
+            let second, _ = Rng.next afterFirst
+            first >= 60 * 255 / 100 && (second &&& 3) = 0)
+
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SMART" ] 0 0 user target seed).Name)
+
+[<Fact>]
+let ``BAT-024 Smart source branches preserve carry direction and team scope`` () =
+    let tackle = Moves.byName "TACKLE"
+    let seedWith predicate = [ 0u .. 255u ] |> List.find predicate
+
+    let paralyzeUser = BattleMon.ofSpecies (Species.byName "PIKACHU") 30 [ Moves.byName "THUNDER_WAVE"; tackle ]
+    let quarterTarget = { BattleMon.ofSpecies (Species.byName "RATTATA") 30 [ tackle ] with Hp = 1 }
+    let paralyzeSeed =
+        seedWith (fun seed ->
+            let first, afterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next afterFirst
+            first >= 128 && (second &&& 3) = 0)
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SMART" ] 0 0 paralyzeUser quarterTarget paralyzeSeed).Name)
+
+    let hyperBeam = Moves.byName "HYPER_BEAM"
+    let hyperBase = BattleMon.ofSpecies (Species.byName "SNORLAX") 30 [ hyperBeam; tackle ]
+    let hyperLow = { hyperBase with Hp = 1 }
+    let hyperEncourageSeed =
+        seedWith (fun seed ->
+            let first, afterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next afterFirst
+            first >= 128 && (second &&& 3) = 1)
+    Assert.Equal("HYPER_BEAM", (sourceAiChoice [ "AI_SMART" ] 0 0 hyperLow quarterTarget hyperEncourageSeed).Name)
+    let hyperDiscourageSeed =
+        seedWith (fun seed ->
+            let first, afterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next afterFirst
+            first >= 65 * 255 / 100 && second >= 128 && (second &&& 3) = 0)
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SMART" ] 0 0 hyperBase quarterTarget hyperDiscourageSeed).Name)
+
+    let spite = move "SPITE" "EFFECT_SPITE" 0 (ty "GHOST")
+    let speedyUser = { mon "FAST" (ty "GHOST") (ty "GHOST") 30 120 70 70 100 with Moves = [ spite; tackle ]; Pp = [ spite.Pp; tackle.Pp ] }
+    let slowTarget = { mon "SLOW" (ty "NORMAL") (ty "NORMAL") 30 120 70 70 1 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }
+    let spiteSeed = seedWith (fun seed -> (fst (Rng.next (Rng.create seed)) &&& 3) = 0)
+    Assert.Equal("TACKLE", (sourceAiChoice [ "AI_SMART" ] 0 0 speedyUser slowTarget spiteSeed).Name)
+
+    let disable = move "DISABLE" "EFFECT_DISABLE" 0 (ty "NORMAL")
+    let usefulMove = Moves.byName "THUNDERBOLT"
+    let disableUser = { mon "FAST" (ty "NORMAL") (ty "NORMAL") 30 120 70 70 100 with Moves = [ disable; tackle ]; Pp = [ disable.Pp; tackle.Pp ] }
+    let usefulTarget =
+        { mon "SLOW" (ty "WATER") (ty "WATER") 30 120 70 70 1 with
+            Moves = [ usefulMove ]
+            Pp = [ usefulMove.Pp ]
+            Volatile = { VolatileStatus.empty with LastCounterMove = Some usefulMove } }
+    let disableSeed =
+        seedWith (fun seed ->
+            let first, afterFirst = Rng.next (Rng.create seed)
+            let second, _ = Rng.next afterFirst
+            first >= 60 * 255 / 100 && (second &&& 3) = 1)
+    Assert.Equal("DISABLE", (sourceAiChoice [ "AI_SMART" ] 0 0 disableUser usefulTarget disableSeed).Name)
+
+    let healBell = Moves.byName "HEAL_BELL"
+    let healUser = { mon "HEALER" (ty "NORMAL") (ty "NORMAL") 30 120 70 70 50 with Moves = [ healBell; tackle ]; Pp = [ healBell.Pp; tackle.Pp ] }
+    let faintedAlly = { mon "FAINTED" (ty "NORMAL") (ty "NORMAL") 30 120 70 70 20 with Hp = 0; Status = Poison }
+    let healContext = { aiContext 0 0 with EnemyTeam = [ healUser; faintedAlly ] }
+    let healSeed = seedWith (fun seed -> (fst (Rng.next (Rng.create seed)) &&& 3) = 0)
+    Assert.Equal("TACKLE", (sourceAiChoiceWithContext [ "AI_SMART" ] healContext healUser slowTarget healSeed).Name)
 
 [<Fact>]
 let ``BAT-024 every generated source scoring layer changes a real move decision`` () =
@@ -1433,15 +1933,19 @@ let ``Baton Pass switches to a bench mon and preserves stat stages`` () =
     Assert.Equal(2, after.Player.EvaStage)
 
 [<Fact>]
-let ``trainer AI switches out of a bad low HP matchup`` () =
+let ``trainer AI switches on a source-valid type matchup roll`` () =
     let player = { mon "GHOST" (ty "GHOST") (ty "GHOST") 30 120 70 70 50 with Moves = [ Moves.byName "SPLASH" ] }
     let activeEnemy =
         { mon "WALLED" (ty "NORMAL") (ty "NORMAL") 30 120 60 60 40 with
-            Hp = 20
             Moves = [ strongHit ] }
     let benchEnemy =
         { mon "ANSWER" (ty "DARK") (ty "DARK") 30 120 80 60 30 with
             Moves = [ Moves.byName "BITE" ] }
+    let switchingSeed =
+        [ 0u .. 255u ]
+        |> List.find (fun candidate ->
+            let roll, _ = Rng.next (Rng.create candidate)
+            roll < (20 * 255 / 100 - 1))
     let trainer =
         { Group = "FALKNER"
           Id = "1"
@@ -1451,7 +1955,9 @@ let ``trainer AI switches out of a bad low HP matchup`` () =
           LossText = None
           BaseReward = Some 25 }
 
-    let after = Battle.createTrainer trainer [ player ] [ activeEnemy; benchEnemy ] 0u |> Battle.chooseMove 0
+    let after =
+        Battle.createTrainer trainer [ player ] [ activeEnemy; benchEnemy ] switchingSeed
+        |> Battle.chooseMove 0
 
     Assert.Equal("ANSWER", after.Enemy.Species.Name)
     Assert.Contains(after.Messages, fun msg -> msg.Contains("Enemy withdrew"))

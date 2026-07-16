@@ -41,6 +41,10 @@ module BattleAI =
                      "POISON_GAS"; "TRANSFORM"; "CONVERSION"; "SUBSTITUTE"; "SPIKES" ]
     let private recklessEffects = Set.ofList [ "EFFECT_SELFDESTRUCT"; "EFFECT_RAMPAGE"; "EFFECT_MULTI_HIT"; "EFFECT_DOUBLE_HIT" ]
     let private riskyEffects = Set.ofList [ "EFFECT_SELFDESTRUCT"; "EFFECT_OHKO" ]
+    let private rainDanceMoves = Set.ofList [ "WATER_GUN"; "HYDRO_PUMP"; "SURF"; "BUBBLEBEAM"; "THUNDER"; "WATERFALL"; "CLAMP"; "BUBBLE"; "CRABHAMMER"; "OCTAZOOKA"; "WHIRLPOOL" ]
+    // Match the source omission: Solar Beam, Flame Wheel, and Moonlight do not qualify.
+    let private sunnyDayMoves = Set.ofList [ "FIRE_PUNCH"; "EMBER"; "FLAMETHROWER"; "FIRE_SPIN"; "FIRE_BLAST"; "SACRED_FIRE"; "MORNING_SUN"; "SYNTHESIS" ]
+    let private usefulMoves = Set.ofList [ "DOUBLE_EDGE"; "SING"; "FLAMETHROWER"; "HYDRO_PUMP"; "SURF"; "ICE_BEAM"; "BLIZZARD"; "HYPER_BEAM"; "SLEEP_POWDER"; "THUNDERBOLT"; "THUNDER"; "EARTHQUAKE"; "TOXIC"; "PSYCHIC_M"; "HYPNOSIS"; "RECOVER"; "FIRE_BLAST"; "SOFTBOILED"; "SUPER_FANG" ]
 
     /// Effects explicitly dispatched by AI_Smart_EffectHandlers in scoring.asm.
     let smartHandlerEffects =
@@ -161,9 +165,9 @@ module BattleAI =
                 else 0, false
             if isSetup then
                 if relevantTurn = 0 then
-                    let encourage, afterRoll = chance50 nextRng
+                    let skipEncourage, afterRoll = chance50 nextRng
                     nextRng <- afterRoll
-                    if encourage then scores.[index] <- scores.[index] - 2
+                    if not skipEncourage then scores.[index] <- scores.[index] - 2
                 else
                     let skipDiscourage, afterRoll = chancePercent 12 nextRng
                     nextRng <- afterRoll
@@ -198,17 +202,32 @@ module BattleAI =
         let randomAdjustment50 adjustment =
             let selected, nextRng = chance50 rng
             (if selected then adjustment else 0), nextRng
+        let randomAdjustment50OnNonCarry adjustment =
+            let skipped, nextRng = chance50 rng
+            (if skipped then 0 else adjustment), nextRng
+        let randomAdjustmentAtOrAbove threshold adjustment =
+            let below, nextRng = rollBelow threshold rng
+            (if below then 0 else adjustment), nextRng
+        let randomAdjustmentBelow threshold adjustment =
+            let below, nextRng = rollBelow threshold rng
+            (if below then adjustment else 0), nextRng
         let randomAdjustment80 adjustment =
             let selected, nextRng = chance80 rng
             (if selected then adjustment else 0), nextRng
         let randomAdjustment90 adjustment =
             let skipped, nextRng = rollBelow (percentThreshold 10) rng
             (if skipped then 0 else adjustment), nextRng
+        let hyperBeamDiscouragement () =
+            let skipped, afterFirstRoll = rollBelow (percentThreshold 35 + 1) rng
+            if skipped then 0, afterFirstRoll
+            else
+                let skipSecondAdjustment, afterSecondRoll = chance50 afterFirstRoll
+                1 + (if skipSecondAdjustment then 0 else 1), afterSecondRoll
         match move.Effect with
-        | "EFFECT_SLEEP" when hasEffect "EFFECT_DREAM_EATER" user || hasEffect "EFFECT_NIGHTMARE" user -> randomAdjustment50 -2
+        | "EFFECT_SLEEP" when hasEffect "EFFECT_DREAM_EATER" user || hasEffect "EFFECT_NIGHTMARE" user -> randomAdjustment50OnNonCarry -2
         | "EFFECT_LEECH_HIT" ->
             let effectiveness = Damage.effectivenessTimesTen move target
-            if effectiveness < 10 then randomAdjustment 60 1
+            if effectiveness < 10 then randomAdjustmentAtOrAbove (percentThreshold 39 + 1) 1
             elif effectiveness > 10 && not (atFullHealth user) then randomAdjustment80 -1
             else 0, rng
         | "EFFECT_DREAM_EATER" when isAsleep target -> randomAdjustment 90 -3
@@ -255,12 +274,12 @@ module BattleAI =
         | "EFFECT_SP_DEF_UP_2" when user.SpDefStage < 2 && (not (TypeChart.isPhysical target.Species.Type1) || not (TypeChart.isPhysical target.Species.Type2)) -> randomAdjustment80 -2
         | "EFFECT_FLY" when targetIsCharging target (Set.ofList [ "EFFECT_FLY"; "EFFECT_DIG" ]) && isFaster user target -> -3, rng
         | "EFFECT_SUPER_FANG" when atMostQuarter target -> 1, rng
-        | "EFFECT_PARALYZE" when atMostQuarter target -> randomAdjustment50 1
+        | "EFFECT_PARALYZE" when atMostQuarter target -> randomAdjustment50OnNonCarry 1
         | "EFFECT_PARALYZE" when not (isFaster user target) && not (atMostQuarter user) -> randomAdjustment80 -2
         | "EFFECT_SPEED_DOWN_HIT" when move.Name = "ICY_WIND" && context.PlayerTurnsTaken = 0 && isFaster target user && not (atMostQuarter user) -> randomAdjustment 88 -2
         | "EFFECT_SUBSTITUTE" when atMostHalf user -> 10, rng
-        | "EFFECT_HYPER_BEAM" when atMostQuarter user -> randomAdjustment50 -1
-        | "EFFECT_HYPER_BEAM" when not (atMostHalf user) -> randomAdjustment 65 1
+        | "EFFECT_HYPER_BEAM" when atMostQuarter user -> randomAdjustment50OnNonCarry -1
+        | "EFFECT_HYPER_BEAM" when not (atMostHalf user) -> hyperBeamDiscouragement ()
         | "EFFECT_RAGE" when user.Volatile.Rage ->
             let baseAdjustment = if user.Volatile.RageCounter >= 2 then -1 else 0
             let extra = if user.Volatile.RageCounter >= 3 then -1 else 0
@@ -269,8 +288,8 @@ module BattleAI =
         | "EFFECT_RAGE" -> randomAdjustment 20 -1
         | "EFFECT_MIMIC" when target.Volatile.LastCounterMove.IsNone -> if isFaster user target then 10, rng else 1, rng
         | "EFFECT_MIMIC" when atMostHalf user -> 1, rng
-        | "EFFECT_DISABLE" when isFaster user target && target.Volatile.LastCounterMove.IsSome -> randomAdjustment 60 -1
-        | "EFFECT_DISABLE" -> randomAdjustment 92 1
+        | "EFFECT_DISABLE" when isFaster user target && (target.Volatile.LastCounterMove |> Option.exists (fun lastMove -> Set.contains lastMove.Name usefulMoves)) -> randomAdjustmentAtOrAbove (percentThreshold 39 + 1) -1
+        | "EFFECT_DISABLE" -> randomAdjustmentAtOrAbove (percentThreshold 8) 1
         | "EFFECT_COUNTER" ->
             match target.Volatile.LastCounterMove with
             | Some lastMove when isPhysical lastMove -> randomAdjustment 60 -1
@@ -289,14 +308,20 @@ module BattleAI =
         | "EFFECT_SNORE" | "EFFECT_SLEEP_TALK" -> if isAsleep user then -3, rng else 3, rng
         | "EFFECT_DESTINY_BOND" | "EFFECT_REVERSAL" | "EFFECT_SKULL_BASH" when not (atMostQuarter user) -> 1, rng
         | "EFFECT_SPITE" ->
-            match lastPp target with
-            | Some pp when pp < 6 -> randomAdjustment 60 -2
-            | Some pp when pp >= 15 -> 1, rng
-            | _ -> 0, rng
+            match target.Volatile.LastCounterMove, lastPp target with
+            | None, _ ->
+                if isFaster user target then 10, rng
+                else randomAdjustment50OnNonCarry 1
+            | Some _, Some pp when pp < 6 -> randomAdjustmentAtOrAbove (percentThreshold 39 + 1) -2
+            | Some _, Some pp when pp >= 15 -> 1, rng
+            | Some _, Some _ -> randomAdjustmentBelow (percentThreshold 39 + 1) 1
+            | Some _, None -> 0, rng
         | "EFFECT_HEAL_BELL" ->
-            let afflicted = context.EnemyTeam |> List.exists (fun mon -> mon.Status <> Healthy)
-            if not afflicted then 10, rng
-            elif user.Status = Freeze || isAsleep user then randomAdjustment50 -2
+            let enemyTeam = if context.EnemyTeam.IsEmpty then [ user ] else context.EnemyTeam
+            let afflicted = enemyTeam |> List.exists (fun mon -> not (BattleMon.isFainted mon) && mon.Status <> Healthy)
+            if not afflicted then
+                if user.Status = Healthy then 10, rng else 0, rng
+            elif user.Status = Freeze || isAsleep user then randomAdjustment50OnNonCarry -2
             elif user.Status <> Healthy then -1, rng
             else 0, rng
         | "EFFECT_PRIORITY_HIT" when BattleMon.effectiveSpeed user < BattleMon.effectiveSpeed target && estimatedDamage user target move >= target.Hp -> -3, rng
@@ -332,7 +357,17 @@ module BattleAI =
             let effectiveness = Damage.effectivenessTimesTen move target
             if effectiveness < 10 then 1, rng elif effectiveness > 10 then -1, rng else 0, rng
         | "EFFECT_RAIN_DANCE" when target.Species.Type1 = TypeChart.value "WATER" || target.Species.Type2 = TypeChart.value "WATER" -> 3, rng
+        | "EFFECT_RAIN_DANCE" when target.Species.Type1 = TypeChart.value "FIRE" || target.Species.Type2 = TypeChart.value "FIRE" ->
+            if not (atMostHalf target) && (context.PlayerTurnsTaken = 0 || context.EnemyTurnsTaken = 0) then -2, rng else 0, rng
+        | "EFFECT_RAIN_DANCE" when not (user.Moves |> List.exists (fun candidate -> Set.contains candidate.Name rainDanceMoves)) -> 3, rng
+        | "EFFECT_RAIN_DANCE" when atMostHalf target -> 3, rng
+        | "EFFECT_RAIN_DANCE" -> randomAdjustment50 -1
         | "EFFECT_SUNNY_DAY" when target.Species.Type1 = TypeChart.value "FIRE" || target.Species.Type2 = TypeChart.value "FIRE" -> 3, rng
+        | "EFFECT_SUNNY_DAY" when target.Species.Type1 = TypeChart.value "WATER" || target.Species.Type2 = TypeChart.value "WATER" ->
+            if not (atMostHalf target) && (context.PlayerTurnsTaken = 0 || context.EnemyTurnsTaken = 0) then -2, rng else 0, rng
+        | "EFFECT_SUNNY_DAY" when not (user.Moves |> List.exists (fun candidate -> Set.contains candidate.Name sunnyDayMoves)) -> 3, rng
+        | "EFFECT_SUNNY_DAY" when atMostHalf target -> 3, rng
+        | "EFFECT_SUNNY_DAY" -> randomAdjustment50 -1
         | "EFFECT_BELLY_DRUM" when user.AtkStage >= 3 || atMostHalf user -> 5, rng
         | "EFFECT_BELLY_DRUM" when not (atFullHealth user) -> 1, rng
         | "EFFECT_PSYCH_UP" when (statStages user |> List.sum) >= (statStages target |> List.sum) -> 1, rng
@@ -483,63 +518,127 @@ module BattleAI =
         elif List.contains "SWITCH_SOMETIMES" profile.ItemSwitchFlags then Some "SWITCH_SOMETIMES"
         else None
 
-    let private switchThreshold policy tier =
+    let private shouldSwitch policy tier rng =
         match policy, tier with
-        | "SWITCH_OFTEN", 0x10 -> percentThreshold 50 + 1
-        | "SWITCH_OFTEN", 0x20 -> percentThreshold 79 - 1
-        | "SWITCH_OFTEN", _ -> percentThreshold 4
-        | "SWITCH_RARELY", 0x10 -> percentThreshold 8
-        | "SWITCH_RARELY", 0x20 -> percentThreshold 12
-        | "SWITCH_RARELY", _ -> percentThreshold 79 - 1
-        | "SWITCH_SOMETIMES", 0x10 -> percentThreshold 20 - 1
-        | "SWITCH_SOMETIMES", 0x20 -> percentThreshold 50 + 1
-        | "SWITCH_SOMETIMES", _ -> percentThreshold 20 - 1
-        | _ -> 0
+        | "SWITCH_OFTEN", 0x10 -> rollBelow (percentThreshold 50 + 1) rng
+        | "SWITCH_OFTEN", 0x20 -> rollBelow (percentThreshold 79 - 1) rng
+        | "SWITCH_OFTEN", _ ->
+            let decline, nextRng = rollBelow (percentThreshold 4) rng
+            not decline, nextRng
+        | "SWITCH_RARELY", 0x10 -> rollBelow (percentThreshold 8) rng
+        | "SWITCH_RARELY", 0x20 -> rollBelow (percentThreshold 12) rng
+        | "SWITCH_RARELY", _ ->
+            let decline, nextRng = rollBelow (percentThreshold 79 - 1) rng
+            not decline, nextRng
+        | "SWITCH_SOMETIMES", 0x10 -> rollBelow (percentThreshold 20 - 1) rng
+        | "SWITCH_SOMETIMES", 0x20 -> rollBelow (percentThreshold 50 + 1) rng
+        | "SWITCH_SOMETIMES", _ ->
+            let decline, nextRng = rollBelow (percentThreshold 20 - 1) rng
+            not decline, nextRng
+        | _ -> false, rng
+
+    let private typeEffectiveness typeId (target: BattleMon) =
+        let primary = TypeChart.multiplier typeId target.Species.Type1
+        if target.Species.Type1 = target.Species.Type2 then primary
+        else primary * TypeChart.multiplier typeId target.Species.Type2 / TypeChart.Neutral
+
+    let private offensiveCategory (user: BattleMon) (target: BattleMon) =
+        user.Moves
+        |> List.fold (fun category move ->
+            if move.Power <= 0 then category
+            else
+                let effectiveness = Damage.effectivenessTimesTen move target
+                if effectiveness > 10 then 3
+                elif effectiveness = 10 then max category 2
+                elif effectiveness > 0 then max category 1
+                else category) 0
+
+    let private firstOffensiveCandidate (target: BattleMon) candidates =
+        let withCategory category =
+            candidates
+            |> List.tryFind (fun (_, mon) -> offensiveCategory mon target = category)
+            |> Option.map (fun (index, _) -> index, category)
+        withCategory 3 |> Option.orElseWith (fun () -> withCategory 2)
+
+    let private playerMatchupScore (active: BattleMon) (target: BattleMon) =
+        let scoreFromUsedMoves =
+            let rec score moves best =
+                match moves with
+                | [] ->
+                    if best = 2 then 10
+                    elif best = 1 then 11
+                    else 12
+                | move :: rest when move.Power <= 0 -> score rest best
+                | move :: rest ->
+                    let effectiveness = Damage.effectivenessTimesTen move active
+                    if effectiveness > 10 then 9
+                    elif effectiveness = 10 then score rest (max best 2)
+                    elif effectiveness > 0 then score rest (max best 1)
+                    else score rest best
+            score target.Volatile.PlayerUsedMoves 0
+        let scoreFromTypes =
+            [ target.Species.Type1; target.Species.Type2 ]
+            |> List.distinct
+            |> List.fold (fun score typeId -> if typeEffectiveness typeId active > 10 then score - 1 else score) 10
+        let baseScore =
+            if target.Volatile.PlayerUsedMoves.IsEmpty then scoreFromTypes else scoreFromUsedMoves
+        match offensiveCategory active target with
+        | 0 -> baseScore - 2
+        | 1 -> baseScore - 1
+        | 2 -> baseScore
+        | 3 -> baseScore + 1
+        | _ -> baseScore
 
     let private sourceSwitchCandidate (context: AiContext) (active: BattleMon) (target: BattleMon) (team: BattleMon list) =
-        let playerLastMove = target.Volatile.LastCounterMove
-        let eligibleBench =
+        let aliveBench =
             team
             |> List.mapi (fun index mon -> index, mon)
-            |> List.filter (fun (index, mon) -> index > 0 && not (BattleMon.isFainted mon) && not (atMostQuarter mon))
-        let hasSuperEffectiveMove (mon: BattleMon) = mon.Moves |> List.exists (fun move -> move.Power > 0 && Damage.effectivenessTimesTen move target > 10)
-        let resistsLastMove (mon: BattleMon) =
-            match playerLastMove with
-            | Some move -> Damage.effectivenessTimesTen move mon < 10
-            | None -> false
-        let resistsPlayerType (mon: BattleMon) =
-            TypeChart.multiplier target.Species.Type1 mon.Species.Type1 < TypeChart.Neutral
-            || TypeChart.multiplier target.Species.Type1 mon.Species.Type2 < TypeChart.Neutral
-        let perishCandidate =
-            eligibleBench
-            |> List.tryFind (fun (_, mon) -> hasSuperEffectiveMove mon && (resistsLastMove mon || resistsPlayerType mon))
-        let activeWalled =
-            active.Moves
-            |> List.filter (fun move -> move.Power > 0)
-            |> List.forall (fun move -> Damage.effectivenessTimesTen move target = 0)
-        let playerPressuresActive =
-            match playerLastMove with
-            | Some move -> Damage.effectivenessTimesTen move active > 10
-            | None -> target.Moves |> List.exists (fun move -> move.Power > 0 && Damage.effectivenessTimesTen move active > 10)
-        if context.EnemySide.PerishCounter = Some 1 then
-            perishCandidate |> Option.map (fun (index, _) -> index, 0x30)
-        elif not (atMostQuarter active || activeWalled || playerPressuresActive) then None
+            |> List.filter (fun (index, mon) -> index > 0 && not (BattleMon.isFainted mon))
+        let atLeastQuarter = aliveBench |> List.filter (fun (_, mon) -> not (atMostQuarter mon))
+        let isNotWeakToPlayer mon =
+            match target.Volatile.LastCounterMove with
+            | Some move when move.Power > 0 -> Damage.effectivenessTimesTen move mon <= 10
+            | _ ->
+                [ target.Species.Type1; target.Species.Type2 ]
+                |> List.distinct
+                |> List.forall (fun typeId -> typeEffectiveness typeId mon <= 10)
+        let noLastCounterMove () =
+            if playerMatchupScore active target >= 10 then None
+            else
+                atLeastQuarter
+                |> List.filter (fun (_, mon) -> isNotWeakToPlayer mon)
+                |> firstOffensiveCandidate target
+                |> Option.bind (fun (index, category) -> if category = 3 then Some(index, 0x10) else None)
+        if aliveBench.IsEmpty then None
+        elif context.EnemySide.PerishCounter = Some 1 then
+            atLeastQuarter
+            |> List.filter (fun (_, mon) -> isNotWeakToPlayer mon)
+            |> firstOffensiveCandidate target
+            |> Option.bind (fun (index, category) -> if category = 3 then Some(index, 0x30) else None)
+            |> Option.orElseWith (fun () -> aliveBench |> List.tryHead |> Option.map (fun (index, _) -> index, 0x30))
+        elif playerMatchupScore active target >= 11 then None
         else
-            eligibleBench
-            |> List.map (fun (index, mon) ->
-                let hasSuperEffectiveMove = hasSuperEffectiveMove mon
-                let resistsLastMove = resistsLastMove mon
-                let tier = if hasSuperEffectiveMove && resistsLastMove then 0x10 elif hasSuperEffectiveMove || resistsLastMove then 0x20 else 0x30
-                index, tier, hasSuperEffectiveMove, resistsLastMove)
-            |> List.sortByDescending (fun (_, tier, hasSuperEffectiveMove, resistsLastMove) -> hasSuperEffectiveMove, resistsLastMove, -tier)
-            |> List.tryHead
-            |> Option.map (fun (index, tier, _, _) -> index, tier)
+            match target.Volatile.LastCounterMove with
+            | Some lastMove when lastMove.Power > 0 ->
+                let immuneCandidates = aliveBench |> List.filter (fun (_, mon) -> Damage.effectivenessTimesTen lastMove mon = 0)
+                if immuneCandidates.IsEmpty then noLastCounterMove ()
+                else
+                    match firstOffensiveCandidate target immuneCandidates with
+                    | None -> None
+                    | Some(index, 3) ->
+                        let candidateScore = playerMatchupScore team.[index] target
+                        let tier = if candidateScore >= 10 then 0x10 else 0x20
+                        Some(index, tier)
+                    | Some(index, _) ->
+                        let candidateScore = playerMatchupScore team.[index] target
+                        if candidateScore < 10 then Some(index, 0x10) else None
+            | _ -> noLastCounterMove ()
 
     let chooseSwitchWithProfileAndRng (profile: TrainerProfile) (context: AiContext) (active: BattleMon) (target: BattleMon) (team: BattleMon list) (rng: Rng) =
         match switchPolicy profile, sourceSwitchCandidate context active target team with
         | Some policy, Some(index, tier) when canSwitch active && not target.Volatile.CantEscape ->
-            let shouldSwitch, nextRng = rollBelow (switchThreshold policy tier) rng
-            (if shouldSwitch then Some index else None), nextRng
+            let switches, nextRng = shouldSwitch policy tier rng
+            (if switches then Some index else None), nextRng
         | _ -> None, rng
 
     let chooseSwitchWithProfile (profile: TrainerProfile) enemyTurnsTaken (active: BattleMon) (target: BattleMon) (team: BattleMon list) =
@@ -617,8 +716,8 @@ module BattleAI =
                 if rejected then false, afterFirstRoll
                 elif hasItemFlag "CONTEXT_USE" profile then true, afterFirstRoll
                 else
-                    let rejectedAgain, finalRng = chance50 afterFirstRoll
-                    not rejectedAgain, finalRng
+                    let rejected, afterSecondRoll = chance50 afterFirstRoll
+                    not rejected, afterSecondRoll
         elif hasItemFlag "ALWAYS_USE" profile then chance20 rng
         else false, rng
 

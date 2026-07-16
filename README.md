@@ -17,7 +17,7 @@ This is an active port, not a finished game release. The plan documents track a
 large amount of engine work as complete, including source-asset data generation,
 overworld systems, script VM work, battle systems, save/load, audio, UI scenes,
 and a substantial xUnit conformance suite. The current desktop suite has
-1,380/1,380 tests green as of 2026-07-13, including a script-VM golden path from
+1,395/1,395 tests green as of 2026-07-16, including a script-VM golden path from
 New Bark bedroom to post-Red credits, source-authentic trainer/wild construction,
 visible failure for missing production battle data, stable party identity, and
 source-exact persistent DV/stat-experience calculations and complete identity-safe
@@ -27,7 +27,8 @@ prevents Falkner, Lance, and Red defeats from continuing as victories, plus a
 real Falkner loss-save-reload-retry path that grants progression exactly once,
 source-ordered forced replacement across real multi-mon trainer battles,
 source-backed battle items plus held-item consumption/persistence coverage across
-runtime battle cleanup and save reload, source-conformant seeded trainer AI, and a
+runtime battle cleanup and save reload, seeded trainer AI with branch tests for player-move
+history, candidate-filtered switching, good-weather scoring, and X-item rolls, and a
 legal-party runtime component matrix spanning wild, ordinary trainer, gym, Elite Four,
 and Red battles. The remaining public bar is the continuous fresh-save Epic 3 route.
 
