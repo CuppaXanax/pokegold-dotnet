@@ -186,6 +186,25 @@ let private renderBrightness (scene: Scene) =
     averageBrightness fb
 
 [<Fact>]
+let ``Silver Cave Red disappear operand updates its event flag and live actor cache`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "SilverCaveRoom3"
+            9
+            11
+            Up
+            "DisappearRed"
+            [| Disappear "SILVERCAVEROOM3_RED"
+               End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, PlayerStateOps.initial)
+
+    Assert.True(World.hasEvent "EVENT_RED_IN_MT_SILVER" scene.DebugWorld)
+    Assert.True(scene.RuntimeSnapshot.Actors |> List.exists (fun actor -> actor.Script = "Red" && not actor.Visible))
+
+[<Fact>]
 let ``restore runs map callbacks through the scheduler`` () =
     let content = Content()
     let scene =
