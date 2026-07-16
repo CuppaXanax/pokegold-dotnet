@@ -1993,6 +1993,22 @@ let ``wild and trainer battle constructors use distinct opening text`` () =
     Assert.Contains(trainerBattle.Messages, fun msg -> msg = "RIVAL sent out TOTODILE!")
 
 [<Fact>]
+let ``CatchTutorialScene automatically demonstrates a Poke Ball catch without player input`` () =
+    let scene = CatchTutorialScene(Content(), "RATTATA", 5)
+    let mutable transition = Stay
+    let mutable frames = 0
+
+    while transition = Stay && frames < 5000 do
+        transition <- (scene :> Scene).Update Buttons.none
+        frames <- frames + 1
+
+    Assert.Equal(Pop, transition)
+    Assert.True(scene.Caught)
+    Assert.Equal("RATTATA", scene.BattleSnapshot.PlayerSpecies)
+    Assert.Equal("RATTATA", scene.BattleSnapshot.EnemySpecies)
+    Assert.Equal(0, Bag.count "POKE_BALL" scene.CurrentBag)
+
+[<Fact>]
 let ``BattleScene command menu opens fight and backs out with B`` () =
     let tackle = Moves.byName "TACKLE"
     let player = { mon "PLAYER" (ty "NORMAL") (ty "NORMAL") 10 100 30 25 50 with Moves = [ tackle ]; Pp = [ tackle.Pp ] }

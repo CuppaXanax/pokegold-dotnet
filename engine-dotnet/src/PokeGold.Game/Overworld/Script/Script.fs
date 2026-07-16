@@ -103,6 +103,8 @@ type ScriptEffect =
     | WinLossText of win: string * loss: string
     /// `startbattle` — run the staged battle. → resume value: battle result.
     | StartBattle
+    /// `catchtutorial` — run the source automated catching demonstration.
+    | StartCatchTutorial of battleType: string
     /// `reloadmapafterbattle` / `reloadmap` / `refreshmap` — redraw the map.
     | ReloadMap
     /// `changeblock` — replace a map tile. Enacted by the integration layer.
@@ -538,7 +540,7 @@ module Script =
             | Checkpokemail _
             | ConditionalEvent _ -> run world { next with ScriptVar = 0 }
             | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
-            | Catchtutorial
+            | Catchtutorial battleType -> suspend next world (StartCatchTutorial battleType)
             | Trade _
             | Givepokemail _ -> run world next
             | Addcellnum phone -> suspend next world (AddPhoneContact phone)

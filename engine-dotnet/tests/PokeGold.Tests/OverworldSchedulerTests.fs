@@ -186,6 +186,47 @@ let private renderBrightness (scene: Scene) =
     averageBrightness fb
 
 [<Fact>]
+let ``catchtutorial pushes an automated demo and resumes without mutating the player`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "Route29"
+            20
+            7
+            Left
+            "TutorialScript"
+            [| Loadwildmon("RATTATA", 5)
+               Catchtutorial "BATTLETYPE_TUTORIAL"
+               Setevent "EVENT_TEST_TUTORIAL_COMPLETE"
+               End |]
+    let scene = OverworldScene(content, SilentSound(), state)
+    let initialPlayer =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create (Species.byName "CYNDAQUIL").Dex 5 ]
+            Bag = Bag.empty |> Bag.add "POTION" 2 }
+    scene.Restore(World.empty, initialPlayer)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+    let mutable sawTutorial = false
+    let mutable frame = 0
+
+    while frame < 5000 && (stack.Count > 1 || not (World.hasEvent "EVENT_TEST_TUTORIAL_COMPLETE" scene.DebugWorld)) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        if top :? CatchTutorialScene then sawTutorial <- true
+        applyTransition stack (top.Update Buttons.none)
+
+    if stack.Count = 1 then
+        (scene :> Scene).Update Buttons.none |> ignore
+
+    Assert.True(sawTutorial)
+    Assert.True(World.hasEvent "EVENT_TEST_TUTORIAL_COMPLETE" scene.DebugWorld)
+    Assert.Equal<PlayerState>(initialPlayer, scene.DebugPlayer)
+
+[<Fact>]
 let ``Silver Cave Red disappear operand updates its event flag and live actor cache`` () =
     let content = Content()
     let state =

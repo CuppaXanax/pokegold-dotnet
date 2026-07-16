@@ -139,7 +139,7 @@ type ScriptCommand =
     /// `setlasttalked $67 object` — set the active object id.
     | Setlasttalked of obj: string
     | Giveegg of species: string * level: int
-    | Catchtutorial
+    | Catchtutorial of battleType: string
     | Trade of tradeId: string
     | Givepokemail of args: string list
     | Checkpokemail of args: string list

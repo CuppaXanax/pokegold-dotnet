@@ -203,7 +203,7 @@ module ScriptParser =
         | "itemnotify" -> Some Itemnotify
         | "elevator" -> Some(Elevator args)
         | "giveegg" -> Some(Giveegg(arg 0, i 1))
-        | "catchtutorial" -> Some Catchtutorial
+        | "catchtutorial" -> Some(Catchtutorial(arg 0))
         | "givepokemail" -> Some(Givepokemail args)
         | "checkpokemail" -> Some(Checkpokemail args)
         | "addcellnum" -> Some(Addcellnum(arg 0))

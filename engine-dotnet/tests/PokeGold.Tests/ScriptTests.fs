@@ -26,6 +26,30 @@ let ``parses a simple text-only NPC script`` () =
     )
 
 [<Fact>]
+let ``catchtutorial preserves its battle type and suspends for a tutorial scene`` () =
+    let prog =
+        parse
+            "S:\n\
+             \tloadwildmon RATTATA, 5\n\
+             \tcatchtutorial BATTLETYPE_TUTORIAL\n\
+             \tsetval 7\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Loadwildmon("RATTATA", 5); Catchtutorial "BATTLETYPE_TUTORIAL"; Setval 7; End ],
+        ScriptProgram.blockAt "S" prog)
+
+    let loaded = Script.start "S" World.empty prog "TEST"
+    let loadedVm =
+        match loaded.Outcome with
+        | Suspended(vm, LoadWild("RATTATA", 5)) -> vm
+        | other -> failwithf "expected LoadWild, got %A" other
+    let tutorial = Script.resume None loaded.World loadedVm
+    match tutorial.Outcome with
+    | Suspended(_, StartCatchTutorial "BATTLETYPE_TUTORIAL") -> ()
+    | other -> failwithf "expected StartCatchTutorial, got %A" other
+
+[<Fact>]
 let ``parses opcodes with their typed arguments`` () =
     let prog =
         parse

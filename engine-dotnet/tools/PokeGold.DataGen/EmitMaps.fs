@@ -81,7 +81,7 @@ module EmitMaps =
         | Givepoke (s, l, item) -> sprintf "Givepoke(%s, %d, %s)" (str s) l (strOpt item)
         | Checkpoke s -> sprintf "Checkpoke %s" (str s)
         | Giveegg(s, l) -> sprintf "Giveegg(%s, %d)" (str s) l
-        | Catchtutorial -> "Catchtutorial"
+        | Catchtutorial battleType -> sprintf "Catchtutorial %s" (str battleType)
         | Trade tradeId -> sprintf "Trade %s" (str tradeId)
         | Givepokemail args -> sprintf "Givepokemail [%s]" (args |> List.map str |> String.concat "; ")
         | Checkpokemail args -> sprintf "Checkpokemail [%s]" (args |> List.map str |> String.concat "; ")

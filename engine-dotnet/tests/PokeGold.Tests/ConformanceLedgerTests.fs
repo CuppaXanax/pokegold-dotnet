@@ -83,7 +83,7 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Menu commands preserve loaded menu state and route vertical/2D menu choices through a generic runtime UI."
             [ "Loadmenu"; "Verticalmenu"; "TwoDMenu"; "MenuCoords" ]
 
-          yield entry ScriptCommandCase "Catchtutorial" StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated battle command remains a no-op; Prompt and text_ram are source text directives handled by MapText/TextBox, not script commands."
+          yield entry ScriptCommandCase "Catchtutorial" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "Route 29 preserves the source battle-type operand, stages the scripted wild Rattata, and runs an automated ordinary BattleScene with Dude's temporary level-5 Rattata and one Poke Ball without mutating the real player."
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
@@ -189,6 +189,7 @@ module ConformanceLedger =
             [ "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
               "PokegearScene"; "SaveMenuScene"; "StartMenuScene"; "TextBoxScene"; "YesNoScene" ]
 
+          yield entry SceneSurface "CatchTutorialScene" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "SCR-002 parser, scene, and scheduler tests cover Dude's automated Route 29 Poke Ball demonstration and verify that it resumes without mutating the real player."
           yield entry SceneSurface "BattleScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BUX tests cover trainer/wild battle context, FIGHT/PKMN/PACK/RUN command menu, submenu back-out, party switching, party-targeted items, trainer ball/RUN rejection, and Cherrygrove rival entry through the real runtime script path; forced-switch prompt timing and full trainer battle fidelity remain future battle-shell work."
           yield entry SceneSurface "TitleScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test drives Start through the real title/menu input path; exact title animation timing remains future UI polish."
           yield entry SceneSurface "MainMenuScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "D Title-to-continue runtime test covers save-present CONTINUE ordering from engine/menus/main_menu.asm and verifies Continue then Save preserves the exact persistent JSON state."
@@ -520,7 +521,7 @@ let ``critical Johto debt is queryable`` () =
         |> List.map (fun entry -> entry.Category, entry.Name)
         |> Set.ofList
 
-    Assert.Contains((ScriptCommandCase, "Catchtutorial"), debt)
+    Assert.DoesNotContain((ScriptCommandCase, "Catchtutorial"), debt)
     Assert.Contains((ScriptSpecial, "HealMachineAnim"), debt)
     Assert.DoesNotContain((ScriptSpecial, "TryQuickSave"), debt)
 

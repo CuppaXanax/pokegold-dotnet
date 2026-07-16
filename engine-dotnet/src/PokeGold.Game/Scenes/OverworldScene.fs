@@ -1301,6 +1301,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         pending <- Some(vm, effect)
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                         stop (Push(this.BuildBattle() :> Scene))
+                    | StartCatchTutorial _ ->
+                        match stagedWild with
+                        | Some(species, level) ->
+                            pending <- Some(vm, effect)
+                            stop (Push(CatchTutorialScene(content, species, level) :> Scene))
+                        | None ->
+                            invalidOp $"catchtutorial on {state.MapId} requires loadwildmon staging"
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
                         pending <- Some(vm, effect)
@@ -2104,6 +2111,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 Some 0
                             else
                                 Some 1
+                        | StartCatchTutorial _ ->
+                            stagedWild <- None
+                            world <- World.setVar "VAR_BATTLETYPE" 0 world
+                            None
                         | StartBattle ->
                             let won = lastBattleResult = Some BattleVictory
                             stagedWild <- None
