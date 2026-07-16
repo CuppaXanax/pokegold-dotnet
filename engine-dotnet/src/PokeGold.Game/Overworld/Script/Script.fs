@@ -532,8 +532,7 @@ module Script =
             | MenuCoords coords -> run (World.setBuffer "__menu_coords" (String.concat "," coords) world) next
             | Pokepic _
             | Closepokepic
-            | Itemnotify
-            | Prompt -> run world next
+            | Itemnotify -> run world next
             | Closewindow -> suspend next world CloseWindow
             | Elevator _ -> run world { next with ScriptVar = 1 }
             | Checkpokemail _
@@ -581,7 +580,6 @@ module Script =
             | Getstring(bufferName, value) -> run (World.setBuffer bufferName (value.Replace("_", " ")) world) next
             | Getnum(bufferName, varName) -> run (World.setBuffer bufferName (string (World.getVar varName world)) world) next
             | Getcurlandmarkname bufferName -> run (World.setBuffer bufferName (vm.MapId.Replace("_", " ")) world) next
-            | TextRam _ -> run world next
             | Halloffame ->
                 let w = World.setEvent "EVENT_BEAT_ELITE_FOUR" world
                 suspend (endLike vm) w HallOfFame

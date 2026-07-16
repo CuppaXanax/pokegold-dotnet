@@ -369,8 +369,9 @@ Generated commands are typed, but many are approximate and several required comm
   - `startbattle`, `reloadmapafterbattle`, `checkjustbattled`, and `endifjustbattled` must use explicit win/loss/catch/run state.
   - Acceptance is covered jointly with BAT-016 through BAT-019.
 
-- ⬜ **SCR-002 — Implement route-relevant command stubs.**
-  - `Prompt`, `Catchtutorial`, and `TextRam` receive source-backed behavior and runtime tests.
+- 🟡 **SCR-002 — Implement route-relevant command stubs.**
+  - `prompt` and `text_ram` are source text directives, not script opcodes; the parser no longer emits phantom script commands for them, while `MapText`, `TextBox`, and runtime buffer substitution preserve their behavior.
+  - `Catchtutorial` still requires source-backed runtime behavior and tests.
 
 - ⬜ **SCR-003 — Implement required side-system command stubs.**
   - Audit and implement or accurately exclude:

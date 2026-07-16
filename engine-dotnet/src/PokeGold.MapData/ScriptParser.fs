@@ -201,7 +201,6 @@ module ScriptParser =
         | "closepokepic" -> Some Closepokepic
         | "_2dmenu" -> Some TwoDMenu
         | "itemnotify" -> Some Itemnotify
-        | "prompt" -> Some Prompt
         | "elevator" -> Some(Elevator args)
         | "giveegg" -> Some(Giveegg(arg 0, i 1))
         | "catchtutorial" -> Some Catchtutorial
@@ -309,7 +308,6 @@ module ScriptParser =
         | "getstring" -> Some(Getstring(arg 0, arg 1))
         | "getnum" -> Some(Getnum(arg 0, arg 1))
         | "getcurlandmarkname" -> Some(Getcurlandmarkname(arg 0))
-        | "text_ram" -> Some(TextRam(arg 0))
         // mart
         | "pokemart" -> Some(Pokemart(arg 0, arg 1))
         // map & warp
@@ -332,7 +330,7 @@ module ScriptParser =
     let private nonScript =
         set
             [ "db"; "dw"; "dn"; "dl"; "ds"; "dba"; "dab"; "dbw"; "bigdt";
-              "text"; "text_far"; "line"; "cont"; "next"; "para"; "done"; "page";
+              "text"; "text_far"; "text_ram"; "line"; "cont"; "next"; "para"; "done"; "prompt"; "page";
               "text_start"; "text_end"; "raw"; "ascii"; "sound"; "interpret_data";
               "DEF"; "INCLUDE"; "MACRO"; "ENDM"; "add_stdscript";
               "ugdoor_def";

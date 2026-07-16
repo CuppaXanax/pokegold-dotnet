@@ -183,6 +183,25 @@ let ``parser skips movement script blocks from ScriptProgram`` () =
     )
 
 [<Fact>]
+let ``parser does not emit text prompt or text ram directives as script commands`` () =
+    let prog =
+        parse
+            "PromptText:\n\
+             \ttext \"Choose wisely.\"\n\
+             \tprompt\n\
+             \n\
+             BufferedText:\n\
+             \ttext_ram wStringBuffer3\n\
+             \tdone\n\
+             \n\
+             RealScript:\n\
+             \tsetval 1\n\
+             \tend\n"
+
+    Assert.Equal<ScriptCommand list>([ Setval 1; End ], prog.Commands |> Array.toList)
+    Assert.Equal<ScriptCommand list>([ Setval 1; End ], ScriptProgram.blockAt "RealScript" prog)
+
+[<Fact>]
 let ``giveitem and verbosegiveitem default quantity to one`` () =
     let prog =
         parse

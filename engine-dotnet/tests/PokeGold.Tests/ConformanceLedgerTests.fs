@@ -83,8 +83,7 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Menu commands preserve loaded menu state and route vertical/2D menu choices through a generic runtime UI."
             [ "Loadmenu"; "Verticalmenu"; "TwoDMenu"; "MenuCoords" ]
 
-          yield! many ScriptCommandCase StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback on normal story/menu paths."
-            [ "Prompt"; "Catchtutorial"; "TextRam" ]
+          yield entry ScriptCommandCase "Catchtutorial" StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated battle command remains a no-op; Prompt and text_ram are source text directives handled by MapText/TextBox, not script commands."
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Itemnotify"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
@@ -521,7 +520,7 @@ let ``critical Johto debt is queryable`` () =
         |> List.map (fun entry -> entry.Category, entry.Name)
         |> Set.ofList
 
-    Assert.Contains((ScriptCommandCase, "TextRam"), debt)
+    Assert.Contains((ScriptCommandCase, "Catchtutorial"), debt)
     Assert.Contains((ScriptSpecial, "HealMachineAnim"), debt)
     Assert.DoesNotContain((ScriptSpecial, "TryQuickSave"), debt)
 

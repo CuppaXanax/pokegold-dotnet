@@ -13,7 +13,7 @@ It is written so that a model (or human) with **no prior context** can pick up a
 work item, complete it, and verify it, without re-deriving the project's architecture.
 Read this file, then read only the files each work item names.
 
-**State as of 2026-07-16:** 1395/1395 tests green. The script-VM golden path is verified
+**State as of 2026-07-16:** 1397/1397 tests green. The script-VM golden path is verified
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all

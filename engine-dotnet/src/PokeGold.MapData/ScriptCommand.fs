@@ -119,7 +119,6 @@ type ScriptCommand =
     | Closepokepic
     | TwoDMenu
     | Itemnotify
-    | Prompt
     | Elevator of args: string list
 
     // ---- Battle ----------------------------------------------------------
@@ -240,7 +239,6 @@ type ScriptCommand =
     | Getstring of buffer: string * value: string
     | Getnum of buffer: string * var: string
     | Getcurlandmarkname of buffer: string
-    | TextRam of value: string
     | Describedecoration of args: string list
     | Stonetable of args: string list
     | Cmdqueue of args: string list

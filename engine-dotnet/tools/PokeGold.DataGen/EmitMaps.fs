@@ -76,7 +76,6 @@ module EmitMaps =
         | Closepokepic -> "Closepokepic"
         | TwoDMenu -> "TwoDMenu"
         | Itemnotify -> "Itemnotify"
-        | Prompt -> "Prompt"
         | Elevator args -> sprintf "Elevator [%s]" (args |> List.map str |> String.concat "; ")
         | Loadwildmon (s, l) -> sprintf "Loadwildmon(%s, %d)" (str s) l
         | Givepoke (s, l, item) -> sprintf "Givepoke(%s, %d, %s)" (str s) l (strOpt item)
@@ -150,7 +149,6 @@ module EmitMaps =
         | Getstring(buffer, value) -> sprintf "Getstring(%s, %s)" (str buffer) (str value)
         | Getnum(buffer, var) -> sprintf "Getnum(%s, %s)" (str buffer) (str var)
         | Getcurlandmarkname buffer -> sprintf "Getcurlandmarkname %s" (str buffer)
-        | TextRam value -> sprintf "TextRam %s" (str value)
         | Describedecoration args -> sprintf "Describedecoration [%s]" (args |> List.map str |> String.concat "; ")
         | Stonetable args -> sprintf "Stonetable [%s]" (args |> List.map str |> String.concat "; ")
         | Cmdqueue args -> sprintf "Cmdqueue [%s]" (args |> List.map str |> String.concat "; ")
