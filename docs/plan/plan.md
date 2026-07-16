@@ -340,8 +340,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Generalize hole/event handling from map-specific coordinate matches to source-generated behavior.
   - Prove Ice Path and a non-Ice-Path Strength puzzle.
 
-- ⬜ **OVR-007 — Complete Whirlpool.**
-  - Remove or traverse the correct obstruction, preserve surf state, and allow the Dragon’s Den/Whirl Islands routes.
+- ✅ **OVR-007 — Complete Whirlpool.**
+  - Source block `$07` is replaced by passable water block `$36`; surf state is preserved and real-map tests prove traversal in Dragon’s Den B1F and Route 41.
+  - Missing Glacier Badge or a party Pokémon with Whirlpool leaves the obstruction intact and non-traversable.
 
 - ⬜ **OVR-008 — Complete Waterfall.**
   - Implement required facing, ascent/descent, forced movement, animation state, and landing behavior.

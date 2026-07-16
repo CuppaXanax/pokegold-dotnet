@@ -1897,13 +1897,152 @@ let ``A12 DragonsDenB1F Whirlpool gate uses GlacierBadge and party HM`` () =
 
     scene.Restore(world, player)
 
+    let dx, dy = directionDelta facing
+    let targetX, targetY = playerX + dx, playerY + dy
+    let targetBlockIndex = (targetY / 2) * scene.DebugState.Map.Width + (targetX / 2)
+    Assert.Equal(0x07uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+
     let stack = ResizeArray<Scene>()
     stack.Add(scene :> Scene)
     (scene :> Scene).Update(press "a") |> applyTransition stack
 
     Assert.Equal("WHIRLPOOL", ScriptWorld.getBuffer "__last_field_move" scene.DebugWorld)
     Assert.Equal(1, ScriptWorld.getVar "__whirlpool_used" scene.DebugWorld)
+    Assert.Equal(1, ScriptWorld.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal(0x36uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+    Assert.True(FieldMoves.isSurfWater (mapCollision scene.DebugState targetX targetY))
     Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons = if top :? TextBoxScene && frame % 2 = 0 then press "a" else Buttons.none
+        top.Update(buttons) |> applyTransition stack
+
+    Assert.Equal(1, stack.Count)
+
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton facing) |> ignore
+
+    Assert.Equal((targetX, targetY), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+
+[<Fact>]
+let ``OVR-007 Route41 Whirlpool uses the same source block replacement`` () =
+    let content = Content()
+    let island = OverworldState.loadById content "Route41"
+    let playerX, playerY, facing = findWhirlpoolFacingCell island
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "Route41" playerX playerY facing)
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ partyMonWithMove "WHIRLPOOL" ] }
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setFlag "ENGINE_GLACIERBADGE"
+        |> ScriptWorld.setVar "__surfing" 1
+    scene.Restore(world, player)
+
+    let dx, dy = directionDelta facing
+    let targetX, targetY = playerX + dx, playerY + dy
+    let targetBlockIndex = (targetY / 2) * scene.DebugState.Map.Width + (targetX / 2)
+    Assert.Equal(0x07uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    (scene :> Scene).Update(press "a") |> applyTransition stack
+
+    Assert.Equal(0x36uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+    Assert.Equal(1, ScriptWorld.getVar "__surfing" scene.DebugWorld)
+    Assert.True(FieldMoves.isSurfWater (mapCollision scene.DebugState targetX targetY))
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons = if top :? TextBoxScene && frame % 2 = 0 then press "a" else Buttons.none
+        top.Update(buttons) |> applyTransition stack
+
+    Assert.Equal(1, stack.Count)
+
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton facing) |> ignore
+
+    Assert.Equal((targetX, targetY), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+
+[<Fact>]
+let ``OVR-007 missing GlacierBadge leaves Route41 Whirlpool intact`` () =
+    let content = Content()
+    let route = OverworldState.loadById content "Route41"
+    let playerX, playerY, facing = findWhirlpoolFacingCell route
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "Route41" playerX playerY facing)
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ partyMonWithMove "WHIRLPOOL" ] }
+    let world = ScriptWorld.empty |> ScriptWorld.setVar "__surfing" 1
+    scene.Restore(world, player)
+
+    let dx, dy = directionDelta facing
+    let targetX, targetY = playerX + dx, playerY + dy
+    let targetBlockIndex = (targetY / 2) * scene.DebugState.Map.Width + (targetX / 2)
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    (scene :> Scene).Update(press "a") |> applyTransition stack
+
+    Assert.Equal(0x07uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+    Assert.Equal(0, ScriptWorld.getVar "__whirlpool_used" scene.DebugWorld)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons = if top :? TextBoxScene && frame % 2 = 0 then press "a" else Buttons.none
+        top.Update(buttons) |> applyTransition stack
+
+    Assert.Equal(1, stack.Count)
+
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton facing) |> ignore
+
+    Assert.Equal((playerX, playerY), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+
+[<Fact>]
+let ``OVR-007 missing party move leaves Route41 Whirlpool intact`` () =
+    let content = Content()
+    let route = OverworldState.loadById content "Route41"
+    let playerX, playerY, facing = findWhirlpoolFacingCell route
+    let scene =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "Route41" playerX playerY facing)
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setFlag "ENGINE_GLACIERBADGE"
+        |> ScriptWorld.setVar "__surfing" 1
+    scene.Restore(world, PlayerStateOps.initial)
+
+    let dx, dy = directionDelta facing
+    let targetX, targetY = playerX + dx, playerY + dy
+    let targetBlockIndex = (targetY / 2) * scene.DebugState.Map.Width + (targetX / 2)
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    (scene :> Scene).Update(press "a") |> applyTransition stack
+
+    Assert.Equal(0x07uy, scene.DebugState.Map.BlockIds.[targetBlockIndex])
+    Assert.Equal(0, ScriptWorld.getVar "__whirlpool_used" scene.DebugWorld)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons = if top :? TextBoxScene && frame % 2 = 0 then press "a" else Buttons.none
+        top.Update(buttons) |> applyTransition stack
+
+    Assert.Equal(1, stack.Count)
+
+    for _ in 1 .. 17 do
+        (scene :> Scene).Update(directionButton facing) |> ignore
+
+    Assert.Equal((playerX, playerY), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
 
 [<Fact>]
 let ``A12 Strength-active IcePathB1F boulder pushes one cell`` () =

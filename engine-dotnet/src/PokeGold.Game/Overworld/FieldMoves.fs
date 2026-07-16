@@ -111,8 +111,11 @@ module FieldMoves =
         [ CollSurf; CollWater21; CollWhirlpool; CollWhirlpool2C; CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]
         |> List.contains collId
 
-    let private isWhirlpool collId =
+    let isWhirlpool collId =
         collId = CollWhirlpool || collId = CollWhirlpool2C
+
+    let isPassableSurfWater collId =
+        isSurfWater collId && not (isWhirlpool collId)
 
     let private isWaterfall collId =
         [ CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]

@@ -498,17 +498,25 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             true
         elif World.getVar "__surfing" world = 1 then
             MapConnections.collisionId state.Map state.Collision state.Neighbors cx cy
-            |> FieldMoves.isSurfWater
+            |> FieldMoves.isPassableSurfWater
         else
             false
 
     member private this.UseFieldMove(moveName: string) : Transition =
         let x, y = this.FacingCell()
         let targetColl = MapConnections.collisionId state.Map state.Collision state.Neighbors x y
+        let blockX, blockY = x / 2, y / 2
+        let targetBlock =
+            if blockX >= 0 && blockY >= 0 && blockX < state.Map.Width && blockY < state.Map.Height then
+                Some state.Map.BlockIds.[blockY * state.Map.Width + blockX]
+            else
+                None
 
         match FieldMoves.tryUse moveName targetColl state.MapId world player.Party with
         | FieldMoves.NotUsable reason ->
             Push(TextBoxScene.Of(content, reason + "<DONE>") :> Scene)
+        | FieldMoves.Used("WHIRLPOOL", _) when targetBlock <> Some 0x07uy ->
+            Push(TextBoxScene.Of(content, "Can't use WHIRLPOOL here<DONE>") :> Scene)
         | FieldMoves.Used(move, message) ->
             world <-
                 world
@@ -522,7 +530,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | "FLASH" -> World.setVar "__flash_active" 1 world
                 | "FLY" -> World.setVar "__fly_requested" 1 world
                 | "CUT" -> World.setVar "__cut_used" 1 world
-                | "WHIRLPOOL" -> World.setVar "__whirlpool_used" 1 world
+                | "WHIRLPOOL" ->
+                    this.ChangeBlockAt(x, y, 0x36)
+                    World.setVar "__whirlpool_used" 1 world
                 | "WATERFALL" -> World.setVar "__waterfall_used" 1 world
                 | _ -> world
 
