@@ -383,6 +383,50 @@ let ``younger haircut brother charges money and raises selected mon friendship``
     runHaircutBrother 8 15 3 1000 700
 
 [<Fact>]
+let ``Daisy grooming source probability and friendship boundaries are exact`` () =
+    Assert.Equal((2, (3, 3, 1)), Grooming.daisyOutcome 254)
+    Assert.Equal((0, (0, 0, 0)), Grooming.daisyOutcome 255)
+    Assert.Equal(3, Grooming.friendshipDelta 99 (3, 3, 1))
+    Assert.Equal(3, Grooming.friendshipDelta 100 (3, 3, 1))
+    Assert.Equal(3, Grooming.friendshipDelta 199 (3, 3, 1))
+    Assert.Equal(1, Grooming.friendshipDelta 200 (3, 3, 1))
+
+[<Fact>]
+let ``Daisy grooming selects a party mon and applies the source friendship tier`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "BluesHouse" 2 4 Up, encounterRandom = System.Random(0))
+    let cyndaquil = { PartyMon.create 155 10 with Friendship = 70 }
+    let world = World.empty |> World.setVar "VAR_HOUR" 15
+    let player = { PlayerStateOps.initial with Party = [ cyndaquil ] }
+    overworld.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        stack.Count = 1
+        && overworld.CanCapture
+        && World.hasFlag "ENGINE_DAISYS_GROOMING" overworld.DebugWorld
+        && overworld.DebugPlayer.Party.Head.Friendship = 73
+
+    let mutable frame = 0
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene"
+            | "PartyScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+        tickStack stack buttons
+
+    Assert.True(completed (), "Daisy should groom one selected non-Egg and add source low-tier friendship.")
+
+[<Fact>]
 let ``celadon prize counter exchanges coins for Porygon and registers dex`` () =
     let content = Content()
     let overworld =

@@ -474,6 +474,7 @@ module Script =
             | Special "InitRoamMons" -> suspend next world InitRoamMons
             | Special "OlderHaircutBrother" -> suspend next world (Haircut "OLDER")
             | Special "YoungerHaircutBrother" -> suspend next world (Haircut "YOUNGER")
+            | Special "DaisysGrooming" -> suspend next world (Haircut "DAISY")
             | Special "MagnetTrain" ->
                 let destination =
                     if vm.ScriptVar = 0 then "SaffronMagnetTrainStation"

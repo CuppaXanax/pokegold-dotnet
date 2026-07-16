@@ -417,7 +417,8 @@ Many specials have useful seams, but some are simplified or skipped.
   - Pure helpers or directly seeded coins do not count.
 
 - ⬜ **SCR-009 — Burn down non-link completion-special stubs.**
-  - Triage and implement the required behavior for Lucky Number, Daisy grooming, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Oak’s PC completion checks, Diploma, and related normal-play specials.
+  - ✅ `DaisysGrooming` routes through party selection and applies the source grooming probability/friendship tiers with Blues House runtime coverage.
+  - Triage and implement the remaining required behavior for Lucky Number, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Oak’s PC completion checks, Diploma, and related normal-play specials.
   - Link-only cable-club behavior remains excluded.
 
 - ⬜ **SCR-010 — Define deliberate replacements for unavailable external services.**

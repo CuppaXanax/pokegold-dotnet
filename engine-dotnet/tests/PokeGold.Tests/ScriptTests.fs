@@ -867,17 +867,18 @@ let ``MagnetTrain routes by script var direction`` () =
     Assert.Equal<ScriptEffect list>([ ScriptEffect.Warp("GoldenrodMagnetTrainStation", 11, 6, Some "UP") ], toGoldenrod)
 
 [<Fact>]
-let ``haircut brother specials emit party picker effects`` () =
+let ``haircut and grooming specials emit party picker effects`` () =
     let prog =
         parse
             "S:\n\
              \tspecial OlderHaircutBrother\n\
              \tspecial YoungerHaircutBrother\n\
+             \tspecial DaisysGrooming\n\
              \tend\n"
 
     let _, effects = driveSilent World.empty "S" prog
 
-    Assert.Equal<ScriptEffect list>([ Haircut "OLDER"; Haircut "YOUNGER" ], effects)
+    Assert.Equal<ScriptEffect list>([ Haircut "OLDER"; Haircut "YOUNGER"; Haircut "DAISY" ], effects)
 
 [<Fact>]
 let ``game corner specials emit game and prize dex effects`` () =

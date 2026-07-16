@@ -151,10 +151,11 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Routes the setval-staged species through the CheckPoke party effect; the YourTrainerID OT check is unmodelled (all party mons are the player's)."
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
 
+          yield entry ScriptSpecial "DaisysGrooming" FaithfulTested [ SideSystem; RequiredFor100Percent ] "Blues House runtime test covers 3 PM gating, party selection, source 255/256 grooming chance, low-tier +3 friendship, and daily ENGINE_DAISYS_GROOMING flag."
+
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMysteryGift"; "CheckPokerus"
-              "DaisysGrooming"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"
               "MrChrono"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"

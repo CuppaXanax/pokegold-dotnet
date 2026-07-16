@@ -14,6 +14,16 @@ open PokeGold.Game.Render
 open PokeGold.Game.Save
 open PokeGold.Game.Debug
 
+module Grooming =
+    let daisyOutcome roll =
+        if roll < 255 then 2, (3, 3, 1)
+        else 0, (0, 0, 0)
+
+    let friendshipDelta friendship (low, mid, high) =
+        if friendship < 100 then low
+        elif friendship < 200 then mid
+        else high
+
 module TrainerSight =
     let private isInSightCone (npc: NpcObject) (px: int) (py: int) : bool =
         let dx = px - npc.CellX
@@ -818,10 +828,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         if Breeding.isEgg mon then
             haircutResult <- 1
         else
-            let roll = encounterRng.Next(100)
+            let roll = encounterRng.Next(if brother = "DAISY" then 256 else 100)
 
             let result, deltas =
                 match brother with
+                | "DAISY" -> Grooming.daisyOutcome roll
                 | "YOUNGER" when roll < 60 -> 2, (1, 1, 1)
                 | "YOUNGER" when roll < 90 -> 3, (3, 3, 1)
                 | "YOUNGER" -> 4, (10, 10, 4)
@@ -829,11 +840,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | _ when roll < 80 -> 3, (3, 3, 1)
                 | _ -> 4, (5, 5, 2)
 
-            let delta =
-                let low, mid, high = deltas
-                if mon.Friendship < 100 then low
-                elif mon.Friendship < 200 then mid
-                else high
+            let delta = Grooming.friendshipDelta mon.Friendship deltas
 
             let updated = { mon with Friendship = min 255 (mon.Friendship + delta) }
             let party =
