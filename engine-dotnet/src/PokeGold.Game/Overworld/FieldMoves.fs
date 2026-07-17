@@ -1,6 +1,7 @@
 namespace PokeGold.Game.Overworld
 
 open PokeGold.Game.Data
+open PokeGold.Game.Core
 
 /// HM field-move definitions: badge gates, party move checks, and the collision
 /// tiles that decide whether the move can be used at the player's current target.
@@ -41,6 +42,9 @@ module FieldMoves =
 
     [<Literal>]
     let CollWaterfall = 0x33uy
+
+    [<Literal>]
+    let CollCurrentDown = 0x3buy
 
     /// (MoveName, RequiredBadgeBit) — the ENGINE_* flag that must be set.
     /// Badge constants from constants/engine_flags.asm:
@@ -128,7 +132,7 @@ module FieldMoves =
         |> List.tryPick (fun (source, replacement) -> if source = blockId then Some replacement else None)
 
     let isSurfWater collId =
-        [ CollSurf; CollWater21; CollWhirlpool; CollWhirlpool2C; CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]
+        [ CollSurf; CollWater21; CollWhirlpool; CollWhirlpool2C; CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall; CollCurrentDown ]
         |> List.contains collId
 
     let isWhirlpool collId =
@@ -137,9 +141,16 @@ module FieldMoves =
     let isPassableSurfWater collId =
         isSurfWater collId && not (isWhirlpool collId)
 
-    let private isWaterfall collId =
-        [ CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]
-        |> List.contains collId
+    let isWaterfallClimbTile collId =
+        collId = CollWaterfall || collId = CollCurrentDown
+
+    let waterfallFlowDirection collId =
+        match collId with
+        | id when id = CollWaterfallRight -> Some Right
+        | id when id = CollWaterfallLeft -> Some Left
+        | id when id = CollWaterfallUp -> Some Up
+        | id when id = CollWaterfall || id = CollCurrentDown -> Some Down
+        | _ -> None
 
     let tryUse (moveName: string) (targetCollId: byte) (mapId: string) (world: PokeGold.Game.Overworld.Script.World) (party: PokeGold.Game.Player.Party) : FieldMoveResult =
         let moveName = normalize moveName
@@ -154,7 +165,7 @@ module FieldMoves =
             | "STRENGTH" -> Used("STRENGTH", "Boulders may now be moved!")
             | "WHIRLPOOL" when not (isWhirlpool targetCollId) -> NotUsable "Can't use WHIRLPOOL here"
             | "WHIRLPOOL" -> Used("WHIRLPOOL", "Used WHIRLPOOL!")
-            | "WATERFALL" when not (isWaterfall targetCollId) -> NotUsable "Can't use WATERFALL here"
+            | "WATERFALL" when not (isWaterfallClimbTile targetCollId) -> NotUsable "Can't use WATERFALL here"
             | "WATERFALL" -> Used("WATERFALL", "Used WATERFALL!")
             | "FLY" when not (world.EngineFlags |> Set.exists (fun flag -> flag.StartsWith("ENGINE_FLYPOINT_"))) ->
                 NotUsable "No known FLY destination"

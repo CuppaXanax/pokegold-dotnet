@@ -2142,6 +2142,55 @@ let ``OVR-006 BlackthornGym2F Strength boulder falls through source stone-table 
     Assert.True(ScriptWorld.hasEvent "EVENT_BOULDER_IN_BLACKTHORN_GYM_1" scene.DebugWorld)
     Assert.False(MapEvents.objectVisible scene.DebugWorld boulder.Event)
 
+[<Fact>]
+let ``OVR-008 Tohjo Falls Waterfall requires Up and forces ascent and descent`` () =
+    let waterfallUser =
+        { PartyMon.create 150 100 with
+            Moves = MoveLearn.tryLearnMove "WATERFALL" [] }
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ waterfallUser ]
+            RepelSteps = 1000 }
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setFlag "ENGINE_RISINGBADGE"
+        |> ScriptWorld.setVar "__surfing" 1
+
+    // TohjoFalls.blk cave-waterfall column: (18, 10) -> (18, 5).
+    let wrongFacing, wrongFacingStack = sceneStackAt "TohjoFalls" 18 6 Down world player
+    wrongFacingStack.[wrongFacingStack.Count - 1].Update(press "a") |> applyTransition wrongFacingStack
+    Assert.Equal(0, ScriptWorld.getVar "__field_move_success" wrongFacing.DebugWorld)
+
+    let ascent, ascentStack = sceneStackAt "TohjoFalls" 18 10 Up world player
+    ascentStack.[ascentStack.Count - 1].Update(press "a") |> applyTransition ascentStack
+
+    let mutable sawAscentAnimation = false
+    for frame in 1 .. 160 do
+        let top = ascentStack.[ascentStack.Count - 1]
+        let buttons =
+            if top :? TextBoxScene && frame % 2 = 0 then press "a" else Buttons.none
+        top.Update(buttons) |> applyTransition ascentStack
+        sawAscentAnimation <- sawAscentAnimation || ascent.DebugState.Player.Motion = Walking
+
+    Assert.True(sawAscentAnimation, "Waterfall climb should animate through its forced steps")
+    Assert.Equal((18, 5), (ascent.DebugState.Player.CellX, ascent.DebugState.Player.CellY))
+    Assert.Equal(Standing, ascent.DebugState.Player.Motion)
+    Assert.Equal(1, ScriptWorld.getVar "__surfing" ascent.DebugWorld)
+
+    let descent, descentStack = sceneStackAt "TohjoFalls" 18 5 Down world player
+    holdSceneStack descentStack (directionButton Down) 17
+
+    let mutable sawDescentAnimation = false
+    for _ in 1 .. 120 do
+        let top = descentStack.[descentStack.Count - 1]
+        top.Update(Buttons.none) |> applyTransition descentStack
+        sawDescentAnimation <- sawDescentAnimation || descent.DebugState.Player.Motion = Walking
+
+    Assert.True(sawDescentAnimation, "Waterfall current should animate its forced descent")
+    Assert.Equal((18, 10), (descent.DebugState.Player.CellX, descent.DebugState.Player.CellY))
+    Assert.Equal(Standing, descent.DebugState.Player.Motion)
+    Assert.Equal(1, ScriptWorld.getVar "__surfing" descent.DebugWorld)
+
 // ---------------------------------------------------------------------------
 // A13 — New Bark → Route 27/26 → Victory Road gate → Indigo Plateau
 // ---------------------------------------------------------------------------

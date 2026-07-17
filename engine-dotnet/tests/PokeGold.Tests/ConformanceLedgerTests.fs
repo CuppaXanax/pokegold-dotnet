@@ -393,8 +393,10 @@ module ConformanceLedger =
 
           yield entry FieldMove "STRENGTH" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-006 tests prove badge/move activation requirements, one-cell boulder pushing, every generated source stonetable pairing, Ice Path lower-floor event transfer, and Blackthorn Gym non-Ice pit behavior through the source fallout scripts."
 
+          yield entry FieldMove "WATERFALL" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-008 runtime test proves source upward-facing activation, forced animated ascent and source current descent through the real Tohjo Falls waterfall column, stable water landings, and retained surfing state."
+
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "FLY"; "FLASH"; "WATERFALL" ]
+            [ "FLY"; "FLASH" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

@@ -47,8 +47,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   land, and restores a legal water state through save/reload.
 - Strength boulders push through the runtime and source-generated stone tables
   now drive pit detection and fallout scripts in Ice Path and Blackthorn Gym.
+- Waterfall now requires the source upward-facing activation, animates forced
+  ascent and descent through the real Tohjo Falls column, lands on water
+  correctly, and retains surfing state.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1416/1416) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1417/1417) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

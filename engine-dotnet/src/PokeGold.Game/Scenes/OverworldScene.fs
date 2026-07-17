@@ -138,6 +138,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// A script suspended on an `applymovement`: the VM to resume, the moved actor,
     /// and the live movement run. Ticked each frame until done.
     let mutable runningMove: (ScriptVm * ActorId * MovementRunner.Run) option = None
+    let mutable waterfallClimbing = false
     /// The most recent yes/no choice, written by the YesNoScene callback.
     let mutable yesNoResult = 0
     /// A script suspended by `pause` / timed cosmetic effects.
@@ -585,6 +586,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
         wasSurfing && not onWater
 
+    member private _.ButtonsForDirection(direction) =
+        match direction with
+        | Down -> { Buttons.none with Down = true }
+        | Up -> { Buttons.none with Up = true }
+        | Left -> { Buttons.none with Left = true }
+        | Right -> { Buttons.none with Right = true }
+
+    member private _.WaterfallDirectionAtPlayer() =
+        MapConnections.collisionId
+            state.Map
+            state.Collision
+            state.Neighbors
+            state.Player.CellX
+            state.Player.CellY
+        |> FieldMoves.waterfallFlowDirection
+
     member private this.UseFieldMove(moveName: string) : Transition =
         let x, y = this.FacingCell()
         let targetColl = MapConnections.collisionId state.Map state.Collision state.Neighbors x y
@@ -607,6 +624,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             Push(TextBoxScene.Of(content, "Can't use WHIRLPOOL here<DONE>") :> Scene)
         | FieldMoves.Used("CUT", _) when cutReplacement.IsNone ->
             Push(TextBoxScene.Of(content, "Can't use CUT here<DONE>") :> Scene)
+        | FieldMoves.Used("WATERFALL", _) when state.Player.Facing <> Up ->
+            Push(TextBoxScene.Of(content, "Can't use WATERFALL here<DONE>") :> Scene)
         | FieldMoves.Used(move, message) ->
             world <-
                 world
@@ -647,7 +666,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | "WHIRLPOOL" ->
                     this.ChangeBlockAt(x, y, 0x36)
                     World.setVar "__whirlpool_used" 1 world
-                | "WATERFALL" -> World.setVar "__waterfall_used" 1 world
+                | "WATERFALL" ->
+                    waterfallClimbing <- true
+                    world
                 | _ -> world
 
             Push(TextBoxScene.Of(content, message + "<DONE>") :> Scene)
@@ -2360,9 +2381,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             | _ -> Stay
                 else
                     let playerBefore = state.Player
+                    let waterfallDirection =
+                        if waterfallClimbing then Some Up else this.WaterfallDirectionAtPlayer()
+                    let movementButtons =
+                        waterfallDirection
+                        |> Option.map (fun direction -> this.ButtonsForDirection(direction))
+                        |> Option.defaultValue buttons
                     let leaderBefore = followPair |> Option.bind (fun (_, leader) -> actorCell leader)
                     if not (tryPushStrengthBoulder buttons) then
-                        state <- OverworldState.tickWithPlayerWalkable (Some this.PlayerTerrainWalkable) (fun i _ -> isObjectPresent i) buttons state
+                        state <- OverworldState.tickWithPlayerWalkable (Some this.PlayerTerrainWalkable) (fun i _ -> isObjectPresent i) movementButtons state
                     let after = state.Player.CellX, state.Player.CellY
                     let completedTranslation =
                         match playerBefore.Motion with
@@ -2378,6 +2405,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             tryStrengthBoulderHoleFallLabel ()
                         else
                             None
+
+                    if completedTranslation && waterfallClimbing then
+                        let collision =
+                            MapConnections.collisionId
+                                state.Map
+                                state.Collision
+                                state.Neighbors
+                                state.Player.CellX
+                                state.Player.CellY
+
+                        if not (FieldMoves.isWaterfallClimbTile collision) then
+                            waterfallClimbing <- false
 
                     match followPair, leaderBefore with
                     | Some(follower, leader), Some(lx, ly) ->
@@ -2401,6 +2440,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | Some label, _ -> this.Drive(Script.start label world state.Script state.MapId)
                     | None, Some ns -> this.EnterMap(ns, true)
                     | None, None when not completedTranslation ->
+                        Stay
+                    | None, None when waterfallDirection.IsSome ->
                         Stay
                     | None, None ->
                         if player.RepelSteps > 0 then

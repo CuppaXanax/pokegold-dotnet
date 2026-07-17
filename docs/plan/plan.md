@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,416 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,417 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -345,8 +345,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Source block `$07` is replaced by passable water block `$36`; surf state is preserved and real-map tests prove traversal in Dragon’s Den B1F and Route 41.
   - Missing Glacier Badge or a party Pokémon with Whirlpool leaves the obstruction intact and non-traversable.
 
-- ⬜ **OVR-008 — Complete Waterfall.**
-  - Implement required facing, ascent/descent, forced movement, animation state, and landing behavior.
+- ✅ **OVR-008 — Complete Waterfall.**
+  - Source `CheckMapCanWaterfall` activation requires facing up at a waterfall/current tile; ascent repeats its forced upward movement until the first non-waterfall cell, and waterfall flow forces descent.
+  - Tohjo Falls runtime coverage proves facing rejection, animated ascent and descent, stable water landings, and retained surfing state.
 
 - ⬜ **OVR-009 — Complete Fly.**
   - Present discovered destinations, move to the correct destination warp, and preserve state.
