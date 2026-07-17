@@ -45,8 +45,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Surf now enters from a facing shore, renders the normal or Pikachu source
   sprite, traverses water while rejecting invalid terrain, dismounts on legal
   land, and restores a legal water state through save/reload.
+- Strength boulders push through the runtime and source-generated stone tables
+  now drive pit detection and fallout scripts in Ice Path and Blackthorn Gym.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1414/1414) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1416/1416) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

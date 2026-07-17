@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,414 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,416 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -335,10 +335,11 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Save/reload while surfing must restore a legal state.
   - New Bark runtime tests prove the normal and source Pikachu sprites, invalid-terrain rejection, water traversal, legal shore dismount, and legal save restoration.
 
-- 🟡 **OVR-006 — Complete Strength.**
+- ✅ **OVR-006 — Complete Strength.**
   - Existing boulder pushing and selected Ice Path hole handling are retained.
   - Generalize hole/event handling from map-specific coordinate matches to source-generated behavior.
   - Prove Ice Path and a non-Ice-Path Strength puzzle.
+  - Runtime detection now consumes every baked `stonetable` warp/object/branch tuple and executes its generated fallout script; Ice Path and Blackthorn Gym tests prove both event models.
 
 - ✅ **OVR-007 — Complete Whirlpool.**
   - Source block `$07` is replaced by passable water block `$36`; surf state is preserved and real-map tests prove traversal in Dragon’s Den B1F and Route 41.

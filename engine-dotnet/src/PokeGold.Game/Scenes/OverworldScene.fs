@@ -449,37 +449,38 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     false
 
-    let strengthHoleFall (mapId: string) (eventFlag: string) (x: int) (y: int) : string option option =
-        match mapId, eventFlag, x, y with
-        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_1", 11, 2 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_1A")
-        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_2", 4, 7 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_2A")
-        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_3", 5, 12 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_3A")
-        | "IcePathB1F", "EVENT_BOULDER_IN_ICE_PATH_4", 12, 13 -> Some(Some "EVENT_BOULDER_IN_ICE_PATH_4A")
-        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_1", 8, 3 -> Some None
-        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_2", 2, 5 -> Some None
-        | "BlackthornGym2F", "EVENT_BOULDER_IN_BLACKTHORN_GYM_3", 8, 7 -> Some None
-        | _ -> None
+    /// Resolve the source map's `stonetable` command for a settled Strength
+    /// boulder. The command's one-based warp index supplies the pit coordinate;
+    /// its object constant and branch label supply the exact fallout script.
+    let tryStrengthBoulderHoleFallLabel () =
+        state.Script.Commands
+        |> Array.tryPick (function
+            | Stonetable(warpArg :: objectConst :: label :: _) ->
+                match Int32.TryParse warpArg, OverworldState.objectIndexOf state.MapId objectConst with
+                | (true, warpNumber), Some idx when
+                    warpNumber > 0
+                    && warpNumber <= state.Events.Warps.Length
+                    && idx >= 0
+                    && idx < state.Npcs.Length
+                    && isObjectPresent idx ->
+                    let warp = state.Events.Warps.[warpNumber - 1]
+                    let npc = state.Npcs.[idx]
 
-    let applyStrengthBoulderHoleFalls () =
-        for idx = 0 to state.Npcs.Length - 1 do
-            let npc = state.Npcs.[idx]
-
-            match npc.Event.EventFlag with
-            | Some eventFlag when
-                isObjectPresent idx
-                && npc.Motion = NpcStanding
-                && npc.Event.Movement = "SPRITEMOVEDATA_STRENGTH_BOULDER" ->
-                match strengthHoleFall state.MapId eventFlag npc.CellX npc.CellY with
-                | Some lowerFloorFlag ->
-                    world <- World.setEvent eventFlag world
-                    if idx < objectPresent.Length then
-                        objectPresent.[idx] <- false
-
-                    match lowerFloorFlag with
-                    | Some flag -> world <- World.clearEvent flag world
-                    | None -> ()
-                | None -> ()
-            | _ -> ()
+                    if npc.Motion = NpcStanding
+                       && npc.Event.Movement = "SPRITEMOVEDATA_STRENGTH_BOULDER"
+                       && npc.CellX = warp.X
+                       && npc.CellY = warp.Y then
+                        if state.Script.Labels.ContainsKey label then
+                            Some label
+                        else
+                            state.Script.Labels
+                            |> Map.toSeq
+                            |> Seq.map fst
+                            |> Seq.tryFind (fun candidate -> candidate.EndsWith(label, StringComparison.Ordinal))
+                    else
+                        None
+                | _ -> None
+            | _ -> None)
 
     let setNpcFacing (idx: int) (facing: Direction) =
         let player, npcs = Actor.setFacing (ActorId.Object idx) facing state.Player state.Npcs
@@ -2369,11 +2370,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Hopping -> not state.Player.Moving
                         | _ -> false
 
-                    if completedTranslation then
-                        applyStrengthBoulderHoleFalls ()
+                    let strengthFallLabel =
+                        if completedTranslation then
+                            if this.SyncSurfStateWithTerrain() then
+                                this.PlayMapMusic state.MapId
 
-                        if this.SyncSurfStateWithTerrain() then
-                            this.PlayMapMusic state.MapId
+                            tryStrengthBoulderHoleFallLabel ()
+                        else
+                            None
 
                     match followPair, leaderBefore with
                     | Some(follower, leader), Some(lx, ly) ->
@@ -2393,11 +2397,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // Walking off the current map into a connected neighbour swaps the
                     // active map once the step settles (player rebased to the same world
                     // position, so the view is seamless).
-                    match if completedTranslation then OverworldState.crossConnection content state else None with
-                    | Some ns -> this.EnterMap(ns, true)
-                    | None when not completedTranslation ->
+                    match strengthFallLabel, (if completedTranslation then OverworldState.crossConnection content state else None) with
+                    | Some label, _ -> this.Drive(Script.start label world state.Script state.MapId)
+                    | None, Some ns -> this.EnterMap(ns, true)
+                    | None, None when not completedTranslation ->
                         Stay
-                    | None ->
+                    | None, None ->
                         if player.RepelSteps > 0 then
                             player <- { player with RepelSteps = player.RepelSteps - 1 }
 

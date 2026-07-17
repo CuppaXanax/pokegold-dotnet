@@ -391,8 +391,10 @@ module ConformanceLedger =
 
           yield entry FieldMove "SURF" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-005 runtime tests prove badge/move/facing-water entry, normal and Pikachu surfing sprites, invalid-terrain rejection, water traversal, legal shore dismount, and save restoration to a legal surfing state."
 
+          yield entry FieldMove "STRENGTH" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-006 tests prove badge/move activation requirements, one-cell boulder pushing, every generated source stonetable pairing, Ice Path lower-floor event transfer, and Blackthorn Gym non-Ice pit behavior through the source fallout scripts."
+
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "STRENGTH"; "FLY"; "FLASH"; "WATERFALL" ]
+            [ "FLY"; "FLASH"; "WATERFALL" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

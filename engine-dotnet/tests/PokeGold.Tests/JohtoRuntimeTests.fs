@@ -2069,7 +2069,57 @@ let ``A12 Strength-active IcePathB1F boulder pushes one cell`` () =
     Assert.Equal(NpcStanding, boulder.Motion)
 
 [<Fact>]
-let ``A12 BlackthornGym2F Strength boulder falls through stone-table hole`` () =
+let ``OVR-006 generated stone tables preserve every source boulder and warp pairing`` () =
+    let entries mapId =
+        (OverworldState.loadById (Content()) mapId).Script.Commands
+        |> Array.choose (function
+            | PokeGold.Game.Overworld.Script.Stonetable args -> Some args
+            | _ -> None)
+        |> Array.toList
+
+    Assert.Equal<string list list>(
+        [ [ "3"; "ICEPATHB1F_BOULDER1"; ".Boulder1" ]
+          [ "4"; "ICEPATHB1F_BOULDER2"; ".Boulder2" ]
+          [ "5"; "ICEPATHB1F_BOULDER3"; ".Boulder3" ]
+          [ "6"; "ICEPATHB1F_BOULDER4"; ".Boulder4" ] ],
+        entries "IcePathB1F")
+    Assert.Equal<string list list>(
+        [ [ "5"; "BLACKTHORNGYM2F_BOULDER1"; ".Boulder1" ]
+          [ "3"; "BLACKTHORNGYM2F_BOULDER2"; ".Boulder2" ]
+          [ "4"; "BLACKTHORNGYM2F_BOULDER3"; ".Boulder3" ] ],
+        entries "BlackthornGym2F")
+
+[<Fact>]
+let ``OVR-006 IcePathB1F Strength boulder falls and appears on the lower floor`` () =
+    let content = Content()
+    let world =
+        ScriptWorld.empty
+        |> ScriptWorld.setVar "__strength_active" 1
+        |> ScriptWorld.setEvent "EVENT_BOULDER_IN_ICE_PATH_1A"
+    let initial = OverworldState.loadByIdAt content "IcePathB1F" 11 4 Up
+    initial.Npcs.[0] <-
+        { initial.Npcs.[0] with
+            CellX = 11
+            CellY = 3
+            SrcX = 11
+            SrcY = 3 }
+    let scene = OverworldScene(content, SilentSound(), initial)
+    scene.Restore(world, PlayerStateOps.initial)
+
+    // Stage the final legal push: IcePathB1F.asm stonetable warp 3 is (11,2).
+    // Begin one cell south with the source boulder on the cell before that pit.
+    for _frame in 1 .. 17 do
+        (scene :> Scene).Update(directionButton Up) |> ignore
+
+    let boulder = scene.DebugState.Npcs.[0]
+    Assert.Equal((11, 3), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+    Assert.Equal((11, 2), (boulder.CellX, boulder.CellY))
+    Assert.True(ScriptWorld.hasEvent "EVENT_BOULDER_IN_ICE_PATH_1" scene.DebugWorld)
+    Assert.False(ScriptWorld.hasEvent "EVENT_BOULDER_IN_ICE_PATH_1A" scene.DebugWorld)
+    Assert.False(MapEvents.objectVisible scene.DebugWorld boulder.Event)
+
+[<Fact>]
+let ``OVR-006 BlackthornGym2F Strength boulder falls through source stone-table hole`` () =
     let content = Content()
     let world =
         ScriptWorld.empty
