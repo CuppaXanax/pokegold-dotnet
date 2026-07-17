@@ -94,6 +94,69 @@ module MapParsers =
                     Movements = movements
                     ObjectConsts = objectConsts } ]
 
+    /// Source Fly destinations joined to their spawn-point locations and engine
+    /// flags. Most flags are declared by the map's new-map callback; Rock Tunnel
+    /// uses the matching source engine-flag name because it has no such callback.
+    let flyPoints : FlyPoint list =
+        let callbackFlags =
+            maps
+            |> Seq.collect (fun map ->
+                map.Script.Commands
+                |> Seq.choose (function
+                    | Setflag flag when flag.StartsWith("ENGINE_FLYPOINT_") -> Some(map.Meta.Landmark, flag)
+                    | _ -> None))
+            |> Seq.groupBy fst
+            |> Seq.map (fun (landmark, entries) ->
+                let flags = entries |> Seq.map snd |> Seq.distinct |> Seq.toList
+
+                match flags with
+                | [ flag ] -> landmark, flag
+                | _ -> failwithf "Expected one flypoint flag for %s, found %A" landmark flags)
+            |> Map.ofSeq
+
+        let knownFlags =
+            Regex.Matches(Repo.readText "constants/engine_flags.asm", @"^\s*const\s+(ENGINE_FLYPOINT_[A-Z0-9_]+)", RegexOptions.Multiline)
+            |> Seq.cast<Match>
+            |> Seq.map (fun m -> m.Groups.[1].Value)
+            |> Set.ofSeq
+
+        let spawnIds =
+            Regex.Matches(Repo.readText "constants/map_data_constants.asm", @"^\s*const\s+(SPAWN_[A-Z0-9_]+)", RegexOptions.Multiline)
+            |> Seq.cast<Match>
+            |> Seq.map (fun m -> m.Groups.[1].Value)
+            |> Seq.toList
+
+        if spawnIds.Length <> spawnPoints.Length then
+            failwithf "Spawn constant count %d does not match spawn table count %d" spawnIds.Length spawnPoints.Length
+
+        let spawnById =
+            List.zip spawnIds spawnPoints
+            |> List.map (fun (spawnId, (_, mapId, x, y)) -> spawnId, (mapId, x, y))
+            |> Map.ofList
+
+        let pointPattern = Regex(@"^\s*db\s+(LANDMARK_[A-Z0-9_]+),\s+(SPAWN_[A-Z0-9_]+)", RegexOptions.Multiline)
+        let source = Repo.readText "data/maps/flypoints.asm"
+
+        [ for m in pointPattern.Matches(source) do
+              let landmark = m.Groups.[1].Value
+              let spawn = m.Groups.[2].Value
+              let mapId, x, y =
+                  Map.tryFind spawn spawnById
+                  |> Option.defaultWith (fun () -> failwithf "Unknown Fly spawn %s" spawn)
+              let fallbackFlag = "ENGINE_FLYPOINT_" + landmark.Substring("LANDMARK_".Length)
+              let flag = Map.tryFind landmark callbackFlags |> Option.defaultValue fallbackFlag
+
+              if not (Set.contains flag knownFlags) then
+                  failwithf "Unknown Fly engine flag %s for %s" flag landmark
+
+              yield
+                  { Landmark = landmark
+                    Spawn = spawn
+                    Flag = flag
+                    MapId = mapId
+                    X = x
+                    Y = y } ]
+
     /// The shared *standard* scripts (`engine/events/std_scripts.asm`) — the
     /// `jumpstd`/`callstd` targets (PokecenterNurseScript, bookshelves, signs, …) —
     /// parsed into one program addressed by label.

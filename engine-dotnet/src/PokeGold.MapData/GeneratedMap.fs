@@ -15,3 +15,13 @@ type GeneratedMap =
       /// The map's object-constant names in `object_event` order, so a script's
       /// symbolic actor operand resolves to an object index by position.
       ObjectConsts: string[] }
+
+/// A source `data/maps/flypoints.asm` entry joined to its spawn point and
+/// discovered-engine flag.
+type FlyPoint =
+    { Landmark: string
+      Spawn: string
+      Flag: string
+      MapId: string
+      X: int
+      Y: int }

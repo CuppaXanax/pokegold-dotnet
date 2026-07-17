@@ -203,6 +203,7 @@ module ConformanceLedger =
           yield entry SceneSurface "MomBankScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "CriticalSpecialSceneTests and OverworldSchedulerTests cover core Mom savings flows; exact digit/menu fidelity remains future UI work."
           yield entry SceneSurface "ScriptMenuScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Generic ROM script-menu UI is covered by CriticalSpecialSceneTests and ScriptTests; exact per-menu labels remain future menu-header decoding work."
           yield entry SceneSurface "ApricornSelectionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B1 scene test covers disassembly-order picker entries, selection, and cancel."
+          yield entry SceneSurface "FlyDestinationScene" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-009 scheduler coverage drives the real Start/Party/FLY flow through discovered source destinations, cancellation, a source spawn warp, and save restoration; the original town-map art and Fly animation remain presentation work."
           yield entry SceneSurface "DayCareScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B2 scene tests cover deposit, withdraw, and egg pickup flows; exact text/level-growth fidelity remains future daycare polish."
           yield entry SceneSurface "MoveDeletionScene" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B3 scene test covers party-pick, move-pick, confirmation, and compaction after deletion."
           yield entry SceneSurface "LearnMoveScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BAT-012 tests cover explicit slot replacement, two-stage decline confirmation, HM rejection, cancellation, and one-shot decisions."
@@ -395,8 +396,10 @@ module ConformanceLedger =
 
           yield entry FieldMove "WATERFALL" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-008 runtime test proves source upward-facing activation, forced animated ascent and source current descent through the real Tohjo Falls waterfall column, stable water landings, and retained surfing state."
 
+          yield entry FieldMove "FLY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-009 scheduler test proves the generated 24-entry flypoint table, source outdoor gating, discovered-destination filtering through the real Party menu, cancellation, source-spawn arrival, and save restoration. The original town-map art and Fly animation remain presentation work."
+
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "FLY"; "FLASH" ]
+            [ "FLASH" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

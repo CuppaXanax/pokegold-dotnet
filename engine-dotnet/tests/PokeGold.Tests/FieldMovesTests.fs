@@ -325,6 +325,10 @@ let ``Fly requires a known fly point`` () =
     | FieldMoves.Used("FLY", _) -> ()
     | other -> Assert.Fail(sprintf "expected FLY to be usable, got %A" other)
 
+    match FieldMoves.tryUse "FLY" 0uy "PlayersHouse2F" withFlypoint [ mon ] with
+    | FieldMoves.NotUsable reason -> Assert.Contains("outdoors", reason)
+    | FieldMoves.Used _ -> Assert.Fail("FLY should reject indoor maps")
+
 [<Fact>]
 let ``PartyScene dispatches detected HM field move`` () =
     let mutable fieldMove = None

@@ -152,6 +152,15 @@ module FieldMoves =
         | id when id = CollWaterfall || id = CollCurrentDown -> Some Down
         | _ -> None
 
+    let private isOutdoorMap mapId =
+        Maps.byName mapId
+        |> Option.exists (fun map -> map.Meta.Environment = "TOWN" || map.Meta.Environment = "ROUTE")
+
+    let discoveredFlyPoints (world: PokeGold.Game.Overworld.Script.World) =
+        MapsData.flyPoints
+        |> Array.filter (fun point -> PokeGold.Game.Overworld.Script.World.hasFlag point.Flag world)
+        |> Array.toList
+
     let tryUse (moveName: string) (targetCollId: byte) (mapId: string) (world: PokeGold.Game.Overworld.Script.World) (party: PokeGold.Game.Player.Party) : FieldMoveResult =
         let moveName = normalize moveName
         match requirementFailure moveName world party with
@@ -167,7 +176,8 @@ module FieldMoves =
             | "WHIRLPOOL" -> Used("WHIRLPOOL", "Used WHIRLPOOL!")
             | "WATERFALL" when not (isWaterfallClimbTile targetCollId) -> NotUsable "Can't use WATERFALL here"
             | "WATERFALL" -> Used("WATERFALL", "Used WATERFALL!")
-            | "FLY" when not (world.EngineFlags |> Set.exists (fun flag -> flag.StartsWith("ENGINE_FLYPOINT_"))) ->
+            | "FLY" when not (isOutdoorMap mapId) -> NotUsable "Can only use FLY outdoors"
+            | "FLY" when discoveredFlyPoints world |> List.isEmpty ->
                 NotUsable "No known FLY destination"
             | "FLY" -> Used("FLY", $"Used FLY from {mapId}!")
             | "FLASH" -> Used("FLASH", "Used FLASH!")

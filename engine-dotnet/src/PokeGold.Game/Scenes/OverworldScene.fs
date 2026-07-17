@@ -620,6 +620,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         match FieldMoves.tryUse moveName targetColl state.MapId world player.Party with
         | FieldMoves.NotUsable reason ->
             Push(TextBoxScene.Of(content, reason + "<DONE>") :> Scene)
+        | FieldMoves.Used("FLY", _) ->
+            let destinations = FieldMoves.discoveredFlyPoints world
+
+            Push(
+                FlyDestinationScene(
+                    content,
+                    destinations,
+                    fun selected ->
+                        match selected with
+                        | Some point -> this.FlyTo(point)
+                        | None -> ()) :> Scene)
         | FieldMoves.Used("WHIRLPOOL", _) when targetBlock <> Some 0x07uy ->
             Push(TextBoxScene.Of(content, "Can't use WHIRLPOOL here<DONE>") :> Scene)
         | FieldMoves.Used("CUT", _) when cutReplacement.IsNone ->
@@ -658,7 +669,6 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     this.PlayMapMusic state.MapId
                     world
                 | "FLASH" -> World.setVar "__flash_active" 1 world
-                | "FLY" -> World.setVar "__fly_requested" 1 world
                 | "CUT" ->
                     this.ChangeBlockAt(x, y, int cutReplacement.Value)
                     interpretHostEffect (HostEffect.PlaySfx "Sfx_PlacePuzzlePieceDown")
@@ -814,8 +824,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         else
             this.ContinueQueuedScripts()
 
+    member private _.RegisterFlyPointArrival() =
+        MapsData.flyPoints
+        |> Array.tryFind (fun point ->
+            point.MapId = state.MapId
+            && point.X = state.Player.CellX
+            && point.Y = state.Player.CellY)
+        |> Option.iter (fun point -> world <- World.setFlag point.Flag world)
+
     member private this.EnterMap(nextState: OverworldState, playMusic: bool) : Transition =
         state <- nextState
+        this.RegisterFlyPointArrival()
         balanceOverlay <- None
         resetObjectPresence ()
         firedCoords <- Set.empty
@@ -828,6 +847,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         this.RunMapCallbacks nextState.MapId
         syncFlaggedObjectPresenceFromWorld ()
         this.RunSceneScript nextState.MapId
+
+    member private this.FlyTo(point: FlyPoint) =
+        world <-
+            world
+            |> World.setBuffer "__last_field_move" "FLY"
+            |> World.setVar "__field_move_success" 1
+
+        let nextState = OverworldState.loadByIdAt content point.MapId point.X point.Y Down
+
+        match this.EnterMap(nextState, true) with
+        | Stay -> ()
+        | transition -> restoreTransition <- Some transition
 
     member private this.ApplyCallbackEffect(effect: ScriptEffect) =
         match effect with

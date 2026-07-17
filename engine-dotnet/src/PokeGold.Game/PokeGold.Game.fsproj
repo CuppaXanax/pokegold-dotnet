@@ -172,6 +172,7 @@
     <Compile Include="Scenes\MomBankScene.fs" />
     <Compile Include="Scenes\ScriptMenuScene.fs" />
     <Compile Include="Scenes\ApricornSelectionScene.fs" />
+    <Compile Include="Scenes\FlyDestinationScene.fs" />
     <Compile Include="Scenes\StartMenuScene.fs" />
     <Compile Include="Scenes\PackUseGive.fs" />
     <Compile Include="Scenes\SummaryScene.fs" />
@@ -262,6 +263,8 @@
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\blocks.asm" />
+    <GameDataInput Include="$(RepoRoot)data\maps\spawn_points.asm" />
+    <GameDataInput Include="$(RepoRoot)data\maps\flypoints.asm" />
     <GameDataInput Include="$(RepoRoot)maps\*.asm" />
     <GameDataInput Include="$(RepoRoot)constants\music_constants.asm" />
     <GameDataInput Include="$(RepoRoot)audio\music_pointers.asm" />

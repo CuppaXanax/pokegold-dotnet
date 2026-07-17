@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,417 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,418 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -349,9 +349,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Source `CheckMapCanWaterfall` activation requires facing up at a waterfall/current tile; ascent repeats its forced upward movement until the first non-waterfall cell, and waterfall flow forces descent.
   - Tohjo Falls runtime coverage proves facing rejection, animated ascent and descent, stable water landings, and retained surfing state.
 
-- ⬜ **OVR-009 — Complete Fly.**
-  - Present discovered destinations, move to the correct destination warp, and preserve state.
-  - A `__fly_requested` variable is not completion.
+- ✅ **OVR-009 — Complete Fly.**
+  - Source `flypoints.asm` entries are generated with their source spawn and discovered engine flag; Fly requires a source outdoor map and presents only discovered destinations.
+  - The Party-menu runtime test proves cancellation, Goldenrod's exact source spawn, and save restoration. The original town-map art and Fly animation remain presentation work.
 
 - 🟡 **OVR-010 — Complete Flash.**
   - Existing eligibility state must control actual cave darkness rendering and survive map transitions as the source requires.

@@ -2023,6 +2023,78 @@ let ``party HM field move dispatches through overworld runtime`` () =
     Assert.Equal("FLASH", World.getBuffer "__last_field_move" scene.DebugWorld)
 
 [<Fact>]
+let ``OVR-009 Party Fly selects discovered source destination and persists its spawn`` () =
+    let content = Content()
+    Assert.Equal(24, MapsData.flyPoints.Length)
+    let goldenrodPoint =
+        MapsData.flyPoints
+        |> Array.find (fun point -> point.Landmark = "LANDMARK_GOLDENROD_CITY")
+    Assert.Equal("ENGINE_FLYPOINT_GOLDENROD", goldenrodPoint.Flag)
+    Assert.Equal("SPAWN_GOLDENROD", goldenrodPoint.Spawn)
+    Assert.Equal(("GoldenrodCity", 15, 28), (goldenrodPoint.MapId, goldenrodPoint.X, goldenrodPoint.Y))
+    let rockTunnelPoint =
+        MapsData.flyPoints
+        |> Array.find (fun point -> point.Landmark = "LANDMARK_ROCK_TUNNEL")
+    Assert.Equal("ENGINE_FLYPOINT_ROCK_TUNNEL", rockTunnelPoint.Flag)
+    Assert.Equal(("Route10North", 11, 2), (rockTunnelPoint.MapId, rockTunnelPoint.X, rockTunnelPoint.Y))
+
+    let flyer = { PartyMon.create 150 100 with Moves = MoveLearn.tryLearnMove "FLY" [] }
+    let player = { PlayerStateOps.initial with Party = [ flyer ] }
+    let world =
+        World.empty
+        |> World.setFlag "ENGINE_STORMBADGE"
+        |> World.setFlag "ENGINE_FLYPOINT_NEW_BARK"
+        |> World.setFlag "ENGINE_FLYPOINT_GOLDENROD"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" 5 5 Down)
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let press buttons =
+        let top = stack.[stack.Count - 1]
+        applyTransition stack (top.Update buttons)
+        applyTransition stack (stack.[stack.Count - 1].Update Buttons.none)
+
+    let openFlyPickerFromParty () =
+        press { Buttons.none with A = true }
+
+        for _ in 1 .. 3 do
+            press { Buttons.none with Down = true }
+
+        press { Buttons.none with A = true }
+
+    let openFlyPicker () =
+        press { Buttons.none with Start = true }
+        press { Buttons.none with Down = true }
+        press { Buttons.none with A = true }
+        openFlyPickerFromParty ()
+
+    openFlyPicker ()
+    match stack.[stack.Count - 1] with
+    | :? FlyDestinationScene as picker ->
+        Assert.Equal<string list>([ "SPAWN_NEW_BARK"; "SPAWN_GOLDENROD" ], picker.Destinations |> List.map _.Spawn)
+    | other -> Assert.Fail(sprintf "expected FlyDestinationScene, got %s" (other.GetType().Name))
+
+    press { Buttons.none with B = true }
+    Assert.Equal("NewBarkTown", scene.DebugState.MapId)
+    Assert.Equal((5, 5), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+
+    openFlyPickerFromParty ()
+    Assert.Equal("FlyDestinationScene", stack.[stack.Count - 1].GetType().Name)
+    press { Buttons.none with Down = true }
+    press { Buttons.none with A = true }
+
+    Assert.Equal("GoldenrodCity", scene.DebugState.MapId)
+    Assert.Equal((15, 28), (scene.DebugState.Player.CellX, scene.DebugState.Player.CellY))
+    Assert.Equal("FLY", World.getBuffer "__last_field_move" scene.DebugWorld)
+    Assert.Equal(0, World.getVar "__fly_requested" scene.DebugWorld)
+
+    let restored = OverworldScene.OfSave(content, SilentSound(), scene.Capture())
+    Assert.Equal("GoldenrodCity", restored.DebugState.MapId)
+    Assert.Equal((15, 28), (restored.DebugState.Player.CellX, restored.DebugState.Player.CellY))
+
+[<Fact>]
 let ``facing water triggers Surf field move through overworld A press`` () =
     let content = Content()
     let probe = OverworldState.loadById content "NewBarkTown"

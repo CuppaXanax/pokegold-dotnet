@@ -50,8 +50,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Waterfall now requires the source upward-facing activation, animates forced
   ascent and descent through the real Tohjo Falls column, lands on water
   correctly, and retains surfing state.
+- Fly now consumes source-generated flypoint/spawn data, filters the Party-menu
+  selector to discovered destinations, and reaches the exact selected spawn
+  with save restoration; original Fly map art and animation remain presentation work.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1417/1417) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1418/1418) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
