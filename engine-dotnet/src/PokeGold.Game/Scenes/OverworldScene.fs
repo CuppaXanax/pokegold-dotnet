@@ -562,11 +562,18 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             else
                 None
 
+        let cutReplacement =
+            match Maps.byName state.MapId, targetBlock with
+            | Some map, Some block -> FieldMoves.tryCutReplacement map.Meta.Tileset block
+            | _ -> None
+
         match FieldMoves.tryUse moveName targetColl state.MapId world player.Party with
         | FieldMoves.NotUsable reason ->
             Push(TextBoxScene.Of(content, reason + "<DONE>") :> Scene)
         | FieldMoves.Used("WHIRLPOOL", _) when targetBlock <> Some 0x07uy ->
             Push(TextBoxScene.Of(content, "Can't use WHIRLPOOL here<DONE>") :> Scene)
+        | FieldMoves.Used("CUT", _) when cutReplacement.IsNone ->
+            Push(TextBoxScene.Of(content, "Can't use CUT here<DONE>") :> Scene)
         | FieldMoves.Used(move, message) ->
             world <-
                 world
@@ -579,7 +586,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | "SURF" -> World.setVar "__surfing" 1 world
                 | "FLASH" -> World.setVar "__flash_active" 1 world
                 | "FLY" -> World.setVar "__fly_requested" 1 world
-                | "CUT" -> World.setVar "__cut_used" 1 world
+                | "CUT" ->
+                    this.ChangeBlockAt(x, y, int cutReplacement.Value)
+                    interpretHostEffect (HostEffect.PlaySfx "Sfx_PlacePuzzlePieceDown")
+                    world
                 | "WHIRLPOOL" ->
                     this.ChangeBlockAt(x, y, 0x36)
                     World.setVar "__whirlpool_used" 1 world

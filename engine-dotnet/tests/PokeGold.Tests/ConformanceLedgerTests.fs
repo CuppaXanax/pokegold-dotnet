@@ -387,8 +387,10 @@ module ConformanceLedger =
 
           yield entry FieldMove "WHIRLPOOL" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "OVR-007 tests prove source block $07 becomes passable water block $36 in Dragons Den B1F and Route 41, surf state persists, traversal succeeds on both maps, and missing Glacier Badge or party move leaves the obstruction intact and non-traversable."
 
+          yield entry FieldMove "CUT" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-004 tests preserve every source CutTreeBlockPointers entry and prove ordinary A-press Cut in Ilex Forest and Route 2 replaces the correct forest/Kanto block, opens traversal, resets on save/reload, and cannot mutate without the Hive Badge or a party user."
+
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "CUT"; "SURF"; "STRENGTH"; "FLY"; "FLASH"; "WATERFALL" ]
+            [ "SURF"; "STRENGTH"; "FLY"; "FLASH"; "WATERFALL" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

@@ -326,10 +326,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
 
 ### Work items
 
-- ⬜ **OVR-004 — Complete Cut.**
-  - Cut removes the correct tree/grass obstruction and makes the route walkable.
-  - Persistence follows source event/map reload behavior.
-  - Prove on Ilex Forest/Route 34 and at least one second map.
+- ✅ **OVR-004 — Complete Cut.**
+  - Ordinary A-press/party field-move use replaces the exact source tileset block and makes the cut cell traversable.
+  - Ilex Forest and Route 2 runtime tests cover forest/Kanto replacements, badge/move rejection, traversal, and source map-reload reset behavior.
 
 - ⬜ **OVR-005 — Complete Surf.**
   - Enter surfing state, render the proper player state, traverse water, block invalid terrain, and dismount on valid land.

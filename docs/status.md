@@ -40,8 +40,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   coverage, not yet a player-facing runtime acquisition proof.
 - Oak's Lab now rates the live Pokédex through the source 19-entry threshold,
   message, and fanfare table, with staged runtime proof that his script resumes.
+- Cut now replaces the source tileset-specific obstruction block, opens real
+  traversal in Ilex Forest and Route 2, and resets with source map reloads.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1408/1408) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1412/1412) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

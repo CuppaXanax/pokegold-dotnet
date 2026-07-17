@@ -107,6 +107,26 @@ module FieldMoves =
     let private isCutTree collId =
         collId = CollCutTree || collId = CollCutTree1A
 
+    /// Source `CutTreeBlockPointers`: a cuttable collision is only actionable
+    /// when the complete facing block also appears in the current tileset's
+    /// replacement table.
+    let tryCutReplacement tileset blockId =
+        let replacements =
+            match tileset with
+            | "TILESET_JOHTO" ->
+                [ 0x03uy, 0x02uy; 0x5buy, 0x3cuy; 0x5fuy, 0x3duy
+                  0x63uy, 0x3fuy; 0x67uy, 0x3euy ]
+            | "TILESET_JOHTO_MODERN" -> [ 0x03uy, 0x02uy ]
+            | "TILESET_KANTO" ->
+                [ 0x0buy, 0x0auy; 0x32uy, 0x6duy; 0x33uy, 0x6cuy
+                  0x34uy, 0x6fuy; 0x35uy, 0x4cuy; 0x60uy, 0x6euy ]
+            | "TILESET_PARK" -> [ 0x13uy, 0x03uy; 0x03uy, 0x04uy ]
+            | "TILESET_FOREST" -> [ 0x0fuy, 0x17uy ]
+            | _ -> []
+
+        replacements
+        |> List.tryPick (fun (source, replacement) -> if source = blockId then Some replacement else None)
+
     let isSurfWater collId =
         [ CollSurf; CollWater21; CollWhirlpool; CollWhirlpool2C; CollWaterfallRight; CollWaterfallLeft; CollWaterfallUp; CollWaterfall ]
         |> List.contains collId
