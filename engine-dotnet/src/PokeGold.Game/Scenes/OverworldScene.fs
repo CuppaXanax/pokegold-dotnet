@@ -508,7 +508,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// track is already playing — so walking within a single-music region doesn't
     /// restart it, while crossing into a differently-scored map does change it.
     member private _.PlayMapMusic(mapId: string) =
-        match OverworldScene.musicFor mapId with
+        let music =
+            if World.getVar "__surfing" world = 1 then
+                Map.tryFind "MUSIC_SURF" MusicData.byId
+            else
+                OverworldScene.musicFor mapId
+
+        match music with
         | Some path -> interpretHostEffect (HostEffect.PlayMusic path)
         | None -> ()
 
@@ -552,6 +558,32 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         else
             false
 
+    member private _.SurfSpriteName() =
+        if World.getVar "__surfing_pikachu" world = 1 then "surfing_pikachu" else "surf"
+
+    /// Source `CheckUpdatePlayerSprite`: standing on water restores a legal Surf
+    /// state; standing on land clears it. Returns true when this update dismounted.
+    member private this.SyncSurfStateWithTerrain() =
+        let collision =
+            MapConnections.collisionId
+                state.Map
+                state.Collision
+                state.Neighbors
+                state.Player.CellX
+                state.Player.CellY
+
+        let wasSurfing = World.getVar "__surfing" world = 1
+        let onWater = FieldMoves.isSurfWater collision
+
+        if onWater then
+            world <- World.setVar "__surfing" 1 world
+            state <- { state with Sprite = content.Sprite(this.SurfSpriteName()) }
+        elif wasSurfing || World.getVar "__surfing_pikachu" world = 1 then
+            world <- world |> World.setVar "__surfing" 0 |> World.setVar "__surfing_pikachu" 0
+            state <- { state with Sprite = content.Sprite "chris" }
+
+        wasSurfing && not onWater
+
     member private this.UseFieldMove(moveName: string) : Transition =
         let x, y = this.FacingCell()
         let targetColl = MapConnections.collisionId state.Map state.Collision state.Neighbors x y
@@ -583,7 +615,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             world <-
                 match move with
                 | "STRENGTH" -> World.setVar "__strength_active" 1 world
-                | "SURF" -> World.setVar "__surfing" 1 world
+                | "SURF" ->
+                    let pikachuUser =
+                        player.Party
+                        |> List.tryFind (fun mon ->
+                            mon.Moves
+                            |> List.exists (fun (moveId, _) ->
+                                Moves.tryByIndex moveId
+                                |> Option.exists (fun moveData -> moveData.Name = "SURF")))
+                        |> Option.exists (fun mon -> mon.SpeciesId = 25)
+
+                    world <-
+                        world
+                        |> World.setVar "__surfing" 1
+                        |> World.setVar "__surfing_pikachu" (if pikachuUser then 1 else 0)
+
+                    state <-
+                        { state with
+                            Player = Player.createFacing x y state.Player.Facing
+                            Sprite = content.Sprite(this.SurfSpriteName()) }
+                    this.ReanchorCamera()
+                    this.PlayMapMusic state.MapId
+                    world
                 | "FLASH" -> World.setVar "__flash_active" 1 world
                 | "FLY" -> World.setVar "__fly_requested" 1 world
                 | "CUT" ->
@@ -629,10 +682,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             | Some path -> interpretHostEffect (HostEffect.PlayMusic path)
             | None -> ()
 
-    member private _.ReloadCurrentMap() =
+    member private this.ReloadCurrentMap() =
         let p = state.Player
         state <- OverworldState.loadByIdAt content state.MapId p.CellX p.CellY p.Facing
         resetObjectPresence ()
+        this.SyncSurfStateWithTerrain() |> ignore
 
     member private this.ApplyBlackout() : Transition =
         let home = MapsData.spawnPoints.["PLAYERS_HOUSE_2F"]
@@ -744,6 +798,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         resetObjectPresence ()
         firedCoords <- Set.empty
         this.BeginMapEntryFadeIn()
+        this.SyncSurfStateWithTerrain() |> ignore
 
         if playMusic then
             this.PlayMapMusic nextState.MapId
@@ -1882,6 +1937,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeRun <- None
         fadeVm <- None
         scriptQueue.Clear()
+        this.SyncSurfStateWithTerrain() |> ignore
         resetObjectPresence ()
         this.RunMapCallbacks state.MapId
         syncFlaggedObjectPresenceFromWorld ()
@@ -2315,6 +2371,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                     if completedTranslation then
                         applyStrengthBoulderHoleFalls ()
+
+                        if this.SyncSurfStateWithTerrain() then
+                            this.PlayMapMusic state.MapId
 
                     match followPair, leaderBefore with
                     | Some(follower, leader), Some(lx, ly) ->

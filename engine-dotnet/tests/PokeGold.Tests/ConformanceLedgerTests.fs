@@ -389,8 +389,10 @@ module ConformanceLedger =
 
           yield entry FieldMove "CUT" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-004 tests preserve every source CutTreeBlockPointers entry and prove ordinary A-press Cut in Ilex Forest and Route 2 replaces the correct forest/Kanto block, opens traversal, resets on save/reload, and cannot mutate without the Hive Badge or a party user."
 
+          yield entry FieldMove "SURF" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-005 runtime tests prove badge/move/facing-water entry, normal and Pikachu surfing sprites, invalid-terrain rejection, water traversal, legal shore dismount, and save restoration to a legal surfing state."
+
           yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "SURF"; "STRENGTH"; "FLY"; "FLASH"; "WATERFALL" ]
+            [ "STRENGTH"; "FLY"; "FLASH"; "WATERFALL" ]
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

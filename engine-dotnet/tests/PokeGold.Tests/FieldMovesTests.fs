@@ -23,6 +23,20 @@ let private directionButton direction =
     | Left -> { Buttons.none with Left = true }
     | Right -> { Buttons.none with Right = true }
 
+let private delta direction =
+    match direction with
+    | Down -> 0, 1
+    | Up -> 0, -1
+    | Left -> -1, 0
+    | Right -> 1, 0
+
+let private opposite direction =
+    match direction with
+    | Down -> Up
+    | Up -> Down
+    | Left -> Right
+    | Right -> Left
+
 let private cutTarget content mapId =
     let probe = OverworldState.loadById content mapId
     let tileset = (Maps.byName mapId).Value.Meta.Tileset
@@ -61,6 +75,57 @@ let private dismissModal (stack: ResizeArray<Scene>) =
         | Replace child -> stack.[stack.Count - 1] <- child
 
     Assert.Equal(1, stack.Count)
+
+let private surfRoute content mapId =
+    let probe = OverworldState.loadById content mapId
+    let directions = [ Down; Up; Left; Right ]
+    let occupied = probe.Npcs |> Array.map (fun npc -> npc.CellX, npc.CellY) |> Set.ofArray
+
+    seq {
+        for landY in 0 .. probe.Map.Height * 2 - 1 do
+            for landX in 0 .. probe.Map.Width * 2 - 1 do
+                if Movement.cellWalkable probe.Map probe.Collision landX landY
+                   && not (Set.contains (landX, landY) occupied) then
+                    for enterDirection in directions do
+                        let enterDx, enterDy = delta enterDirection
+                        let waterX, waterY = landX + enterDx, landY + enterDy
+                        let waterCollision = Movement.collisionIdAtCell probe.Map probe.Collision waterX waterY
+
+                        if FieldMoves.isPassableSurfWater waterCollision
+                           && not (Set.contains (waterX, waterY) occupied) then
+                            let invalidDirection =
+                                directions
+                                |> List.tryFind (fun direction ->
+                                    let dx, dy = delta direction
+                                    let x, y = waterX + dx, waterY + dy
+                                    x >= 0 && y >= 0 && x < probe.Map.Width * 2 && y < probe.Map.Height * 2
+                                    && not (Movement.cellWalkable probe.Map probe.Collision x y)
+                                    && not (Movement.collisionIdAtCell probe.Map probe.Collision x y |> FieldMoves.isPassableSurfWater))
+
+                            match invalidDirection with
+                            | Some invalidDirection ->
+                                for traverseDirection in directions do
+                                    let traverseDx, traverseDy = delta traverseDirection
+                                    let nextX, nextY = waterX + traverseDx, waterY + traverseDy
+                                    let nextCollision = Movement.collisionIdAtCell probe.Map probe.Collision nextX nextY
+
+                                    if FieldMoves.isPassableSurfWater nextCollision
+                                       && not (Set.contains (nextX, nextY) occupied) then
+                                        yield landX, landY, enterDirection, waterX, waterY, invalidDirection, traverseDirection, nextX, nextY
+                            | None -> ()
+    }
+    |> Seq.tryHead
+    |> Option.defaultWith (fun () -> failwithf "expected a shore and traversable water on %s" mapId)
+
+let private driveTo (scene: OverworldScene) direction target =
+    let mutable frames = 0
+    while frames < 64
+          && ((scene.RuntimeSnapshot.Player.CellX, scene.RuntimeSnapshot.Player.CellY) <> target
+              || scene.RuntimeSnapshot.Player.Moving) do
+        frames <- frames + 1
+        (scene :> Scene).Update(directionButton direction) |> ignore
+
+    Assert.Equal(target, (scene.RuntimeSnapshot.Player.CellX, scene.RuntimeSnapshot.Player.CellY))
 
 [<Fact>]
 let ``FieldMoves.canUse returns false without the required badge`` () =
@@ -165,6 +230,59 @@ let ``OVR-004 Cut leaves Ilex Forest blocked without badge or party move`` () =
     let cutter = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "CUT" [] }
     tryBlocked World.empty { PlayerStateOps.initial with Party = [ cutter ] }
     tryBlocked (World.empty |> World.setFlag "ENGINE_HIVEBADGE") PlayerStateOps.initial
+
+[<Fact>]
+let ``OVR-005 Surf enters traverses dismounts and restores legally from save`` () =
+    let content = Content()
+    let landX, landY, enterDirection, waterX, waterY, invalidDirection, traverseDirection, nextX, nextY = surfRoute content "NewBarkTown"
+    let surfer = { PartyMon.create 158 10 with Moves = MoveLearn.tryLearnMove "SURF" [] }
+    let player = { PlayerStateOps.initial with Party = [ surfer ] }
+    let world = World.empty |> World.setFlag "ENGINE_FOGBADGE"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" landX landY enterDirection)
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    match (scene :> Scene).Update { Buttons.none with A = true } with
+    | Push modal -> stack.Add modal
+    | other -> Assert.Fail(sprintf "expected Surf text after A press, got %A" other)
+
+    Assert.Equal((waterX, waterY), (scene.RuntimeSnapshot.Player.CellX, scene.RuntimeSnapshot.Player.CellY))
+    Assert.Equal(1, World.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal(content.Sprite "surf", scene.DebugState.Sprite)
+
+    dismissModal stack
+    let restored = OverworldScene.OfSave(content, SilentSound(), scene.Capture())
+    Assert.Equal((waterX, waterY), (restored.RuntimeSnapshot.Player.CellX, restored.RuntimeSnapshot.Player.CellY))
+    Assert.Equal(1, World.getVar "__surfing" restored.DebugWorld)
+    Assert.Equal(content.Sprite "surf", restored.DebugState.Sprite)
+
+    for _ in 1 .. 40 do
+        (scene :> Scene).Update(directionButton invalidDirection) |> ignore
+    Assert.Equal((waterX, waterY), (scene.RuntimeSnapshot.Player.CellX, scene.RuntimeSnapshot.Player.CellY))
+
+    driveTo scene traverseDirection (nextX, nextY)
+    driveTo scene (opposite traverseDirection) (waterX, waterY)
+    driveTo scene (opposite enterDirection) (landX, landY)
+
+    Assert.Equal(0, World.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal(content.Sprite "chris", scene.DebugState.Sprite)
+
+[<Fact>]
+let ``OVR-005 Pikachu Surf uses the source alternate overworld sprite`` () =
+    let content = Content()
+    let landX, landY, enterDirection, _, _, _, _, _, _ = surfRoute content "NewBarkTown"
+    let pikachu = { PartyMon.create 25 10 with Moves = MoveLearn.tryLearnMove "SURF" [] }
+    let player = { PlayerStateOps.initial with Party = [ pikachu ] }
+    let world = World.empty |> World.setFlag "ENGINE_FOGBADGE"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" landX landY enterDirection)
+    scene.Restore(world, player)
+
+    (scene :> Scene).Update { Buttons.none with A = true } |> ignore
+
+    Assert.Equal(1, World.getVar "__surfing" scene.DebugWorld)
+    Assert.Equal(1, World.getVar "__surfing_pikachu" scene.DebugWorld)
+    Assert.Equal(content.Sprite "surfing_pikachu", scene.DebugState.Sprite)
 
 [<Theory>]
 [<InlineData("CUT", "ENGINE_HIVEBADGE", 0x12)>]

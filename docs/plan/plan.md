@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,355 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,414 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -330,9 +330,10 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Ordinary A-press/party field-move use replaces the exact source tileset block and makes the cut cell traversable.
   - Ilex Forest and Route 2 runtime tests cover forest/Kanto replacements, badge/move rejection, traversal, and source map-reload reset behavior.
 
-- ⬜ **OVR-005 — Complete Surf.**
+- ✅ **OVR-005 — Complete Surf.**
   - Enter surfing state, render the proper player state, traverse water, block invalid terrain, and dismount on valid land.
   - Save/reload while surfing must restore a legal state.
+  - New Bark runtime tests prove the normal and source Pikachu sprites, invalid-terrain rejection, water traversal, legal shore dismount, and legal save restoration.
 
 - 🟡 **OVR-006 — Complete Strength.**
   - Existing boulder pushing and selected Ice Path hole handling are retained.

@@ -3113,10 +3113,11 @@ let ``A20 Cinnabar Blue disappears and enables Viridian Gym Blue`` () =
 let ``A20 Cinnabar east surf route loads Route20 and Seafoam Gym`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
-    driver.Apply(SetVar("__surfing", 1))
 
-    // CinnabarIsland metadata connects east to Route20; y=8 is open water.
+    // This component fixture stages the connection edge directly, then applies
+    // the Surf state that ordinary play would have acquired from the adjacent shore.
     driver.Apply(Warp("CinnabarIsland", 19, 8, Some Right))
+    driver.Apply(SetVar("__surfing", 1))
     stepAndSettle driver Right
     Assert.Equal("Route20", owMap driver.Snapshot)
     Assert.Equal((0, 8), ((owOf driver.Snapshot).Player.CellX, (owOf driver.Snapshot).Player.CellY))

@@ -42,8 +42,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   message, and fanfare table, with staged runtime proof that his script resumes.
 - Cut now replaces the source tileset-specific obstruction block, opens real
   traversal in Ilex Forest and Route 2, and resets with source map reloads.
+- Surf now enters from a facing shore, renders the normal or Pikachu source
+  sprite, traverses water while rejecting invalid terrain, dismounts on legal
+  land, and restores a legal water state through save/reload.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1412/1412) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1414/1414) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
