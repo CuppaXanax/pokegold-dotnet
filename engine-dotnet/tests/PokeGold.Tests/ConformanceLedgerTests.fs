@@ -67,7 +67,7 @@ module ConformanceLedger =
               "Giveitem"; "Takeitem"; "Checkitem"; "Verbosegiveitem"
               "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
               "Opentext"; "Closetext"; "Writetext"; "Jumptext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton"; "Yesorno"
-              "Loadwildmon"; "Givepoke"; "Checkpoke"; "Loadtrainer"; "Startbattle"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
+              "Loadwildmon"; "Givepoke"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
               "Playmusic"; "Playsound"
               "Warp"; "Warpfacing"; "Reloadmap"; "Refreshmap"; "Changeblock"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
@@ -88,6 +88,8 @@ module ConformanceLedger =
           yield entry ScriptCommandCase "Itemnotify" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime test proves giveitem stages the current item, itemnotify renders the source item and pocket names, waits in a textbox, and resumes the script."
 
           yield entry ScriptCommandCase "Checkjustbattled" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 ScriptTests prove the source-compatible transient trainer-script truth value, false branch, and one-shot endifjustbattled consumption through the port's __just_battled state seam."
+
+          yield entry ScriptCommandCase "Startbattle" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 runtime tests prove script-visible WIN=0 for capture, DRAW=2 for wild RUN, and existing BAT-016 through BAT-019 loss blackout/abort behavior. reloadmapafterbattle's Mom/Bill post-battle dispatch remains open."
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Pokepic"; "Closepokepic"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"

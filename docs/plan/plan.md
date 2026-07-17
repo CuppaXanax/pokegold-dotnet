@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,425 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,426 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -373,6 +373,7 @@ Generated commands are typed, but many are approximate and several required comm
   - `startbattle`, `reloadmapafterbattle`, `checkjustbattled`, and `endifjustbattled` must use explicit win/loss/catch/run state.
   - Acceptance is covered jointly with BAT-016 through BAT-019.
   - ✅ `checkjustbattled` now returns the transient trainer-script state that `endifjustbattled` consumes, with both branch values and one-shot consumption covered by `ScriptTests`.
+  - ✅ `startbattle` now resumes capture as source `WIN = 0` and wild RUN as `DRAW = 2`; loss remains an explicit blackout/abort path. `reloadmapafterbattle` Mom/Bill dispatch remains open.
 
 - ✅ **SCR-002 — Implement route-relevant command stubs.**
   - `prompt` and `text_ram` are source text directives, not script opcodes; the parser no longer emits phantom script commands for them, while `MapText`, `TextBox`, and runtime buffer substitution preserve their behavior.

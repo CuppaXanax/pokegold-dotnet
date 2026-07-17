@@ -1095,9 +1095,20 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
             "WildCatchScene"
             [| Loadwildmon("RATTATA", 4)
                Startbattle
+               Ifequal(0, "WildCatchScene.Caught")
+               Writetext "WrongCatchResult"
+               End
                Writetext "CatchDone"
                End |]
-        |> fun s -> { s with Text = Map.ofList [ "CatchDone", "done<DONE>" ] }
+        |> fun s ->
+            { s with
+                Script =
+                    { s.Script with
+                        Labels = Map.ofList [ "WildCatchScene", 0; "WildCatchScene.Caught", 5 ] }
+                Text =
+                    Map.ofList
+                        [ "CatchDone", "done<DONE>"
+                          "WrongCatchResult", "wrong catch result<DONE>" ] }
 
     let ember = Moves.byName "EMBER"
     let mon =
@@ -1136,6 +1147,67 @@ let ``wild battle runtime catches Pokemon with Master Ball`` () =
     Assert.Contains(rattataDex, scene.DebugPlayer.DexSeen)
     Assert.Equal(777, scene.DebugPlayer.Money)
     Assert.Equal(Some "CatchDone", scene.RuntimeSnapshot.LastTextLabel)
+
+[<Fact>]
+let ``SCR-001 wild RUN resumes startbattle with source DRAW result`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "WildEscape"
+            [| Loadwildmon("RATTATA", 5)
+               Startbattle
+               Ifequal(2, "WildEscape.Draw")
+               Writetext "WrongResult"
+               End
+               Writetext "DrawResult"
+               End |]
+        |> fun s ->
+            { s with
+                Script =
+                    { s.Script with
+                        Labels = Map.ofList [ "WildEscape", 0; "WildEscape.Draw", 5 ] }
+                Text =
+                    Map.ofList
+                        [ "WrongResult", "wrong result<DONE>"
+                          "DrawResult", "draw result<DONE>" ] }
+    let runner = { PartyMon.create 155 20 with Moves = MoveLearn.tryLearnMove "TACKLE" [] }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ runner ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && scene.RuntimeSnapshot.LastTextLabel.IsNone do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons =
+            match top with
+            | :? BattleScene as battle when frame % 2 = 0 ->
+                let snapshot = battle.RuntimeSnapshot
+
+                if snapshot.MessageActive || not snapshot.PendingMessages.IsEmpty then
+                    { Buttons.none with A = true }
+                elif snapshot.Mode = "CommandMenu" && battle.CommandCursor = 0 then
+                    { Buttons.none with Down = true }
+                elif snapshot.Mode = "CommandMenu" && battle.CommandCursor = 2 then
+                    { Buttons.none with Right = true }
+                elif snapshot.Mode = "CommandMenu" && battle.CommandCursor = 3 then
+                    { Buttons.none with A = true }
+                else
+                    Buttons.none
+            | :? TextBoxScene when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        applyTransition stack (top.Update buttons)
+
+    Assert.Equal(Some "DrawResult", scene.RuntimeSnapshot.LastTextLabel)
 
 [<Fact>]
 let ``caught Pokemon goes to PC when party is full`` () =

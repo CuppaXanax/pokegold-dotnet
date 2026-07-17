@@ -2381,17 +2381,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             world <- World.setVar "VAR_BATTLETYPE" 0 world
                             None
                         | StartBattle ->
-                            let won = lastBattleResult = Some BattleVictory
+                            let scriptResult =
+                                match lastBattleResult with
+                                | Some BattleVictory -> 0
+                                | Some BattleEscape -> 2
+                                | Some BattleDefeat -> 1
+                                | None -> 1
                             stagedWild <- None
                             stagedTrainer <- None
                             world <- World.setVar "VAR_BATTLETYPE" 0 world
                             stagedWinText <- ""
                             stagedLossText <- ""
                             lastBattleResult <- None
-                            // ROM wBattleResult is zero for victory and nonzero
-                            // for escape/draw. Defeat is intercepted above and
-                            // never resumes this script continuation.
-                            Some (if won then 0 else 1)
+                            // Source wBattleResult is WIN=0, LOSE=1, DRAW=2.
+                            // Defeat is intercepted above and never resumes this
+                            // script continuation.
+                            Some scriptResult
                         | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
                         | _ -> None
 

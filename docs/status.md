@@ -62,8 +62,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
+- `startbattle` now returns source `WIN = 0` for a catch and `DRAW = 2` for a
+  wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
+  `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1425/1425) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1426/1426) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
