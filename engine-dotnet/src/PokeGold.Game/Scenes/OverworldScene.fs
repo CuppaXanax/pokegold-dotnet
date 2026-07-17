@@ -644,6 +644,40 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         match FieldMoves.tryUse moveName targetColl state.MapId world player.Party with
         | FieldMoves.NotUsable reason ->
             Push(TextBoxScene.Of(content, reason + "<DONE>") :> Scene)
+        | FieldMoves.Used("HEADBUTT", _) ->
+            let userName =
+                player.Party
+                |> List.tryFind (fun mon ->
+                    mon.Moves
+                    |> List.exists (fun (moveId, _) ->
+                        Moves.tryByIndex moveId
+                        |> Option.exists (fun moveData -> moveData.Name = "HEADBUTT")))
+                |> Option.map (fun mon -> mon.Nickname)
+                |> Option.defaultValue "A POKeMON"
+            let trainerId = World.getVar "__trainer_id" world
+
+            world <-
+                world
+                |> World.setBuffer "__last_field_move" "HEADBUTT"
+                |> World.setVar "__field_move_success" 1
+
+            interpretHostEffect (HostEffect.PlaySfx "Sfx_Headbutt")
+
+            match TreeEncounter.tryHeadbutt state.MapId x y trainerId encounterRng with
+            | Some(species, level) ->
+                stagedWild <- Some(species, level)
+                stagedTrainer <- None
+                world <- World.setVar "VAR_BATTLETYPE" 0 world
+                Push(
+                    TextBoxScene.Of(
+                        content,
+                        userName + " did a<LINE>HEADBUTT!<PROMPT>",
+                        onDone = fun () -> Replace(this.BuildBattle()))
+                    :> Scene)
+            | None ->
+                let text = "Nope. Nothing...<DONE>"
+                lastText <- Some("HeadbuttNothing", text)
+                Push(TextBoxScene.Of(content, text) :> Scene)
         | FieldMoves.Used("FLY", _) ->
             let destinations = FieldMoves.discoveredFlyPoints world
 
@@ -2425,6 +2459,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             match collId with
                             | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->
                                 this.UseFieldMove "CUT"
+                            | id when FieldMoves.isHeadbuttTree id ->
+                                this.UseFieldMove "HEADBUTT"
                             | id when id = FieldMoves.CollSurf || id = FieldMoves.CollWater21 ->
                                 this.UseFieldMove "SURF"
                             | id when id = FieldMoves.CollWhirlpool || id = FieldMoves.CollWhirlpool2C ->

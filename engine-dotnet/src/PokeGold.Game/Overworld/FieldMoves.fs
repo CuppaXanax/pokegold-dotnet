@@ -20,6 +20,12 @@ module FieldMoves =
     let CollCutTree1A = 0x1auy
 
     [<Literal>]
+    let CollHeadbuttTree = 0x15uy
+
+    [<Literal>]
+    let CollHeadbuttTree1D = 0x1duy
+
+    [<Literal>]
     let CollSurf = 0x29uy
 
     [<Literal>]
@@ -100,16 +106,22 @@ module FieldMoves =
 
     let private requirementFailure moveName world party =
         let moveName = normalize moveName
-        match requiredBadge moveName with
-        | None -> Some $"Unknown field move {moveName}"
-        | Some badge when not (PokeGold.Game.Overworld.Script.World.hasFlag badge world) ->
-            Some $"Need {badgeDisplay badge}"
-        | Some _ when not (hasMove moveName party) ->
-            Some $"No Pokémon knows {moveName}"
-        | _ -> None
+        if moveName = "HEADBUTT" then
+            if hasMove moveName party then None else Some "No Pokémon knows HEADBUTT"
+        else
+            match requiredBadge moveName with
+            | None -> Some $"Unknown field move {moveName}"
+            | Some badge when not (PokeGold.Game.Overworld.Script.World.hasFlag badge world) ->
+                Some $"Need {badgeDisplay badge}"
+            | Some _ when not (hasMove moveName party) ->
+                Some $"No Pokémon knows {moveName}"
+            | _ -> None
 
     let private isCutTree collId =
         collId = CollCutTree || collId = CollCutTree1A
+
+    let isHeadbuttTree collId =
+        collId = CollHeadbuttTree || collId = CollHeadbuttTree1D
 
     /// Source `CutTreeBlockPointers`: a cuttable collision is only actionable
     /// when the complete facing block also appears in the current tileset's
@@ -173,6 +185,8 @@ module FieldMoves =
             match moveName with
             | "CUT" when not (isCutTree targetCollId) -> NotUsable "Can't use CUT here"
             | "CUT" -> Used("CUT", "Used CUT!")
+            | "HEADBUTT" when not (isHeadbuttTree targetCollId) -> NotUsable "Can't use HEADBUTT here"
+            | "HEADBUTT" -> Used("HEADBUTT", "Used HEADBUTT!")
             | "SURF" when not (isSurfWater targetCollId) -> NotUsable "Can't use SURF here"
             | "SURF" -> Used("SURF", "Used SURF!")
             | "STRENGTH" -> Used("STRENGTH", "Boulders may now be moved!")

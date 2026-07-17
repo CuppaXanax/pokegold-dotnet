@@ -97,6 +97,18 @@ type WildEncounterTable =
       WaterRate: int
       Water: WildSlot list }
 
+/// A weighted Headbutt/Rock Smash encounter entry from `treemons.asm`.
+type TreeMonSlot =
+    { Weight: int
+      Species: string
+      Level: int }
+
+/// The common and rare weighted tables for one source treemon set.
+type TreeMonTable =
+    { Set: string
+      Common: TreeMonSlot list
+      Rare: TreeMonSlot list }
+
 /// Source layout selected by the TRAINERTYPE_* byte in trainer party data.
 [<RequireQualifiedAccess>]
 type TrainerPartyType =

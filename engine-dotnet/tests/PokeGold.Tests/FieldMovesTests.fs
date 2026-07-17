@@ -343,6 +343,22 @@ let ``Flash is only usable in source dark maps`` () =
     | FieldMoves.Used _ -> Assert.Fail("FLASH should reject a non-dark map")
 
 [<Fact>]
+let ``Headbutt needs a party user and source tree but no badge`` () =
+    let headbutter = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "HEADBUTT" [] }
+
+    match FieldMoves.tryUse "HEADBUTT" FieldMoves.CollHeadbuttTree "Route39" World.empty [ headbutter ] with
+    | FieldMoves.Used("HEADBUTT", _) -> ()
+    | other -> Assert.Fail(sprintf "expected HEADBUTT to work without a badge, got %A" other)
+
+    match FieldMoves.tryUse "HEADBUTT" 0uy "Route39" World.empty [ headbutter ] with
+    | FieldMoves.NotUsable _ -> ()
+    | FieldMoves.Used _ -> Assert.Fail("HEADBUTT should require a source tree collision")
+
+    match FieldMoves.tryUse "HEADBUTT" FieldMoves.CollHeadbuttTree "Route39" World.empty [] with
+    | FieldMoves.NotUsable _ -> ()
+    | FieldMoves.Used _ -> Assert.Fail("HEADBUTT should require a party user")
+
+[<Fact>]
 let ``PartyScene dispatches detected HM field move`` () =
     let mutable fieldMove = None
     let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "CUT" [] }

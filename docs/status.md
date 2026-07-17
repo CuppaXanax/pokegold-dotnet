@@ -56,8 +56,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Flash now visibly illuminates `PALETTE_DARK` caves only after a valid field use,
   persists through cave/save transitions, and resets when entering a town or route;
   its source fade, SFX timing, and palette curve remain presentation approximations.
+- Headbutt now uses generated Gold tree-map/weighted encounter data from real tree
+  A-press and Party-menu use, producing normal catchable wild battles or its no-encounter text branch;
+  confirmation, tree-shake animation/SFX, and random player-ID generation remain approximations.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1420/1420) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1424/1424) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

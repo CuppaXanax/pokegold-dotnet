@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,420 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,424 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -357,9 +357,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Flash is usable only on source `PALETTE_DARK` maps; it illuminates the dark-cave render, persists across cave/save transitions, and resets on source town/route map entry.
   - Dark Cave, Rock Tunnel, and Route 31 runtime coverage prove the player-facing result. The original white fade, SFX timing, and exact palette curve remain presentation approximations.
 
-- ⬜ **OVR-011 — Add runtime Headbutt.**
-  - The script command currently pauses only.
-  - Select encounters from generated tree tables for the current map/tree group and start a catchable battle.
+- ✅ **OVR-011 — Add runtime Headbutt.**
+  - A-press and Party-menu use on a real headbutt-tree collision use generated Gold tree-map and weighted encounter tables, run source score/chance selection, and stage a normal catchable wild battle or the no-encounter text branch.
+  - Route 39 runtime tests cover both outcomes; original confirmation, tree-shake animation/SFX, and random player-ID generation remain explicitly approximated.
 
 ## Story 2.3 — Required script commands have real semantics
 

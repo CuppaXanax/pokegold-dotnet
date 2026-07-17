@@ -443,6 +443,43 @@ module Emit =
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
+    let private treeMonsFile () : string =
+        let slots (slots: Parsers.TreeMonSlot list) =
+            slots
+            |> List.map (fun slot -> sprintf "{ Weight = %d; Species = \"%s\"; Level = %d }" slot.Weight slot.Species slot.Level)
+            |> String.concat "; "
+
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated Headbutt/Rock Smash tree encounter tables from data/wild/treemon*.asm.") |> ignore
+        sb.AppendLine("module TreeMonsData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let mapSets : Map<string, string> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for mapId, setName in Parsers.treeMonMaps do
+            sb.AppendLine(sprintf "            (\"%s\", \"%s\")" mapId setName) |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let tables : Map<string, TreeMonTable> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for table in Parsers.treeMonTables do
+            sb.AppendLine(
+                sprintf
+                    "            (\"%s\", { Set = \"%s\"; Common = [ %s ]; Rare = [ %s ] })"
+                    table.Set
+                    table.Set
+                    (slots table.Common)
+                    (slots table.Rare))
+            |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private dexFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -490,6 +527,7 @@ module Emit =
           "Marts.Generated.fs", martsFile ()
           "Trainers.Generated.fs", trainersFile ()
           "WildEncounters.Generated.fs", wildEncountersFile ()
+          "TreeMons.Generated.fs", treeMonsFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)

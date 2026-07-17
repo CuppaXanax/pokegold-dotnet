@@ -116,6 +116,64 @@ module WildOpponent =
             HeldItem = heldItem
             Gender = genderFromDvs species dvs }
 
+/// Source `TreeMonEncounter` selection for Headbutt trees.
+module TreeEncounter =
+
+    type TreeScore =
+        | Bad
+        | Good
+        | Rare
+
+    let private mapConst mapName =
+        Maps.canonicalConst mapName
+        |> Option.orElse (MapsData.byName mapName |> Option.map (fun map -> map.Meta.Const))
+        |> Option.defaultValue mapName
+
+    /// `GetTreeScore.CoordScore`: $(((x + 1)(y + 1) - 1) / 5) \bmod 10$.
+    let coordinateScore x y =
+        (((x + 1) * (y + 1) - 1) / 5) % 10
+
+    /// `GetTreeScore`: compare the faced-tree score to the player's ID remainder.
+    let score x y trainerId =
+        let difference = (coordinateScore x y - (trainerId % 10) + 10) % 10
+
+        if difference = 0 then Rare
+        elif difference < 5 then Good
+        else Bad
+
+    let private selectWeighted roll slots =
+        let rec select remaining =
+            function
+            | [] -> None
+            | slot :: rest when remaining < slot.Weight -> Some(slot.Species, slot.Level)
+            | slot :: rest -> select (remaining - slot.Weight) rest
+
+        select roll slots
+
+    /// Return the source tree encounter, if the map set, score gate, and weighted
+    /// table all produce one. `trainerId` is a persisted port-side stand-in for
+    /// GSC's wPlayerID; absent state reads as zero at the caller.
+    let tryHeadbutt mapName x y trainerId (rng: System.Random) =
+        match Map.tryFind (mapConst mapName) TreeMonsData.mapSets with
+        | Some setName ->
+            let tableName = setName.Replace("TREEMON_SET_", "")
+
+            match Map.tryFind tableName TreeMonsData.tables with
+            | Some table ->
+                let treeScore = score x y trainerId
+                let encounterChance, slots =
+                    match treeScore with
+                    | Bad -> 1, table.Common
+                    | Good -> 5, table.Common
+                    | Rare -> 8, table.Rare
+
+                if rng.Next(10) >= encounterChance then
+                    None
+                else
+                    selectWeighted (rng.Next(100)) slots
+            | None -> None
+        | None -> None
+
 /// Wild encounter trigger logic.
 /// Source: engine/overworld/wildmons.asm::TryWildEncounter
 module WildEncounter =

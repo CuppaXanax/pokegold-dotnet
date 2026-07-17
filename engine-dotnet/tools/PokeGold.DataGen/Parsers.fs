@@ -931,6 +931,80 @@ module Parsers =
           "data/wild/kanto_water.asm" ]
         |> List.collect parseWildEncounterFile
 
+    // --- Headbutt/Rock Smash treemon encounters ------------------------------
+
+    type TreeMonSlot =
+        { Weight: int
+          Species: string
+          Level: int }
+
+    type TreeMonTable =
+        { Set: string
+          Common: TreeMonSlot list
+          Rare: TreeMonSlot list }
+
+    let private treeMonMapRx = Regex(@"^\s*treemon_map\s+([A-Z0-9_]+),\s*(TREEMON_SET_[A-Z0-9_]+)", RegexOptions.IgnoreCase)
+    let private treeMonSetRx = Regex(@"^TreeMonSet_(FOREST|CANYON|ROCK):$", RegexOptions.IgnoreCase)
+    let private treeMonSlotRx = Regex(@"^\s*db\s+(\d+),\s*([A-Z_]+),\s*(\d+)\s*$", RegexOptions.IgnoreCase)
+
+    let treeMonMaps : (string * string) list =
+        let mutable inTreeMonMaps = false
+
+        [ for raw in Repo.readText("data/wild/treemon_maps.asm").Split('\n') do
+              let line = cleanAsmLine raw
+
+              if line = "TreeMonMaps:" then
+                  inTreeMonMaps <- true
+              elif line = "RockMonMaps:" then
+                  inTreeMonMaps <- false
+
+              let m = treeMonMapRx.Match line
+
+              if inTreeMonMaps && m.Success then
+                  yield m.Groups.[1].Value, m.Groups.[2].Value ]
+
+    let treeMonTables : TreeMonTable list =
+        let result = ResizeArray<TreeMonTable>()
+        let mutable currentSet: string option = None
+        let mutable tableIndex = 0
+        let mutable common = ResizeArray<TreeMonSlot>()
+        let mutable rare = ResizeArray<TreeMonSlot>()
+
+        let flush () =
+            match currentSet with
+            | Some setName ->
+                result.Add
+                    { Set = setName
+                      Common = List.ofSeq common
+                      Rare = List.ofSeq rare }
+            | None -> ()
+
+            currentSet <- None
+            tableIndex <- 0
+            common <- ResizeArray<TreeMonSlot>()
+            rare <- ResizeArray<TreeMonSlot>()
+
+        for line in removeConditionalBranches (Repo.readText("data/wild/treemons.asm").Split('\n')) do
+            let setMatch = treeMonSetRx.Match line
+            let slotMatch = treeMonSlotRx.Match line
+
+            if setMatch.Success then
+                flush ()
+                currentSet <- Some(setMatch.Groups.[1].Value.ToUpperInvariant())
+            elif currentSet.IsSome && line = "db -1" then
+                tableIndex <- tableIndex + 1
+            elif currentSet.IsSome && slotMatch.Success then
+                let slot =
+                    { Weight = int slotMatch.Groups.[1].Value
+                      Species = slotMatch.Groups.[2].Value
+                      Level = int slotMatch.Groups.[3].Value }
+
+                if tableIndex = 0 then common.Add slot
+                elif tableIndex = 1 then rare.Add slot
+
+        flush ()
+        List.ofSeq result
+
     // --- Items -----------------------------------------------------------------
 
     /// Intermediate record for one item parsed from the disassembly tables.

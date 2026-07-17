@@ -73,6 +73,7 @@
     <Compile Include="Data\Generated\Marts.Generated.fs" />
     <Compile Include="Data\Generated\Trainers.Generated.fs" />
     <Compile Include="Data\Generated\WildEncounters.Generated.fs" />
+    <Compile Include="Data\Generated\TreeMons.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
     <Compile Include="Data\Species.fs" />
@@ -256,6 +257,8 @@
     <GameDataInput Include="$(RepoRoot)data\wild\kanto_grass.asm" />
     <GameDataInput Include="$(RepoRoot)data\wild\johto_water.asm" />
     <GameDataInput Include="$(RepoRoot)data\wild\kanto_water.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\treemon_maps.asm" />
+    <GameDataInput Include="$(RepoRoot)data\wild\treemons.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\parties.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\trainers\dvs.asm" />
@@ -287,6 +290,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Marts.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Trainers.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\WildEncounters.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\TreeMons.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>
 

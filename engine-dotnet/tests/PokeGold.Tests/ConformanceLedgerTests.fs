@@ -400,6 +400,8 @@ module ConformanceLedger =
 
           yield entry FieldMove "FLASH" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-010 tests prove source PALETTE_DARK eligibility, visible Dark Cave illumination from the real Party menu, persistence through cave and save transitions, and source town/route reset. The original white fade, SFX timing, and exact palette curve remain presentation approximations."
 
+          yield entry FieldMove "HEADBUTT" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-011 tests prove real Route 39 tree A-press and Party-menu dispatch, generated Gold treemon map/table data, source score/chance/weighted selection, a normal catchable wild battle, and the no-encounter text branch. The original confirmation prompt, tree-shake animation/SFX, and randomly assigned player ID remain approximated; the port reads a persisted __trainer_id seam that defaults to zero."
+
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]
 

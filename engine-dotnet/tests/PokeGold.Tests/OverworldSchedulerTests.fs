@@ -2067,6 +2067,143 @@ let ``OVR-010 Party Flash illuminates dark caves persists in caves and resets ou
     scene.DebugWarp "Route31" 1 1 Down
     Assert.Equal(0, World.getVar "__flash_active" scene.DebugWorld)
 
+let private route39HeadbuttFixture (content: Content) =
+    let route = OverworldState.loadById content "Route39"
+    let occupied x y = route.Npcs |> Array.exists (fun npc -> npc.CellX = x && npc.CellY = y)
+
+    [ for y in 0 .. route.Map.Height * 2 - 1 do
+          for x in 0 .. route.Map.Width * 2 - 1 do
+              let collision = Movement.collisionIdAtCell route.Map route.Collision x y
+
+              if (collision = 0x15uy || collision = 0x1duy)
+                 && not (occupied x y)
+                 && MapEvents.bgAt x y route.Events |> Option.isNone then
+                  for direction in [ Down; Up; Left; Right ] do
+                      let dx, dy = delta direction
+                      let px, py = x - dx, y - dy
+
+                      if px >= 0
+                         && py >= 0
+                         && px < route.Map.Width * 2
+                         && py < route.Map.Height * 2
+                         && Movement.cellWalkable route.Map route.Collision px py
+                         && not (occupied px py) then
+                          yield px, py, direction, x, y ]
+    |> List.tryHead
+    |> Option.defaultWith (fun () -> failwith "expected Route 39 to contain an unoccupied Headbutt tree")
+
+[<Fact>]
+let ``OVR-011 Route39 Party Headbutt starts a catchable forest battle`` () =
+    let content = Content()
+    let playerX, playerY, facing, treeX, treeY = route39HeadbuttFixture content
+
+    let headbutter = { PartyMon.create 155 20 with Moves = MoveLearn.tryLearnMove "HEADBUTT" [] }
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "Route39" playerX playerY facing,
+            encounterRandom = FixedRandom([ 0; 0; 191; 0xAB; 0xCD ]))
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ headbutter ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let press buttons =
+        let top = stack.[stack.Count - 1]
+        applyTransition stack (top.Update buttons)
+        applyTransition stack (stack.[stack.Count - 1].Update Buttons.none)
+
+    press { Buttons.none with Start = true }
+    press { Buttons.none with Down = true }
+    press { Buttons.none with A = true }
+    press { Buttons.none with A = true }
+
+    for _ in 1 .. 3 do
+        press { Buttons.none with Down = true }
+
+    press { Buttons.none with A = true }
+    Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+
+    let mutable frame = 0
+    while frame < 300 && not (stack.[stack.Count - 1] :? BattleScene) do
+        frame <- frame + 1
+        tickStack stack frame
+
+    match stack.[stack.Count - 1] with
+    | :? BattleScene as battle ->
+        Assert.Equal("Wild", battle.RuntimeSnapshot.Kind)
+        let opponent = Assert.Single(battle.CurrentState.EnemyTeam)
+        Assert.Equal("CATERPIE", opponent.Species.Name)
+        Assert.Equal(10, opponent.Level)
+        Assert.Equal("HEADBUTT", World.getBuffer "__last_field_move" scene.DebugWorld)
+    | other -> failwithf "expected a catchable Headbutt battle after the tree shake, got %s" (other.GetType().Name)
+
+[<Fact>]
+let ``OVR-011 Route39 Headbutt reports the source no-encounter branch`` () =
+    let content = Content()
+    let playerX, playerY, facing, treeX, treeY = route39HeadbuttFixture content
+    let headbutter = { PartyMon.create 155 20 with Moves = MoveLearn.tryLearnMove "HEADBUTT" [] }
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "Route39" playerX playerY facing,
+            encounterRandom = FixedRandom([ 8 ]))
+    scene.Restore(World.empty, { PlayerStateOps.initial with Party = [ headbutter ] })
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    match (scene :> Scene).Update { Buttons.none with A = true } with
+    | Push (:? TextBoxScene as text) -> stack.Add(text :> Scene)
+    | other -> failwithf "expected Headbutt no-encounter text, got %A" other
+
+    Assert.Equal(Some "HeadbuttNothing", scene.RuntimeSnapshot.LastTextLabel)
+    Assert.Equal(Some "Nope. Nothing...<DONE>", scene.RuntimeSnapshot.LastRenderedText)
+
+    let mutable frame = 0
+    while frame < 300 && stack.Count > 1 do
+        frame <- frame + 1
+        tickStack stack frame
+
+    Assert.Equal(1, stack.Count)
+
+    match (scene :> Scene).Update Buttons.none with
+    | Stay -> ()
+    | other -> failwithf "Headbutt no-encounter branch should not start a battle, got %A" other
+
+    Assert.True(scene.CanCapture)
+
+[<Fact>]
+let ``OVR-011 generated tree tables retain source map sets scores and weighted slots`` () =
+        Assert.Equal("TREEMON_SET_FOREST", TreeMonsData.mapSets.["ROUTE_39"])
+        Assert.Equal("TREEMON_SET_CANYON", TreeMonsData.mapSets.["ROUTE_29"])
+        Assert.Equal("TREEMON_SET_NONE", TreeMonsData.mapSets.["ROUTE_40"])
+
+        let forest = TreeMonsData.tables.["FOREST"]
+        let assertRareSlot index weight species level =
+            let slot = List.item index forest.Rare
+            Assert.Equal(weight, slot.Weight)
+            Assert.Equal(species, slot.Species)
+            Assert.Equal(level, slot.Level)
+
+        Assert.Equal(6, forest.Rare.Length)
+        assertRareSlot 0 50 "CATERPIE" 10
+        assertRareSlot 1 15 "PINECO" 10
+        assertRareSlot 2 15 "PINECO" 10
+        assertRareSlot 3 10 "EXEGGCUTE" 10
+        assertRareSlot 4 5 "EXEGGCUTE" 10
+        assertRareSlot 5 5 "BUTTERFREE" 10
+
+        Assert.Equal(6, TreeEncounter.coordinateScore 18 6)
+        Assert.Equal(TreeEncounter.Rare, TreeEncounter.score 18 6 6)
+        Assert.Equal(TreeEncounter.Good, TreeEncounter.score 18 6 4)
+        Assert.Equal(TreeEncounter.Bad, TreeEncounter.score 18 6 0)
+        Assert.Equal(Some("PINECO", 10), TreeEncounter.tryHeadbutt "Route39" 18 6 6 (FixedRandom([ 0; 50 ])))
+        Assert.Equal(None, TreeEncounter.tryHeadbutt "Route39" 18 6 6 (FixedRandom([ 8 ])))
+        Assert.Equal(None, TreeEncounter.tryHeadbutt "Route40" 18 6 0 (FixedRandom([ 0; 0 ])))
+
 [<Fact>]
 let ``OVR-009 Party Fly selects discovered source destination and persists its spawn`` () =
     let content = Content()
