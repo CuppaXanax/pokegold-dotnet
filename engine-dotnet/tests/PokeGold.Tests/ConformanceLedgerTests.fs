@@ -398,8 +398,7 @@ module ConformanceLedger =
 
           yield entry FieldMove "FLY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-009 scheduler test proves the generated 24-entry flypoint table, source outdoor gating, discovered-destination filtering through the real Party menu, cancellation, source-spawn arrival, and save restoration. The original town-map art and Fly animation remain presentation work."
 
-          yield! many FieldMove ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "HM field move has badge/move/terrain blockers, party-menu dispatch, and runtime coverage; exact map mutations/warps remain future fidelity work."
-            [ "FLASH" ]
+          yield entry FieldMove "FLASH" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-010 tests prove source PALETTE_DARK eligibility, visible Dark Cave illumination from the real Party menu, persistence through cave and save transitions, and source town/route reset. The original white fade, SFX timing, and exact palette curve remain presentation approximations."
 
           yield! many HostEffectCase ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "Host effect is explicitly interpreted by the scene shell."
             [ "PlayMusic"; "StopMusic"; "PlaySfx"; "PlayJingle" ] ]

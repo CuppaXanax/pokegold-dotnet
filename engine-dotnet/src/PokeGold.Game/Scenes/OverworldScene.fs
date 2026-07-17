@@ -586,6 +586,30 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
         wasSurfing && not onWater
 
+    member private _.ResetFlashIfOutOfCave() =
+        match Maps.byName state.MapId with
+        | Some map when
+            (map.Meta.Environment = "TOWN" || map.Meta.Environment = "ROUTE")
+            && World.getVar "__flash_active" world <> 0 ->
+            world <- World.setVar "__flash_active" 0 world
+        | _ -> ()
+
+    member private _.DarkMapNeedsFlash() =
+        Maps.byName state.MapId
+        |> Option.exists (fun map -> map.Meta.Palette = "PALETTE_DARK")
+        && World.getVar "__flash_active" world = 0
+
+    member private this.ApplyDarknessOverlay(fb: Framebuffer) =
+        if this.DarkMapNeedsFlash() then
+            let pixels = fb.Pixels
+            let mutable i = 0
+
+            while i < pixels.Length do
+                pixels.[i] <- byte (int pixels.[i] / 5)
+                pixels.[i + 1] <- byte (int pixels.[i + 1] / 5)
+                pixels.[i + 2] <- byte (int pixels.[i + 2] / 5)
+                i <- i + 4
+
     member private _.ButtonsForDirection(direction) =
         match direction with
         | Down -> { Buttons.none with Down = true }
@@ -835,6 +859,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private this.EnterMap(nextState: OverworldState, playMusic: bool) : Transition =
         state <- nextState
         this.RegisterFlyPointArrival()
+        this.ResetFlashIfOutOfCave()
         balanceOverlay <- None
         resetObjectPresence ()
         firedCoords <- Set.empty
@@ -1984,6 +2009,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member this.Restore(w: World, p: PlayerState) =
         world <- w
         player <- p
+        this.ResetFlashIfOutOfCave()
         allowDebugBattleFixture <- false
         balanceOverlay <- None
         fadeOverlay <- None
@@ -2556,4 +2582,5 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 WindowRenderer.drawString fb content.Font TextRenderer.palette 6 1 (sprintf "MONEY $%d" player.Money)
                 WindowRenderer.drawString fb content.Font TextRenderer.palette 6 3 (sprintf "COIN %d" player.Coins)
 
+            this.ApplyDarknessOverlay(fb)
             applyFadeOverlay fb

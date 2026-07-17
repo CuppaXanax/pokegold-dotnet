@@ -156,6 +156,10 @@ module FieldMoves =
         Maps.byName mapId
         |> Option.exists (fun map -> map.Meta.Environment = "TOWN" || map.Meta.Environment = "ROUTE")
 
+    let private isDarkMap mapId =
+        Maps.byName mapId
+        |> Option.exists (fun map -> map.Meta.Palette = "PALETTE_DARK")
+
     let discoveredFlyPoints (world: PokeGold.Game.Overworld.Script.World) =
         MapsData.flyPoints
         |> Array.filter (fun point -> PokeGold.Game.Overworld.Script.World.hasFlag point.Flag world)
@@ -180,6 +184,7 @@ module FieldMoves =
             | "FLY" when discoveredFlyPoints world |> List.isEmpty ->
                 NotUsable "No known FLY destination"
             | "FLY" -> Used("FLY", $"Used FLY from {mapId}!")
+            | "FLASH" when not (isDarkMap mapId) -> NotUsable "Can't use FLASH here"
             | "FLASH" -> Used("FLASH", "Used FLASH!")
             | _ -> NotUsable $"Can't use {moveName} here"
 

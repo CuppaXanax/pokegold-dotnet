@@ -330,6 +330,19 @@ let ``Fly requires a known fly point`` () =
     | FieldMoves.Used _ -> Assert.Fail("FLY should reject indoor maps")
 
 [<Fact>]
+let ``Flash is only usable in source dark maps`` () =
+    let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "FLASH" [] }
+    let world = World.empty |> World.setFlag "ENGINE_ZEPHYRBADGE"
+
+    match FieldMoves.tryUse "FLASH" 0uy "DarkCaveVioletEntrance" world [ mon ] with
+    | FieldMoves.Used("FLASH", _) -> ()
+    | other -> Assert.Fail(sprintf "expected FLASH in a dark cave, got %A" other)
+
+    match FieldMoves.tryUse "FLASH" 0uy "NewBarkTown" world [ mon ] with
+    | FieldMoves.NotUsable _ -> ()
+    | FieldMoves.Used _ -> Assert.Fail("FLASH should reject a non-dark map")
+
+[<Fact>]
 let ``PartyScene dispatches detected HM field move`` () =
     let mutable fieldMove = None
     let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "CUT" [] }

@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,418 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,420 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -353,8 +353,9 @@ Badge, move, and some terrain checks exist. Most actions set world variables rat
   - Source `flypoints.asm` entries are generated with their source spawn and discovered engine flag; Fly requires a source outdoor map and presents only discovered destinations.
   - The Party-menu runtime test proves cancellation, Goldenrod's exact source spawn, and save restoration. The original town-map art and Fly animation remain presentation work.
 
-- 🟡 **OVR-010 — Complete Flash.**
-  - Existing eligibility state must control actual cave darkness rendering and survive map transitions as the source requires.
+- ✅ **OVR-010 — Complete Flash.**
+  - Flash is usable only on source `PALETTE_DARK` maps; it illuminates the dark-cave render, persists across cave/save transitions, and resets on source town/route map entry.
+  - Dark Cave, Rock Tunnel, and Route 31 runtime coverage prove the player-facing result. The original white fade, SFX timing, and exact palette curve remain presentation approximations.
 
 - ⬜ **OVR-011 — Add runtime Headbutt.**
   - The script command currently pauses only.

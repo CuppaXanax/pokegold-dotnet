@@ -1997,7 +1997,7 @@ let ``party HM field move dispatches through overworld runtime`` () =
     let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "FLASH" [] }
     let player = { PlayerStateOps.initial with Party = [ mon ] }
     let world = World.empty |> World.setFlag "ENGINE_ZEPHYRBADGE"
-    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "NewBarkTown" 5 5 Down)
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "DarkCaveVioletEntrance" 1 1 Down)
     scene.Restore(world, player)
 
     let stack = ResizeArray<Scene>()
@@ -2021,6 +2021,51 @@ let ``party HM field move dispatches through overworld runtime`` () =
     Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
     Assert.Equal(1, World.getVar "__flash_active" scene.DebugWorld)
     Assert.Equal("FLASH", World.getBuffer "__last_field_move" scene.DebugWorld)
+
+[<Fact>]
+let ``OVR-010 Party Flash illuminates dark caves persists in caves and resets outdoors`` () =
+    let content = Content()
+    let mon = { PartyMon.create 155 10 with Moves = MoveLearn.tryLearnMove "FLASH" [] }
+    let player = { PlayerStateOps.initial with Party = [ mon ] }
+    let world = World.empty |> World.setFlag "ENGINE_ZEPHYRBADGE"
+    let scene = OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "DarkCaveVioletEntrance" 1 1 Down)
+    scene.Restore(world, player)
+    let unlitBrightness = renderBrightness (scene :> Scene)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let press buttons =
+        let top = stack.[stack.Count - 1]
+        applyTransition stack (top.Update buttons)
+        applyTransition stack (stack.[stack.Count - 1].Update Buttons.none)
+
+    press { Buttons.none with Start = true }
+    press { Buttons.none with Down = true }
+    press { Buttons.none with A = true }
+    press { Buttons.none with A = true }
+
+    for _ in 1 .. 3 do
+        press { Buttons.none with Down = true }
+
+    press { Buttons.none with A = true }
+
+    Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+    Assert.Equal(1, World.getVar "__flash_active" scene.DebugWorld)
+    let litBrightness = renderBrightness (scene :> Scene)
+    Assert.True(litBrightness > unlitBrightness * 3.0, sprintf "Flash should illuminate a dark cave (%f -> %f)" unlitBrightness litBrightness)
+
+    press { Buttons.none with A = true }
+    let restored = OverworldScene.OfSave(content, SilentSound(), scene.Capture())
+    Assert.Equal(1, World.getVar "__flash_active" restored.DebugWorld)
+    Assert.True(renderBrightness (restored :> Scene) > unlitBrightness * 3.0)
+
+    scene.DebugWarp "RockTunnel1F" 1 1 Down
+    Assert.Equal(1, World.getVar "__flash_active" scene.DebugWorld)
+    Assert.True(renderBrightness (scene :> Scene) > unlitBrightness * 3.0)
+
+    scene.DebugWarp "Route31" 1 1 Down
+    Assert.Equal(0, World.getVar "__flash_active" scene.DebugWorld)
 
 [<Fact>]
 let ``OVR-009 Party Fly selects discovered source destination and persists its spawn`` () =

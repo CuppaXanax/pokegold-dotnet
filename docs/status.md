@@ -53,8 +53,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Fly now consumes source-generated flypoint/spawn data, filters the Party-menu
   selector to discovered destinations, and reaches the exact selected spawn
   with save restoration; original Fly map art and animation remain presentation work.
+- Flash now visibly illuminates `PALETTE_DARK` caves only after a valid field use,
+  persists through cave/save transitions, and resets when entering a town or route;
+  its source fade, SFX timing, and palette curve remain presentation approximations.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1418/1418) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1420/1420) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
