@@ -562,7 +562,9 @@ module Script =
                     let call = World.getBuffer "__special_phone_call" world
                     call <> "" && call <> "SPECIALCALL_NONE"
                 run world { next with ScriptVar = (if hasCall then 1 else 0) }
-            | Checkjustbattled -> run world { next with ScriptVar = 0 }
+            | Checkjustbattled ->
+                let justBattled = World.getVar "__just_battled" world <> 0
+                run world { next with ScriptVar = if justBattled then 1 else 0 }
             | Askforphonenumber phone -> suspend next world (AskPhoneNumber phone)
             | Checkmoney args -> suspend next world (CheckMoney(intArg args))
             | Checkcoins amount -> suspend next world (CheckCoins(defaultArg amount 0))

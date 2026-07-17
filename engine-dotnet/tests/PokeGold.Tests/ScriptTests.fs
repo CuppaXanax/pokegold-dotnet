@@ -710,6 +710,26 @@ let private driveSilent world label prog =
     drive (fun _ -> None) world label prog
 
 [<Fact>]
+let ``checkjustbattled exposes and endifjustbattled consumes trainer script state`` () =
+    let branchProg =
+        parse "S:\n\tcheckjustbattled\n\tiftrue .JustBattled\n\twritetext OrdinaryText\n\tend\n.JustBattled:\n\twritetext JustBattledText\n\tend\n"
+
+    let justBattled = World.empty |> World.setVar "__just_battled" 1
+
+    match (Script.start "S" justBattled branchProg "TEST").Outcome with
+    | Suspended(_, ShowText("JustBattledText", false)) -> ()
+    | other -> Assert.Fail(sprintf "expected just-battled branch, got %A" other)
+
+    match (Script.start "S" World.empty branchProg "TEST").Outcome with
+    | Suspended(_, ShowText("OrdinaryText", false)) -> ()
+    | other -> Assert.Fail(sprintf "expected ordinary branch, got %A" other)
+
+    let endProg = parse "S:\n\tendifjustbattled\n\twritetext AfterText\n\tend\n"
+    let endedWorld, endedEffects = driveSilent justBattled "S" endProg
+    Assert.Empty(endedEffects)
+    Assert.Equal(0, World.getVar "__just_battled" endedWorld)
+
+[<Fact>]
 let ``map music specials emit host music effects`` () =
     let prog =
         parse

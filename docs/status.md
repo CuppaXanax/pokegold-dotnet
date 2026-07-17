@@ -59,8 +59,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Headbutt now uses generated Gold tree-map/weighted encounter data from real tree
   A-press and Party-menu use, producing normal catchable wild battles or its no-encounter text branch;
   confirmation, tree-shake animation/SFX, and random player-ID generation remain approximations.
+- `checkjustbattled` now returns the transient trainer-script state consumed by
+  `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
+  remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1424/1424) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1425/1425) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
