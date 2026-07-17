@@ -418,7 +418,8 @@ Many specials have useful seams, but some are simplified or skipped.
 
 - ⬜ **SCR-009 — Burn down non-link completion-special stubs.**
   - ✅ `DaisysGrooming` routes through party selection and applies the source grooming probability/friendship tiers with Blues House runtime coverage.
-  - Triage and implement the remaining required behavior for Lucky Number, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Oak’s PC completion checks, Diploma, and related normal-play specials.
+  - ✅ `ProfOaksPCBoot` counts live seen/owned species, preserves all 19 source rating thresholds and messages, plays the matching fanfare, and resumes the real Oak's Lab script.
+  - Triage and implement the remaining required behavior for Lucky Number, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Diploma, and related normal-play specials.
   - Link-only cable-club behavior remains excluded.
 
 - ⬜ **SCR-010 — Define deliberate replacements for unavailable external services.**

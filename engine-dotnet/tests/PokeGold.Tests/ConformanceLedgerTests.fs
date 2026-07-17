@@ -153,12 +153,14 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "DaisysGrooming" FaithfulTested [ SideSystem; RequiredFor100Percent ] "Blues House runtime test covers 3 PM gating, party selection, source 255/256 grooming chance, low-tier +3 friendship, and daily ENGINE_DAISYS_GROOMING flag."
 
+          yield entry ScriptSpecial "ProfOaksPCBoot" FaithfulTested [ SideSystem; RequiredFor100Percent ] "SCR-009 Oak rating boundary coverage preserves all 19 source ceilings and the Oaks Lab staged runtime test proves live seen/owned counts, exact rating text, matching fanfare, and script resumption."
+
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMysteryGift"; "CheckPokerus"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"
               "MrChrono"; "PhotoStudio"
-              "PrintTodaysLuckyNumber"; "ProfOaksPCBoot"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"
+              "PrintTodaysLuckyNumber"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"
               "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."

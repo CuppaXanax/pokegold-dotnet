@@ -179,6 +179,9 @@ type ScriptEffect =
     | UnownPuzzle of puzzleId: int
     /// `special UnownPrinter` — show the Unown stamp printer UI.
     | UnownPrinter
+    /// `special ProfOaksPCBoot` — count the runtime Pokédex, display Oak's
+    /// source rating, play its fanfare, and resume after dismissal.
+    | ShowOakPokedexRating
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -475,6 +478,7 @@ module Script =
             | Special "OlderHaircutBrother" -> suspend next world (Haircut "OLDER")
             | Special "YoungerHaircutBrother" -> suspend next world (Haircut "YOUNGER")
             | Special "DaisysGrooming" -> suspend next world (Haircut "DAISY")
+            | Special "ProfOaksPCBoot" -> suspend next world ShowOakPokedexRating
             | Special "MagnetTrain" ->
                 let destination =
                     if vm.ScriptVar = 0 then "SaffronMagnetTrainStation"

@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
 
 ## Current goal
 
@@ -38,8 +38,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   evolution, trading, breeding, Pokedex, and conformance-ledger tests.
 - Pokédex obtainability has a static 251-species source inventory. This is data
   coverage, not yet a player-facing runtime acquisition proof.
+- Oak's Lab now rates the live Pokédex through the source 19-entry threshold,
+  message, and fanfare table, with staged runtime proof that his script resumes.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1406/1406) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1408/1408) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

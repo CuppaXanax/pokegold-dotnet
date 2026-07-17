@@ -16,6 +16,17 @@ type private SilentSound() =
         member _.PlayJingle _ = ()
         member _.StopMusic() = ()
 
+type private RecordingSound() =
+    let sfx = ResizeArray<string>()
+
+    member _.PlayedSfx = List.ofSeq sfx
+
+    interface ISoundBoard with
+        member _.PlayMusic _ = ()
+        member _.PlaySfx name = sfx.Add name
+        member _.PlayJingle _ = ()
+        member _.StopMusic() = ()
+
 type private IdleScene() =
     interface Scene with
         member _.Update _ = Stay
@@ -425,6 +436,74 @@ let ``Daisy grooming selects a party mon and applies the source friendship tier`
         tickStack stack buttons
 
     Assert.True(completed (), "Daisy should groom one selected non-Egg and add source low-tier friendship.")
+
+[<Fact>]
+let ``Oak Pokedex ratings preserve every source threshold boundary`` () =
+    let thresholds =
+        [ 9; 19; 34; 49; 64; 79; 94; 109; 124; 139
+          154; 169; 184; 199; 214; 229; 239; 248; 255 ]
+
+    Assert.Equal<int list>(thresholds, OakPokedexRating.all |> List.map _.MaxOwned)
+
+    OakPokedexRating.all
+    |> List.iteri (fun index rating ->
+        Assert.Equal(index + 1, (OakPokedexRating.forOwned rating.MaxOwned).Number)
+
+        if index > 0 then
+            let priorThreshold = OakPokedexRating.all.[index - 1].MaxOwned
+            Assert.Equal(index + 1, (OakPokedexRating.forOwned (priorThreshold + 1)).Number))
+
+    let final = OakPokedexRating.forOwned 251
+    Assert.Equal(19, final.Number)
+    Assert.Equal("Sfx_DexFanfare230Plus", final.Sfx)
+    Assert.Contains("Whoa! A perfect", final.Text)
+    Assert.Contains("Congratulations!", final.Text)
+
+[<Fact>]
+let ``SCR-009 Oaks Lab runtime shows source Oak rating and resumes his script`` () =
+    let content = Content()
+    let sound = RecordingSound()
+    let overworld =
+        OverworldScene(content, sound, OverworldState.loadByIdAt content "OaksLab" 4 3 Up)
+
+    let player =
+        { PlayerStateOps.initial with
+            DexSeen = Set.ofList [ 1 .. 200 ]
+            DexOwn = Set.ofList [ 1 .. 169 ] }
+
+    let world = World.empty |> World.setEvent "EVENT_OPENED_MT_SILVER"
+    overworld.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let mutable ratingText = None
+    let mutable frame = 0
+
+    while frame < 6000 && not (stack.Count = 1 && overworld.CanCapture && ratingText.IsSome) do
+        frame <- frame + 1
+
+        match overworld.RuntimeSnapshot.LastTextLabel, overworld.RuntimeSnapshot.LastRenderedText with
+        | Some "ProfOaksPCBoot", Some text -> ratingText <- Some text
+        | _ -> ()
+
+        let buttons =
+            match stack.[stack.Count - 1].GetType().Name with
+            | "TextBoxScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tickStack stack buttons
+
+    let text = ratingText |> Option.defaultWith (fun () -> failwith "Oak rating UI never appeared")
+    Assert.Contains("200 #MON seen", text)
+    Assert.Contains("169 #MON owned", text)
+    Assert.Contains("Have you met KURT?", text)
+    Assert.Contains("His custom #\nBALLS should help.", text)
+    Assert.Contains("Sfx_DexFanfare140169", sound.PlayedSfx)
+    Assert.Equal(Some "OakLabGoodbyeText", overworld.RuntimeSnapshot.LastTextLabel)
+    Assert.True(stack.Count = 1 && overworld.CanCapture, "Oak's Lab script should resume through its goodbye text.")
 
 [<Fact>]
 let ``celadon prize counter exchanges coins for Porygon and registers dex`` () =

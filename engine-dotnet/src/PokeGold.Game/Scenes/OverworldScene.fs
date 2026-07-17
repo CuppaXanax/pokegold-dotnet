@@ -24,6 +24,46 @@ module Grooming =
         elif friendship < 200 then mid
         else high
 
+type OakPokedexRating =
+    { Number: int
+      MaxOwned: int
+      Sfx: string
+      Text: string }
+
+/// The ordered `OakRatings` table and exact English messages from
+/// `data/events/pokedex_ratings.asm` and `data/text/common_2.asm`.
+module OakPokedexRating =
+    let all =
+        [ { Number = 1; MaxOwned = 9; Sfx = "Sfx_DexFanfareLessThan20"; Text = "Look for #MON\nin grassy areas!" }
+          { Number = 2; MaxOwned = 19; Sfx = "Sfx_DexFanfareLessThan20"; Text = "Good. I see you\nunderstand how to\nuse # BALLS." }
+          { Number = 3; MaxOwned = 34; Sfx = "Sfx_DexFanfare2049"; Text = "You're getting\ngood at this.\n\nBut you have a\nlong way to go." }
+          { Number = 4; MaxOwned = 49; Sfx = "Sfx_DexFanfare2049"; Text = "You need to fill\nup the #DEX.\n\nCatch different\nkinds of #MON!" }
+          { Number = 5; MaxOwned = 64; Sfx = "Sfx_DexFanfare5079"; Text = "You're trying--I\ncan see that.\n\nYour #DEX is\ncoming together." }
+          { Number = 6; MaxOwned = 79; Sfx = "Sfx_DexFanfare5079"; Text = "To evolve, some\n#MON grow,\n\nothers use the\neffects of STONES." }
+          { Number = 7; MaxOwned = 94; Sfx = "Sfx_DexFanfare80109"; Text = "Have you gotten a\nfishing ROD? You\n\ncan catch #MON\nby fishing." }
+          { Number = 8; MaxOwned = 109; Sfx = "Sfx_DexFanfare80109"; Text = "Excellent! You\nseem to like col-\nlecting things!" }
+          { Number = 9; MaxOwned = 124; Sfx = "Sfx_CaughtMon"; Text = "Some #MON only\nappear during\n\ncertain times of\nthe day." }
+          { Number = 10; MaxOwned = 139; Sfx = "Sfx_CaughtMon"; Text = "Your #DEX is\nfilling up. Keep\nup the good work!" }
+          { Number = 11; MaxOwned = 154; Sfx = "Sfx_DexFanfare140169"; Text = "I'm impressed.\nYou're evolving\n\n#MON, not just\ncatching them." }
+          { Number = 12; MaxOwned = 169; Sfx = "Sfx_DexFanfare140169"; Text = "Have you met KURT?\nHis custom #\nBALLS should help." }
+          { Number = 13; MaxOwned = 184; Sfx = "Sfx_DexFanfare170199"; Text = "Wow. You've found\nmore #MON than\n\nthe last #DEX\nresearch project." }
+          { Number = 14; MaxOwned = 199; Sfx = "Sfx_DexFanfare170199"; Text = "Are you trading\nyour #MON?\n\nIt's tough to do\nthis alone!" }
+          { Number = 15; MaxOwned = 214; Sfx = "Sfx_DexFanfare200229"; Text = "Wow! You've hit\n200! Your #DEX\nis looking great!" }
+          { Number = 16; MaxOwned = 229; Sfx = "Sfx_DexFanfare200229"; Text = "You've found so\nmany #MON!\n\nYou've really\nhelped my studies!" }
+          { Number = 17; MaxOwned = 239; Sfx = "Sfx_DexFanfare230Plus"; Text = "Magnificent! You\ncould become a\n\n#MON professor\nright now!" }
+          { Number = 18; MaxOwned = 248; Sfx = "Sfx_DexFanfare230Plus"; Text = "Your #DEX is\namazing! You're\n\nready to turn\nprofessional!" }
+          { Number = 19; MaxOwned = 255; Sfx = "Sfx_DexFanfare230Plus"; Text = "Whoa! A perfect\n#DEX! I've\n\ndreamt about this!\nCongratulations!" } ]
+
+    let forOwned owned =
+        all
+        |> List.find (fun rating -> owned <= rating.MaxOwned)
+
+    let render seen owned =
+        let rating = forOwned owned
+        let text =
+            $"Current #DEX\ncompletion level:<PROMPT>{seen} #MON seen\n{owned} #MON owned\n\nPROF.OAK's\nRating:<PROMPT>{rating.Text}<DONE>"
+        rating, text
+
 module TrainerSight =
     let private isInSightCone (npc: NpcObject) (px: int) (py: int) : bool =
         let dx = px - npc.CellX
@@ -1492,6 +1532,13 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         let rendered = this.UnownPrinterText()
                         lastText <- Some("UnownPrinter", rendered)
                         stop (Push(TextBoxScene.Of(content, rendered) :> Scene))
+                    | ShowOakPokedexRating ->
+                        pending <- Some(vm, effect)
+                        let rating, rendered = OakPokedexRating.render player.DexSeen.Count player.DexOwn.Count
+                        lastText <- Some("ProfOaksPCBoot", rendered)
+                        interpretHostEffect (HostEffect.PlaySfx rating.Sfx)
+                        let speed = Options.textSpeedDelay player.Options.TextSpeed
+                        stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | GiveItem(item, qty, false) ->
@@ -2141,6 +2188,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | MagikarpHouseSign -> None
                         | UnownPuzzle _ -> Some unownPuzzleResult
                         | UnownPrinter -> None
+                        | ShowOakPokedexRating -> None
                         | AskPhoneNumber phone ->
                             if askPhoneResult = 0 then
                                 Some 2
