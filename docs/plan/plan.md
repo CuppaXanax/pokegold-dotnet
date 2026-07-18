@@ -383,13 +383,13 @@ Generated commands are typed, but many are approximate and several required comm
   - ✅ `Itemnotify` renders the source item and pocket names from the current `giveitem`, waits for dismissal, and resumes the script.
   - ✅ `Pokepic` resolves direct and source operand-0 species, renders the direct front picture through a real overworld overlay, waits for A/B, and `Closepokepic` resumes the following script. Exact GBC tilemap/SGB restoration remains presentation work.
   - ✅ `Warpcheck` resolves the generated current-cell warp event after a scripted arrival and enters its source destination; the Kabuto puzzle runtime test proves the opened chamber hole reaches the inner chamber.
+  - ✅ The generated `Stonetable`/`Cmdqueue`/`Writecmdqueue` uses are consumed by OVR-006's Strength resolver for every Ice Path and Blackthorn source pairing. Generic Game Boy command-queue scheduling outside those only generated uses remains unmodelled.
   - Audit and implement or accurately exclude:
     - `Elevator`, `Elevfloor`
     - `Trade`
     - `Givepokemail`, `Checkpokemail`
     - `Writeobjectxy`, `Ugdoor`
-    - `ConditionalEvent`, `Describedecoration`, `Stonetable`
-    - `Cmdqueue`, `Writecmdqueue`
+    - `ConditionalEvent`, `Describedecoration`
   - No item may remain tagged `RequiredFor100Percent` and `StubNoOp` at release.
 
 - ⬜ **SCR-004 — Add command-level conformance tests for approximate critical commands.**
