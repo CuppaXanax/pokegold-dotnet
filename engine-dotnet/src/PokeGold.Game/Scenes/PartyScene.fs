@@ -238,7 +238,7 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                             // Take the held item back into the bag; clear HeldItem.
                             // Seam: giving an item from the bag is driven from Pack (M11.3+).
                             let newBag   = Bag.add itemId 1 currentPlayer.Bag
-                            let newMon   = { mon with HeldItem = None }
+                            let newMon   = { mon with HeldItem = None; Mail = None }
                             let newParty = currentPlayer.Party |> List.mapi (fun i m -> if i = slotIdx then newMon else m)
                             currentPlayer <- { currentPlayer with Party = newParty; Bag = newBag }
                             onChange currentPlayer

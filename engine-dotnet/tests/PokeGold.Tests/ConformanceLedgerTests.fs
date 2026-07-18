@@ -106,8 +106,11 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 consumes generated elevfloor table records through a source-style floor selector. Goldenrod proves cancel/current-floor false result and a 2F transition after source timing; Celadon proves its independent table. The port directly resolves the selected map/warp after script completion instead of emulating GBC backup-warp memory."
             [ "Elevator"; "Elevfloor" ]
 
+          yield! many ScriptCommandCase ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 generates static givepokemail payloads, preserves attached party mail through save/load, and routes checkpokemail through the Party picker with source WRONG/CORRECT/REFUSED/NO_MAIL/LAST_MON outcomes. Route 35 to Route 31 runtime coverage proves Kenya delivery and TM50; player-authored mail and PC mailbox composition remain UI/storage work."
+            [ "Givepokemail"; "Checkpokemail" ]
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Describedecoration" ]
+            [ "Writeobjectxy"; "Ugdoor"; "Describedecoration" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
 

@@ -56,7 +56,7 @@ let applyGive (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerStat
         | Some oldId when oldId <> itemId -> Bag.add oldId 1 player.Bag
         | _                               -> player.Bag
     let newBag   = Bag.remove itemId 1 bagAfterReturn
-    let newMon   = { mon with HeldItem = Some itemId }
+    let newMon   = { mon with HeldItem = Some itemId; Mail = None }
     let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then newMon else m)
     { player with Party = newParty; Bag = newBag }
 

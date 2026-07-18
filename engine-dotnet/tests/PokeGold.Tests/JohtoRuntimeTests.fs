@@ -735,6 +735,104 @@ let ``A4 UnionCave1F south exit reaches Route33`` () =
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
 [<Fact>]
+let ``Route 31 mail recipient rejects a selected party mon without Kenya mail`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetBattleTestMon("MEWTWO", 100, "PSYCHIC_M"))
+    driver.Apply(SetEvent("EVENT_GOT_KENYA", true))
+    driver.Apply(Warp("Route31", 17, 8, Some Up))
+
+    driver.Talk()
+
+    let completed (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some overworld ->
+            overworld.LastTextLabel = Some "Text_Route31MissingMail"
+            && not (List.contains "EVENT_GOT_TM50_NIGHTMARE" overworld.Events)
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (completed driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene"
+            | "PartyScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.True(completed driver.Snapshot, "Route 31 should take the POKEMAIL_NO_MAIL branch without rewarding TM50.")
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
+let ``Randy Kenya mail reaches the Route 31 recipient and earns TM50`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetBattleTestMon("MEWTWO", 100, "PSYCHIC_M"))
+    driver.Apply(Warp("Route35GoldenrodGate", 1, 4, Some Left))
+
+    driver.Talk()
+
+    let gotKenya (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some overworld ->
+            List.contains "EVENT_GOT_KENYA" overworld.Events
+            && overworld.Player.PartyCount = 2
+        | None -> false
+
+    let mutable frame = 0
+    while frame < 2000 && not (gotKenya driver.Snapshot) do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> press "a"
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.True(gotKenya driver.Snapshot, "Randy should give Kenya after accepting the source request.")
+    advanceRuntimeUntil driver 2000 (fun snapshot -> snapshot.TopScene = "OverworldScene")
+    Assert.Equal("OverworldScene", driver.Snapshot.TopScene)
+
+    driver.Apply(Warp("Route31", 17, 8, Some Up))
+    let route31 = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected Route 31 overworld")
+    Assert.Contains("EVENT_GOT_KENYA", route31.Events)
+    driver.Tick() |> ignore
+    driver.Talk()
+    Assert.Equal("TextBoxScene", driver.Snapshot.TopScene)
+
+    let mutable pickerFrame = 0
+    while pickerFrame < 1000 && driver.Snapshot.TopScene <> "PartyScene" do
+        pickerFrame <- pickerFrame + 1
+        let buttons =
+            if driver.Snapshot.TopScene = "TextBoxScene" && pickerFrame % 2 = 0 then press "a"
+            else Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.Equal("PartyScene", driver.Snapshot.TopScene)
+    driver.Press(directionButton Down)
+    driver.Press(press "a")
+
+    let delivered (snapshot: RuntimeSnapshot) =
+        match snapshot.Overworld with
+        | Some overworld ->
+            List.contains "EVENT_GAVE_KENYA" overworld.Events
+            && List.contains "EVENT_GOT_TM50_NIGHTMARE" overworld.Events
+            && overworld.Player.PartyCount = 1
+        | None -> false
+
+    let mutable deliveryFrame = 0
+    while deliveryFrame < 2000 && not (delivered driver.Snapshot) do
+        deliveryFrame <- deliveryFrame + 1
+        let buttons =
+            if driver.Snapshot.TopScene = "TextBoxScene" && deliveryFrame % 2 = 0 then press "a"
+            else Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.True(delivered driver.Snapshot, "Kenya's matching source mail should be delivered for TM50.")
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
 let ``A4 Route33 west connection enters AzaleaTown`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")

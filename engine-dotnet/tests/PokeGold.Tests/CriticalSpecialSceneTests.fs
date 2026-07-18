@@ -94,6 +94,46 @@ let ``elevator scene selects a different source floor`` () =
     | None -> Assert.Fail("expected a selected destination")
 
 [<Fact>]
+let ``Randy gives source Kenya identity and attached Flower Mail`` () =
+    let content = Content()
+    let overworld =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "Route35GoldenrodGate" 1 4 Left)
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create (Species.byName "MEWTWO").Dex 100 ] }
+    overworld.Restore(World.empty, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(overworld :> Scene)
+    tickStack stack { Buttons.none with A = true }
+    tickStack stack Buttons.none
+
+    let completed () =
+        stack.Count = 1
+        && World.hasEvent "EVENT_GOT_KENYA" overworld.DebugWorld
+        && overworld.DebugPlayer.Party.Length = 2
+
+    let mutable frame = 0
+    while frame < 4000 && not (completed ()) do
+        frame <- frame + 1
+        let top = stack.[stack.Count - 1]
+        let buttons =
+            match top.GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+        tickStack stack buttons
+
+    Assert.True(completed (), "Randy's source gift flow should complete through the real map script.")
+    let kenya = overworld.DebugPlayer.Party |> List.last
+    let mail = kenya.Mail |> Option.defaultWith (fun () -> failwith "expected Kenya mail")
+    Assert.Equal("KENYA", kenya.Nickname)
+    Assert.Equal("RANDY", kenya.OtName)
+    Assert.Equal(1001, kenya.OtId)
+    Assert.Equal(Some "FLOWER_MAIL", kenya.HeldItem)
+    Assert.Equal("DARK CAVE leads\nto another road", mail.Message)
+
+[<Fact>]
 let ``Mike NPC trade appends source Machop metadata at the offered level`` () =
     let drowzee = PartyMon.create (Species.byName "DROWZEE").Dex 10
     let pidgey = PartyMon.create (Species.byName "PIDGEY").Dex 8

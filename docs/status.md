@@ -79,6 +79,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   return false on cancellation/current-floor selection, and reach selected
   Goldenrod/Celadon source warps after the script timing sequence; exact
   scrolling-menu art and GBC backup-warp storage remain approximations.
+- Route 35's source Kenya gift now preserves its name/OT, generated Flower Mail
+  payload, and save state; Route 31 validates and removes matching delivered
+  mail through the Party picker with all source result-code branches covered.
+  Player-authored mail and full mailbox composition remain UI/storage work.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -86,7 +90,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1438/1438) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1446/1446) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

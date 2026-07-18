@@ -164,6 +164,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable askPhoneResult = 1
     let mutable menuResult = 0
     let mutable apricornResult: string option = None
+    let mutable mailCheckResult: int option = None
     let mutable dayCareResult: int option = None
     let mutable haircutResult = 0
     let mutable currentPartyCrySpecies: string option = None
@@ -183,6 +184,40 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let speciesNameByDex dex =
         Species.all
         |> Map.tryPick (fun name stats -> if stats.Dex = dex then Some name else None)
+
+    let mailExpectation (label: string) =
+        let text =
+            Map.tryFind label state.Text
+            |> Option.orElseWith (fun () -> Map.tryFind label StdScriptsData.text)
+            |> Option.defaultValue label
+
+        text
+            .Replace("<LINE>", "\n")
+            .Replace("<NEXT>", "\n")
+            .Replace("<CONT>", "\n")
+            .Replace("<PARA>", "\n")
+            .Replace("<PROMPT>", "")
+            .Replace("<DONE>", "")
+            .Replace("@", "")
+            .Trim()
+
+    let checkPartyMail index expected =
+        let result, party = PartyMailOps.check expected index player.Party
+        player <- { player with Party = party }
+        result
+
+    let attachPartyMail templateLabel =
+        match player.Party |> List.tryLast, ScriptMailData.byMapAndLabel |> Map.tryFind (state.MapId, templateLabel) with
+        | Some newest, Some template ->
+            let mail: PartyMail =
+                { Item = template.Item
+                  Message = template.Body
+                  SenderName = newest.OtName
+                  SenderId = newest.OtId
+                  Species = newest.SpeciesId }
+            let updated = { newest with HeldItem = Some template.Item; Mail = Some mail }
+            player <- { player with Party = player.Party |> List.mapi (fun index mon -> if index = player.Party.Length - 1 then updated else mon) }
+        | _ -> ()
 
     let elevatorFloors (dataLabel: string) =
         match state.Script.Labels.TryFind dataLabel with
@@ -850,6 +885,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeVm <- None
         pokePicSpecies <- None
         pendingElevatorDestination <- None
+        mailCheckResult <- None
         followPair <- None
         lastTalkedActor <- None
         restoreTransition <- None
@@ -1635,6 +1671,19 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                             world <- World.setVar tradeFlag 1 world) :> Scene))
                         | None ->
                             resume None vm
+                    | CheckPartyMail expectedText ->
+                        pending <- Some(vm, effect)
+                        mailCheckResult <- None
+                        let expected = mailExpectation expectedText
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun updatedPlayer -> player <- updatedPlayer),
+                                    onSelect = (fun index ->
+                                        mailCheckResult <- Some(checkPartyMail index expected)
+                                        Pop)) :> Scene))
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
                         world <- World.setBuffer "__current_item" item world
@@ -1818,6 +1867,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | ClosePokePic ->
                         pokePicSpecies <- None
                         resume None vm
+                    | GivePartyMail template ->
+                        attachPartyMail template
+                        resume None vm
                     | GiveItem(item, qty, false) ->
                         this.AddItem item qty
                         world <- World.setBuffer "__current_item" item world
@@ -1905,11 +1957,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stagedWinText <- win
                         stagedLossText <- loss
                         resume None vm
-                    | GivePoke(species, level, item) ->
+                    | GivePoke(species, level, item, nickname, otName) ->
                         match Map.tryFind species PokeGold.Game.Data.Species.all with
                         | Some stats ->
                             let mon = PokeGold.Game.Player.PartyMon.create stats.Dex level
-                            let mon = match item with Some i -> { mon with HeldItem = Some i } | None -> mon
+                            let heldItem = item |> Option.filter (fun itemId -> itemId <> "NO_ITEM")
+                            let mon =
+                                { mon with
+                                    HeldItem = heldItem
+                                    Nickname = nickname |> Option.map this.ResolveText |> Option.defaultValue mon.Nickname
+                                    OtName = otName |> Option.map this.ResolveText |> Option.defaultValue mon.OtName
+                                    OtId = if otName.IsSome then 1001 else mon.OtId }
                             let mon = PokeGold.Game.Player.MoveLearn.seedStartingMoves mon
                             if player.Party.Length < 6 then
                                 player <- { player with Party = player.Party @ [ mon ] }
@@ -2162,6 +2220,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         pokePicSpecies <- None
         previousMapId <- None
         pendingElevatorDestination <- None
+        mailCheckResult <- None
         scriptQueue.Clear()
         this.SyncSurfStateWithTerrain() |> ignore
         resetObjectPresence ()
@@ -2294,6 +2353,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeVm <- None
         pokePicSpecies <- None
         pendingElevatorDestination <- None
+        mailCheckResult <- None
 
         match this.EnterMap(ns, true) with
         | Stay -> ()
@@ -2467,6 +2527,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | AskYesNo -> Some yesNoResult
                         | OpenScriptMenu _ -> Some menuResult
                         | OpenElevator _ -> Some(if pendingElevatorDestination.IsSome then 1 else 0)
+                        | CheckPartyMail _ -> Some(mailCheckResult |> Option.defaultValue 2)
                         | SelectApricornForKurt ->
                             match apricornResult with
                             | Some apricorn ->

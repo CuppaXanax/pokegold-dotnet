@@ -76,9 +76,13 @@ type ScriptEffect =
     | SetDstFlag of enabled: bool
     | CheckTime of time: string
     /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
-    | GivePoke of species: string * level: int * item: string option
+    | GivePoke of species: string * level: int * item: string option * nickname: string option * otName: string option
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
     | CheckPoke of species: string
+    /// `givepokemail` — attach a source mail payload to the newest party Pokémon.
+    | GivePartyMail of template: string
+    /// `checkpokemail` — choose a party Pokémon and return POKEMAIL_* result.
+    | CheckPartyMail of expectedText: string
     /// `trade` — run an NPC trade identified by its source NPC_TRADE_* constant.
     | OpenNpcTrade of tradeId: string
     /// `setlasttalked` — make this object the active one (for `faceplayer` etc.).
@@ -429,7 +433,7 @@ module Script =
             | Verbosegiveitem(item, qty) -> suspend next world (GiveItem(item, qty, true))
             | Takeitem(item, qty) -> suspend next world (TakeItem(item, qty))
             | Checkitem item -> suspend next world (CheckItem item)
-            | Givepoke(species, level, item) -> suspend next world (GivePoke(species, level, item))
+            | Givepoke(species, level, item, nickname, otName) -> suspend next world (GivePoke(species, level, item, nickname, otName))
             | Checkpoke species -> suspend next world (CheckPoke species)
             | Setlasttalked obj -> suspend next world (SetLastTalked obj)
             | Applymovement(obj, mv) -> suspend next world (ApplyMovement(obj, mv))
@@ -578,12 +582,14 @@ module Script =
                 match args with
                 | dataLabel :: _ -> suspend next world (OpenElevator dataLabel)
                 | [] -> run world { next with ScriptVar = 0 }
-            | Checkpokemail _
+            | Checkpokemail (expectedText :: _) -> suspend next world (CheckPartyMail expectedText)
+            | Checkpokemail []
             | ConditionalEvent _ -> run world next
-            | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
+            | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None, None, None))
             | Catchtutorial battleType -> suspend next world (StartCatchTutorial battleType)
             | Trade tradeId -> suspend next world (OpenNpcTrade tradeId)
-            | Givepokemail _ -> run world next
+            | Givepokemail (template :: _) -> suspend next world (GivePartyMail template)
+            | Givepokemail [] -> run world next
             | Addcellnum phone -> suspend next world (AddPhoneContact phone)
             | Describedecoration _
             | Stonetable _

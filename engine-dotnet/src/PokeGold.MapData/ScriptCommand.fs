@@ -124,8 +124,8 @@ type ScriptCommand =
     // ---- Battle ----------------------------------------------------------
     /// `loadwildmon $5c SPECIES, level`.
     | Loadwildmon of species: string * level: int
-    /// `givepoke SPECIES, level` — add a Pokémon to the party.
-    | Givepoke of species: string * level: int * item: string option
+    /// `givepoke SPECIES, level, item[, nickname, ot]` — add a Pokémon to the party.
+    | Givepoke of species: string * level: int * item: string option * nickname: string option * otName: string option
     /// `checkpoke SPECIES` — var := has species in party.
     | Checkpoke of species: string
     /// `loadtrainer $5d GROUP, id`.

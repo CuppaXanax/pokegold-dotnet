@@ -58,7 +58,7 @@ module PokedexObtainability =
         let collect source commands =
             for command in commands do
                 match command with
-                | ScriptCommand.Givepoke(species, _, _) ->
+                | ScriptCommand.Givepoke(species, _, _, _, _) ->
                     sources <- addSource species $"gift:{source}" sources
                 | ScriptCommand.Giveegg(species, _) ->
                     sources <- addSource species $"egg:{source}" sources

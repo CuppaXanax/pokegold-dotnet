@@ -49,6 +49,19 @@ let ``applyGive swap returns old held item to bag`` () =
     Assert.Equal(4, Bag.count "ANTIDOTE" p'.Bag)  // 3 original + 1 returned
 
 [<Fact>]
+let ``applyGive clears attached mail when replacing a mail held item`` () =
+    let p0 =
+        let mon =
+            { (makePlayer ()).Party.[0] with
+                HeldItem = Some "FLOWER_MAIL"
+                Mail = Some { Item = "FLOWER_MAIL"; Message = "DARK CAVE leads"; SenderName = "RANDY"; SenderId = 1001; Species = 21 } }
+        { makePlayer () with Party = mon :: (makePlayer ()).Party.Tail }
+
+    let p' = PackUseGive.applyGive "POTION" 0 p0
+    Assert.Equal(Some "POTION", p'.Party.[0].HeldItem)
+    Assert.True(p'.Party.[0].Mail.IsNone)
+
+[<Fact>]
 let ``applyGive same item already held: no duplicate return`` () =
     let p0 =
         let mon = { (makePlayer ()).Party.[0] with HeldItem = Some "POTION" }

@@ -74,6 +74,7 @@
     <Compile Include="Data\Generated\Trainers.Generated.fs" />
     <Compile Include="Data\Generated\WildEncounters.Generated.fs" />
     <Compile Include="Data\Generated\TreeMons.Generated.fs" />
+    <Compile Include="Data\Generated\ScriptMail.Generated.fs" />
     <Compile Include="Data\Generated\NpcTrades.Generated.fs" />
     <Compile Include="Data\Generated\Dex.Generated.fs" />
     <Compile Include="Data\TypeChart.fs" />
@@ -297,6 +298,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Trainers.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\WildEncounters.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TreeMons.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\ScriptMail.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\NpcTrades.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Dex.Generated.fs" />
   </ItemGroup>

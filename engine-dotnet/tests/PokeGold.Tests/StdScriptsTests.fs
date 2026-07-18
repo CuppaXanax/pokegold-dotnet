@@ -191,6 +191,7 @@ let ``Azalea nurse heal restores a fainted party`` () =
             StatExp = PokeGold.Game.Battle.StatExperience.zero
             Pokerus = 0
             HeldItem = None
+            Mail = None
             OtName = "P"
             OtId = 0
             Friendship = 70 } ]

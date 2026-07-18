@@ -6,23 +6,7 @@ open PokeGold.Game.Overworld.Script
 
 // M12.1 — pure heal transform + script wiring tests.
 
-let private makeMon hp maxHp status moves : PartyMon =
-    { Id = System.Guid.NewGuid()
-      SpeciesId = 1
-      Nickname = "TEST"
-      Level = 10
-      Exp = 0
-      Hp = hp
-      MaxHp = maxHp
-      Status = status
-      Moves = moves
-      Dvs = 0
-      StatExp = PokeGold.Game.Battle.StatExperience.zero
-      Pokerus = 0
-      HeldItem = None
-      OtName = "PLAYER"
-      OtId = 0
-      Friendship = 70 }
+let private makeMon hp maxHp status moves : PartyMon = { Id = System.Guid.NewGuid(); SpeciesId = 1; Nickname = "TEST"; Level = 10; Exp = 0; Hp = hp; MaxHp = maxHp; Status = status; Moves = moves; Dvs = 0; StatExp = PokeGold.Game.Battle.StatExperience.zero; Pokerus = 0; HeldItem = None; Mail = None; OtName = "PLAYER"; OtId = 0; Friendship = 70 }
 
 // ---- Pure heal transform ---------------------------------------------------
 

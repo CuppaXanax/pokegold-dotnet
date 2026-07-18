@@ -1,5 +1,6 @@
 namespace PokeGold.DataGen
 
+open System
 open System.IO
 open System.Text.RegularExpressions
 open PokeGold.Game.Overworld.Script
@@ -93,6 +94,59 @@ module MapParsers =
                     Text = text
                     Movements = movements
                     ObjectConsts = objectConsts } ]
+
+    type ScriptMailTemplate = { Map: string; Label: string; Item: string; Body: string }
+
+    let private mapLabelRx = Regex(@"^\s*([A-Za-z_][A-Za-z0-9_]*):\s*$")
+    let private mailItemRx = Regex(@"^\s*db\s+([A-Z][A-Z0-9_]+)\s*$")
+    let private mailTextRx = Regex("^\\s*(db|next|line|cont|para)\\s+\"([^\"]*)\"")
+
+    let private stripMapComment (line: string) =
+        let comment = line.IndexOf ';'
+        if comment >= 0 then line.Substring(0, comment).Trim() else line.Trim()
+
+    let private tryParseMailTemplate (map: GeneratedMap) (label: string) : ScriptMailTemplate option =
+        let lines = Repo.readText($"maps/{map.Meta.Name}.asm").Split('\n') |> Array.map stripMapComment
+
+        lines
+        |> Array.tryFindIndex (fun line -> line = label + ":")
+        |> Option.bind (fun start ->
+            let item = ref None
+            let body = Text.StringBuilder()
+            let mutable lineIndex = start + 1
+            let mutable keepReading = true
+
+            while lineIndex < lines.Length && keepReading do
+                let line = lines.[lineIndex]
+                let labelMatch = mapLabelRx.Match line
+                let itemMatch = mailItemRx.Match line
+                let textMatch = mailTextRx.Match line
+
+                if labelMatch.Success then
+                    keepReading <- false
+                elif itemMatch.Success && item.Value.IsNone then
+                    item.Value <- Some itemMatch.Groups.[1].Value
+                elif textMatch.Success then
+                    let mnemonic = textMatch.Groups.[1].Value
+                    if body.Length > 0 && (mnemonic = "next" || mnemonic = "line" || mnemonic = "cont" || mnemonic = "para") then
+                        body.Append('\n') |> ignore
+                    body.Append(textMatch.Groups.[2].Value.Replace("@", "")) |> ignore
+
+                lineIndex <- lineIndex + 1
+
+            match item.Value with
+            | Some mailItem when body.Length > 0 ->
+                Some { Map = map.Meta.Name; Label = label; Item = mailItem; Body = body.ToString() }
+            | _ -> None)
+
+    let scriptMailTemplates : ScriptMailTemplate list =
+        maps
+        |> List.collect (fun map ->
+            map.Script.Commands
+            |> Array.choose (function | Givepokemail(label :: _) -> Some label | _ -> None)
+            |> Array.distinct
+            |> Array.toList
+            |> List.choose (tryParseMailTemplate map))
 
     /// Source Fly destinations joined to their spawn-point locations and engine
     /// flags. Most flags are declared by the map's new-map callback; Rock Tunnel

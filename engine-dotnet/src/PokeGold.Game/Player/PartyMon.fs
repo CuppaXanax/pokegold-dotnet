@@ -4,28 +4,62 @@ open System
 open PokeGold.Game.Data
 open PokeGold.Game.Battle
 
+/// Source mail metadata attached to one party Pokémon alongside its mail held item.
+type PartyMail = { Item: string; Message: string; SenderName: string; SenderId: int; Species: int }
+
 /// A Pokémon in the persistent party (on the player's team).
-/// All fields are preservation of the GSC save-file struct.
-type PartyMon =
-    { Id: Guid                  // stable native-engine identity (not a ROM field)
-      SpeciesId: int            // national dex number
-      Nickname: string
-      Level: int
-      Exp: int
-      Hp: int                   // current HP (may be < MaxHp or 0 if fainted)
-      MaxHp: int
-      Status: string            // ""/PSN/BRN/FRZ/PAR or SLP:n (legacy SLP accepted)
-      Moves: (int * int) list   // (moveId, currentPP) pairs, up to 4
-      Dvs: int                  // packed Attack/Defense/Speed/Special nibbles
-      StatExp: StatExperience   // five 16-bit HP/Atk/Def/Speed/Special words
-      Pokerus: int              // persistent Pokérus status byte; 0 = none
-      HeldItem: string option   // item constant or None
-      OtName: string
-      OtId: int
-      Friendship: int }
+/// All fields preserve the GSC save-file struct plus native identity and mail metadata.
+type PartyMon = { Id: Guid; SpeciesId: int; Nickname: string; Level: int; Exp: int; Hp: int; MaxHp: int; Status: string; Moves: (int * int) list; Dvs: int; StatExp: StatExperience; Pokerus: int; HeldItem: string option; Mail: PartyMail option; OtName: string; OtId: int; Friendship: int }
 
 /// A player's party — up to 6 PartyMon in order.
 type Party = PartyMon list
+
+/// Source-compatible `checkpokemail` result values and party mutation.
+module PartyMailOps =
+    [<Literal>]
+    let WrongMail = 0
+
+    [<Literal>]
+    let Correct = 1
+
+    [<Literal>]
+    let Refused = 2
+
+    [<Literal>]
+    let NoMail = 3
+
+    [<Literal>]
+    let LastMon = 4
+
+    let private mailItems =
+        Set.ofList
+            [ "FLOWER_MAIL"; "SURF_MAIL"; "LITEBLUEMAIL"; "PORTRAITMAIL"; "LOVELY_MAIL"
+              "EON_MAIL"; "MORPH_MAIL"; "BLUESKY_MAIL"; "MUSIC_MAIL"; "MIRAGE_MAIL" ]
+
+    let check expectedMessage selectedIndex (party: Party) : int * Party =
+        if selectedIndex < 0 || selectedIndex >= party.Length then
+            Refused, party
+        else
+            let selected = party.[selectedIndex]
+            let mailItem = selected.HeldItem |> Option.filter mailItems.Contains
+
+            match mailItem, selected.Mail with
+            | None, _ -> NoMail, party
+            | Some item, Some mail when item = mail.Item && mail.Message.StartsWith(expectedMessage, StringComparison.Ordinal) ->
+                let hasOtherConsciousMon =
+                    party
+                    |> List.mapi (fun partyIndex mon -> partyIndex, mon)
+                    |> List.exists (fun (partyIndex, mon) -> partyIndex <> selectedIndex && mon.Hp > 0)
+
+                if not hasOtherConsciousMon then
+                    LastMon, party
+                else
+                    let remaining =
+                        party
+                        |> List.mapi (fun partyIndex mon -> partyIndex, mon)
+                        |> List.choose (fun (partyIndex, mon) -> if partyIndex = selectedIndex then None else Some mon)
+                    Correct, remaining
+            | _ -> WrongMail, party
 
 module PartyMon =
 
@@ -63,6 +97,7 @@ module PartyMon =
           StatExp = StatExperience.zero
           Pokerus = 0
           HeldItem = None
+          Mail = None
           OtName = "PLAYER"
           OtId = 0
           Friendship = 70 }

@@ -49,6 +49,59 @@ let ``save round-trip preserves a deposited mon in box 3`` () =
     Assert.Equal(0, p2.Pc.Boxes.[0].Mons.Length)
 
 [<Fact>]
+let ``save round-trip preserves party-held mail metadata`` () =
+    let content = PokeGold.Game.Data.Content()
+    let overworld = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Down
+    let kenya =
+        { PartyMon.create (PokeGold.Game.Data.Species.byName "SPEAROW").Dex 10 with
+            HeldItem = Some "FLOWER_MAIL"
+            Mail = Some { Item = "FLOWER_MAIL"; Message = "DARK CAVE leads\nto another road"; SenderName = "RANDY"; SenderId = 1001; Species = 21 } }
+    let player = { PlayerStateOps.initial with Party = [ kenya ] }
+
+    let restored =
+        SaveData.captureWith overworld PokeGold.Game.Overworld.Script.World.empty player
+        |> SaveFile.serialize
+        |> SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "expected readable save")
+        |> SaveData.playerOf
+
+    let mail = restored.Party.Head.Mail |> Option.defaultWith (fun () -> failwith "expected attached mail")
+    Assert.Equal(Some "FLOWER_MAIL", restored.Party.Head.HeldItem)
+    Assert.Equal("FLOWER_MAIL", mail.Item)
+    Assert.Equal("DARK CAVE leads\nto another road", mail.Message)
+    Assert.Equal("RANDY", mail.SenderName)
+    Assert.Equal(1001, mail.SenderId)
+    Assert.Equal(21, mail.Species)
+
+[<Fact>]
+let ``party mail check returns source result codes and removes only deliverable mail`` () =
+    let kenya =
+        { PartyMon.create (PokeGold.Game.Data.Species.byName "SPEAROW").Dex 10 with
+            HeldItem = Some "FLOWER_MAIL"
+            Mail = Some { Item = "FLOWER_MAIL"; Message = "DARK CAVE leads\nto another road"; SenderName = "RANDY"; SenderId = 1001; Species = 21 } }
+    let companion = PartyMon.create (PokeGold.Game.Data.Species.byName "MEWTWO").Dex 100
+
+    let correct, afterCorrect = PartyMailOps.check "DARK CAVE leads" 1 [ companion; kenya ]
+    Assert.Equal(PartyMailOps.Correct, correct)
+    Assert.Equal<int list>([ companion.SpeciesId ], afterCorrect |> List.map _.SpeciesId)
+
+    let wrong, afterWrong = PartyMailOps.check "A different message" 1 [ companion; kenya ]
+    Assert.Equal(PartyMailOps.WrongMail, wrong)
+    Assert.Equal(2, afterWrong.Length)
+
+    let noMail, afterNoMail = PartyMailOps.check "DARK CAVE leads" 0 [ companion ]
+    Assert.Equal(PartyMailOps.NoMail, noMail)
+    Assert.Equal(1, afterNoMail.Length)
+
+    let lastMon, afterLastMon = PartyMailOps.check "DARK CAVE leads" 0 [ kenya ]
+    Assert.Equal(PartyMailOps.LastMon, lastMon)
+    Assert.Equal(1, afterLastMon.Length)
+
+    let refused, afterRefused = PartyMailOps.check "DARK CAVE leads" -1 [ companion; kenya ]
+    Assert.Equal(PartyMailOps.Refused, refused)
+    Assert.Equal(2, afterRefused.Length)
+
+[<Fact>]
 let ``v6 Pokemon without identity migrate uniquely across persistent storage`` () =
     let content = PokeGold.Game.Data.Content()
     let ow = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Down
@@ -70,7 +123,7 @@ let ``v6 Pokemon without identity migrate uniquely across persistent storage`` (
         SaveData.captureWith ow PokeGold.Game.Overworld.Script.World.empty player
         |> SaveFile.serialize
         |> fun json -> System.Text.RegularExpressions.Regex.Replace(json, "\"Id\": \"[^\"]+\",\\s*", "")
-        |> fun json -> json.Replace("\"Version\": 9", "\"Version\": 6")
+        |> fun json -> json.Replace($"\"Version\": {SaveData.CurrentVersion}", "\"Version\": 6")
     let migrated = legacyJson |> SaveFile.deserialize |> Option.get |> SaveData.playerOf
     let ids =
         [ migrated.Party.Head.Id

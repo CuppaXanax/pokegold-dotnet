@@ -256,8 +256,14 @@ module ScriptParser =
         | "loadwildmon" -> Some(Loadwildmon(arg 0, i 1))
         | "trade" -> Some(Trade(arg 0))
         | "givepoke" ->
-            let item = if args.Length > 2 then Some(arg 2) else None
-            Some(Givepoke(arg 0, i 1, item))
+            let item =
+                match if args.Length > 2 then arg 2 else "" with
+                | ""
+                | "NO_ITEM" -> None
+                | value -> Some value
+            let nickname, otName =
+                if args.Length >= 5 then Some(arg 3), Some(arg 4) else None, None
+            Some(Givepoke(arg 0, i 1, item, nickname, otName))
         | "checkpoke" -> Some(Checkpoke(arg 0))
         | "loadtrainer" -> Some(Loadtrainer(arg 0, arg 1))
         | "startbattle" -> Some Startbattle

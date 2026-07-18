@@ -480,6 +480,33 @@ module Emit =
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
+    let private scriptMailFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated static givepokemail payloads from map source labels.") |> ignore
+        sb.AppendLine("module ScriptMailData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : ScriptMailTemplate array =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+
+        for template in MapParsers.scriptMailTemplates do
+            sb.AppendLine(
+                sprintf
+                    "            { Map = \"%s\"; Label = \"%s\"; Item = \"%s\"; Body = \"%s\" }"
+                    template.Map
+                    template.Label
+                    template.Item
+                    (escapeString template.Body))
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byMapAndLabel : Map<string * string, ScriptMailTemplate> =") |> ignore
+        sb.AppendLine("        all |> Array.map (fun template -> (template.Map, template.Label), template) |> Map.ofArray") |> ignore
+        sb.ToString()
+
     let private npcTradesFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -562,6 +589,7 @@ module Emit =
           "Trainers.Generated.fs", trainersFile ()
           "WildEncounters.Generated.fs", wildEncountersFile ()
           "TreeMons.Generated.fs", treeMonsFile ()
+          "ScriptMail.Generated.fs", scriptMailFile ()
           "NpcTrades.Generated.fs", npcTradesFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->

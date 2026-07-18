@@ -342,7 +342,7 @@ let ``parses givepoke without a held item`` () =
              \tend\n"
 
     Assert.Equal<ScriptCommand list>(
-        [ Givepoke("CYNDAQUIL", 5, None); End ],
+        [ Givepoke("CYNDAQUIL", 5, None, None, None); End ],
         ScriptProgram.blockAt "S" prog
     )
 
@@ -355,7 +355,17 @@ let ``parses givepoke with a held item`` () =
              \tend\n"
 
     Assert.Equal<ScriptCommand list>(
-        [ Givepoke("CYNDAQUIL", 5, Some "BERRY"); End ],
+        [ Givepoke("CYNDAQUIL", 5, Some "BERRY", None, None); End ],
+        ScriptProgram.blockAt "S" prog
+    )
+
+[<Fact>]
+let ``parses givepoke source nickname and trainer OT operands`` () =
+    let prog =
+        parse "S:\n\tgivepoke SPEAROW, 10, NO_ITEM, GiftSpearowName, GiftSpearowOTName\n\tend\n"
+
+    Assert.Equal<ScriptCommand list>(
+        [ Givepoke("SPEAROW", 10, None, Some "GiftSpearowName", Some "GiftSpearowOTName"); End ],
         ScriptProgram.blockAt "S" prog
     )
 
@@ -454,7 +464,7 @@ let ``giveegg suspends as GivePoke`` () =
     let prog = parse "S:\n\tgiveegg CYNDAQUIL, 5\n\tend\n"
 
     match Script.start "S" World.empty prog "" with
-    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None)) } -> ()
+    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None, None, None)) } -> ()
     | other -> Assert.Fail($"expected GivePoke effect, got {other}")
 
 [<Fact>]
@@ -645,6 +655,13 @@ let ``NPC trades preserve Mike's zero-based source index`` () =
     Assert.Equal(37460, mike.OtId)
     Assert.Equal("MIKE", mike.OtName)
     Assert.Equal("TRADE_GENDER_EITHER", mike.Gender)
+
+[<Fact>]
+let ``Kenya mail payload is generated from Route 35 source data`` () =
+    let kenya = ScriptMailData.byMapAndLabel.[("Route35GoldenrodGate", "GiftSpearowMail")]
+
+    Assert.Equal("FLOWER_MAIL", kenya.Item)
+    Assert.Equal("DARK CAVE leads\nto another road", kenya.Body)
 
 [<Fact>]
 let ``S.S. Aqua is gated by EVENT_BEAT_ELITE_FOUR`` () =
@@ -1458,7 +1475,7 @@ let ``givepoke suspends with a GivePoke effect`` () =
     let prog = ScriptParser.parseText "S:\n\tgivepoke CYNDAQUIL, 5\n\tend\n"
 
     match Script.start "S" World.empty prog "" with
-    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None)) } -> ()
+    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None, None, None)) } -> ()
     | other -> Assert.Fail(sprintf "Expected Suspended GivePoke, got %A" other)
 
 [<Fact>]

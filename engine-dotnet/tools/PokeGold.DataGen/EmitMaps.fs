@@ -78,7 +78,7 @@ module EmitMaps =
         | Itemnotify -> "Itemnotify"
         | Elevator args -> sprintf "Elevator [%s]" (args |> List.map str |> String.concat "; ")
         | Loadwildmon (s, l) -> sprintf "Loadwildmon(%s, %d)" (str s) l
-        | Givepoke (s, l, item) -> sprintf "Givepoke(%s, %d, %s)" (str s) l (strOpt item)
+        | Givepoke (s, l, item, nickname, otName) -> sprintf "Givepoke(%s, %d, %s, %s, %s)" (str s) l (strOpt item) (strOpt nickname) (strOpt otName)
         | Checkpoke s -> sprintf "Checkpoke %s" (str s)
         | Giveegg(s, l) -> sprintf "Giveegg(%s, %d)" (str s) l
         | Catchtutorial battleType -> sprintf "Catchtutorial %s" (str battleType)

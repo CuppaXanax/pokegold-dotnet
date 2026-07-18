@@ -109,6 +109,9 @@ type TreeMonTable =
       Common: TreeMonSlot list
       Rare: TreeMonSlot list }
 
+/// A static `givepokemail` payload decoded from a map source label.
+type ScriptMailTemplate = { Map: string; Label: string; Item: string; Body: string }
+
 /// One NPC trade record from `data/events/npc_trades.asm`.
 type NpcTradeData =
     { Id: int

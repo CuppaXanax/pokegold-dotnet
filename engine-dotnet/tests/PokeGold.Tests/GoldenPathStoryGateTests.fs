@@ -57,7 +57,7 @@ let private applyEffect (mapId: string) (player: PlayerState) (texts: string lis
         mapId, player, texts, Some(if has then 1 else 0)
     | CheckItem item ->
         mapId, player, texts, Some(if Bag.count item player.Bag > 0 then 1 else 0)
-    | GivePoke(species, level, item) ->
+    | GivePoke(species, level, item, _, _) ->
         match Species.all |> Map.tryFind species with
         | Some stats when player.Party.Length < 6 ->
             let mon =

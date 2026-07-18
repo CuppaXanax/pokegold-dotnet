@@ -53,15 +53,10 @@ type StatExperienceSave =
       Special: int }
 
 [<CLIMutable>]
-type PartyMonSave =
-    { Id: Guid
-      SpeciesId: int; Nickname: string; Level: int; Exp: int
-      Hp: int; MaxHp: int; Status: string
-      Moves: MovesSave[]; Dvs: int
-      StatExp: int // v1-v7 scalar compatibility
-      StatExperience: StatExperienceSave
-      Pokerus: int
-      HeldItem: string; OtName: string; OtId: int; Friendship: int }
+type PartyMailSave = { Item: string; Message: string; SenderName: string; SenderId: int; Species: int }
+
+[<CLIMutable>]
+type PartyMonSave = { Id: Guid; SpeciesId: int; Nickname: string; Level: int; Exp: int; Hp: int; MaxHp: int; Status: string; Moves: MovesSave[]; Dvs: int; StatExp: int; StatExperience: StatExperienceSave; Pokerus: int; HeldItem: string; Mail: PartyMailSave option; OtName: string; OtId: int; Friendship: int }
 
 [<CLIMutable>]
 type MailSave = { Author: string; Body: string; Species: int }
@@ -113,7 +108,8 @@ type PlayerSave =
 /// A versioned save container. Carries the overworld position, the script world
 /// (event/engine flags, vars, scene ids), and the player state (party, bag, dex).
 /// v3 saves have a full Player block; v2 saves only have a flat Bag array.
-/// v7 adds identities; v8 adds five-field stat experience; v9 adds Pokérus.
+/// v7 adds identities; v8 adds five-field stat experience; v9 adds Pokérus;
+/// v10 adds party-held mail metadata.
 /// The `Version` lets `SaveFile` reject or migrate older shapes.
 [<CLIMutable>]
 type SaveData =
@@ -127,7 +123,7 @@ module SaveData =
 
     /// The current on-disk schema version. Bump whenever the shape changes.
     [<Literal>]
-    let CurrentVersion = 9
+    let CurrentVersion = 10
 
     let private facingToString (d: Direction) : string =
         match d with
@@ -214,6 +210,7 @@ module SaveData =
           Dvs = pm.Dvs; StatExp = 0; StatExperience = statExperienceToSave pm.StatExp
           Pokerus = pm.Pokerus
           HeldItem = pm.HeldItem |> Option.defaultValue ""
+          Mail = pm.Mail |> Option.map (fun mail -> { Item = mail.Item; Message = mail.Message; SenderName = mail.SenderName; SenderId = mail.SenderId; Species = mail.Species })
           OtName = pm.OtName; OtId = pm.OtId; Friendship = pm.Friendship }
 
     let private partyMonOfSave (s: PartyMonSave) : PartyMon =
@@ -225,6 +222,7 @@ module SaveData =
           Dvs = s.Dvs; StatExp = statExperienceOfSave s.StatExp s.StatExperience
           Pokerus = s.Pokerus
           HeldItem = nullToNone s.HeldItem
+          Mail = if box s.Mail = null then None else s.Mail |> Option.map (fun mail -> { Item = nullToEmptyStr mail.Item; Message = nullToEmptyStr mail.Message; SenderName = nullToEmptyStr mail.SenderName; SenderId = mail.SenderId; Species = mail.Species })
           OtName = nullToEmptyStr s.OtName; OtId = s.OtId; Friendship = s.Friendship }
 
     // Bag conversions
