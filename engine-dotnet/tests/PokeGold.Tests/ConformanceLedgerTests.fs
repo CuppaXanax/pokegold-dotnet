@@ -99,8 +99,10 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "OVR-006 consumes every generated CMDQUEUE_STONETABLE pairing when a settled Strength boulder reaches its source warp, then executes the mapped fallout script. Ice Path and Blackthorn Gym runtime tests prove both outcomes; generic Game Boy command-queue scheduling remains unmodelled outside these only generated uses."
             [ "Stonetable"; "Cmdqueue"; "Writecmdqueue" ]
 
+          yield entry ScriptCommandCase "Trade" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 generates all six source NPC trade records and runs a player-facing party selection flow. Mike's real Goldenrod script proves source replacement, trade marker, and script resumption; scene tests prove recipient level/order/DVs/item/OT/Dex registration and Emy's female-only gate. Exact dialogue/animation and mail restrictions remain UI work."
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"
+            [ "Elevator"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"
               "ConditionalEvent"; "Describedecoration"; "Elevfloor" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
@@ -221,6 +223,7 @@ module ConformanceLedger =
           yield entry SceneSurface "EvolutionScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BAT-014 tests cover explicit evolution acceptance/cancellation and one-shot decisions; persistent mutation remains deferred until acceptance."
           yield entry SceneSurface "PokedexScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "D Pokédex tests cover Start-driven type search, caught-only type filtering from data/types/search_types.asm, AREA wild-encounter nests via FindNest data, and front/question-mark dex pic rendering; exact Pokégear town-map nest icons remain future UI polish."
           yield entry SceneSurface "PokePicWaitScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 runtime coverage opens Elm's Cyndaquil front picture through the real script, asserts visible source-menu-region pixels, dismisses with A, and resumes TakeCyndaquilText; exact original tilemap/SGB restoration remains presentation work."
+          yield entry SceneSurface "NpcTradeScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 supports source-record NPC trade confirmation, party selection, requested species/gender validation, one-time completion, recipient metadata, and Pokédex registration. Exact GBC text and cable animation remain presentation work."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "SummaryScene" ]

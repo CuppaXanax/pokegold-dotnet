@@ -480,6 +480,40 @@ module Emit =
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
+    let private npcTradesFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated NPC trade records from data/events/npc_trades.asm.") |> ignore
+        sb.AppendLine("module NpcTradesData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let all : NpcTradeData array =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+
+        for trade in Parsers.npcTrades do
+            sb.AppendLine(
+                sprintf
+                    "            { Id = %d; Constant = \"%s\"; DialogSet = \"%s\"; Give = \"%s\"; Receive = \"%s\"; Nickname = \"%s\"; Dvs = 0x%04X; HeldItem = \"%s\"; OtId = %d; OtName = \"%s\"; Gender = \"%s\" }"
+                    trade.Id
+                    trade.Constant
+                    trade.DialogSet
+                    trade.Give
+                    trade.Receive
+                    (escapeString trade.Nickname)
+                    trade.Dvs
+                    trade.HeldItem
+                    trade.OtId
+                    (escapeString trade.OtName)
+                    trade.Gender)
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byConstant : Map<string, NpcTradeData> =") |> ignore
+        sb.AppendLine("        all |> Array.map (fun trade -> trade.Constant, trade) |> Map.ofArray") |> ignore
+        sb.ToString()
+
     let private dexFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -528,6 +562,7 @@ module Emit =
           "Trainers.Generated.fs", trainersFile ()
           "WildEncounters.Generated.fs", wildEncountersFile ()
           "TreeMons.Generated.fs", treeMonsFile ()
+          "NpcTrades.Generated.fs", npcTradesFile ()
           "Dex.Generated.fs", dexFile () ]
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)

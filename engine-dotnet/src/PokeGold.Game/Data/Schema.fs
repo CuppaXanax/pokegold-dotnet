@@ -109,6 +109,20 @@ type TreeMonTable =
       Common: TreeMonSlot list
       Rare: TreeMonSlot list }
 
+/// One NPC trade record from `data/events/npc_trades.asm`.
+type NpcTradeData =
+    { Id: int
+      Constant: string
+      DialogSet: string
+      Give: string
+      Receive: string
+      Nickname: string
+      Dvs: int
+      HeldItem: string
+      OtId: int
+      OtName: string
+      Gender: string }
+
 /// Source layout selected by the TRAINERTYPE_* byte in trainer party data.
 [<RequireQualifiedAccess>]
 type TrainerPartyType =

@@ -1588,6 +1588,24 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             stop (Push(CatchTutorialScene(content, species, level) :> Scene))
                         | None ->
                             invalidOp $"catchtutorial on {state.MapId} requires loadwildmon staging"
+                    | OpenNpcTrade tradeId ->
+                        match NpcTrades.tryFind tradeId with
+                        | Some trade ->
+                            pending <- Some(vm, effect)
+                            let tradeFlag = "__npc_trade_" + trade.Constant
+                            let alreadyTraded = World.getVar tradeFlag world <> 0
+                            stop (
+                                Push(
+                                    NpcTradeScene(
+                                        content,
+                                        player,
+                                        trade,
+                                        alreadyTraded,
+                                        fun updatedPlayer ->
+                                            player <- updatedPlayer
+                                            world <- World.setVar tradeFlag 1 world) :> Scene))
+                        | None ->
+                            resume None vm
                     | GiveItem(item, qty, true) ->
                         this.AddItem item qty
                         world <- World.setBuffer "__current_item" item world

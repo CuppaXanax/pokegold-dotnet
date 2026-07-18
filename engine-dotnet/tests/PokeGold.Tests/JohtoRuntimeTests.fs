@@ -104,6 +104,35 @@ let private sceneStackAt mapId x y facing world player =
     scene, stack
 
 [<Fact>]
+let ``Mike trades source Drowzee for Machop through the real Goldenrod script`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetBattleTestMon("DROWZEE", 10, "DISABLE"))
+    driver.Apply(Warp("GoldenrodDeptStore5F", 6, 4, Some Up))
+
+    driver.Talk()
+    Assert.Equal("NpcTradeScene", driver.Snapshot.TopScene)
+
+    // Accept Mike's offer, select the only party mon, then dismiss the result.
+    driver.Press(press "a")
+    driver.Press(press "a")
+    driver.Press(press "a")
+
+    let machopDex = (Species.byName "MACHOP").Dex
+    let completed =
+        driver.RunUntil(
+            (fun snapshot ->
+                snapshot.TopScene = "OverworldScene"
+                && snapshot.Overworld |> Option.exists (fun overworld ->
+                    overworld.Player.PartySpecies = [ machopDex ]
+                    && overworld.Vars |> Map.tryFind "__npc_trade_NPC_TRADE_MIKE" = Some 1)),
+            40)
+
+    let overworld = completed.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    Assert.Contains(machopDex, overworld.Player.PartySpecies)
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
 let ``Goldenrod Flower Shop runtime gate gives SquirtBottle after PlainBadge`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")

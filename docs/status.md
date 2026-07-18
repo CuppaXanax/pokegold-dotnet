@@ -66,6 +66,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - `warpcheck` now resolves a scripted arrival through the generated current-cell
   warp event and enters its source destination; the real Kabuto puzzle proves
   its opened chamber hole reaches the inner chamber.
+- NPC `trade` now consumes generated source records through confirmation and
+  party selection, validates requested species/gender, appends the source
+  recipient with its DVs/item/OT data at the offered level, records completion,
+  and registers the recipient in the Pokédex; original dialogue/animation and
+  mail restrictions remain approximations.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -73,7 +78,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1429/1429) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1432/1432) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

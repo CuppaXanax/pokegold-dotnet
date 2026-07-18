@@ -1005,6 +1005,60 @@ module Parsers =
         flush ()
         List.ofSeq result
 
+    // --- NPC trades -----------------------------------------------------------
+
+    type NpcTrade =
+        { Id: int
+          Constant: string
+          DialogSet: string
+          Give: string
+          Receive: string
+          Nickname: string
+          Dvs: int
+          HeldItem: string
+          OtId: int
+          OtName: string
+          Gender: string }
+
+    let private npcTradeConstantRx = Regex(@"^\s*const\s+(NPC_TRADE_[A-Z0-9_]+)", RegexOptions.IgnoreCase)
+
+    let private npcTradeRx =
+        Regex(
+            @"^\s*npctrade\s+([A-Z0-9_]+)\s*,\s*([A-Z0-9_]+)\s*,\s*([A-Z0-9_]+)\s*,\s*""([^""]*)""\s*,\s*\$([0-9A-F]{2})\s*,\s*\$([0-9A-F]{2})\s*,\s*([A-Z0-9_]+)\s*,\s*(\d+)\s*,\s*""([^""]*)""\s*,\s*([A-Z0-9_]+)",
+            RegexOptions.IgnoreCase)
+
+    let private npcTradeConstants =
+        [ for raw in Repo.readText("constants/npc_trade_constants.asm").Split('\n') do
+              let m = npcTradeConstantRx.Match raw
+              if m.Success then yield m.Groups.[1].Value ]
+
+    let npcTrades : NpcTrade list =
+        let parsed =
+            [ for raw in Repo.readText("data/events/npc_trades.asm").Split('\n') do
+                  let line =
+                      let comment = raw.IndexOf(';')
+                      if comment >= 0 then raw.Substring(0, comment) else raw
+
+                  let m = npcTradeRx.Match line
+                  if m.Success then yield m ]
+
+        if parsed.Length <> npcTradeConstants.Length then
+            failwithf "Expected %d NPC trades, found %d" npcTradeConstants.Length parsed.Length
+
+        parsed
+        |> List.mapi (fun id m ->
+            { Id = id
+              Constant = npcTradeConstants.[id]
+              DialogSet = m.Groups.[1].Value
+              Give = m.Groups.[2].Value
+              Receive = m.Groups.[3].Value
+              Nickname = m.Groups.[4].Value
+              Dvs = (Convert.ToInt32(m.Groups.[5].Value, 16) <<< 8) ||| Convert.ToInt32(m.Groups.[6].Value, 16)
+              HeldItem = m.Groups.[7].Value
+              OtId = int m.Groups.[8].Value
+              OtName = m.Groups.[9].Value
+              Gender = m.Groups.[10].Value })
+
     // --- Items -----------------------------------------------------------------
 
     /// Intermediate record for one item parsed from the disassembly tables.

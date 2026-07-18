@@ -634,8 +634,20 @@ let ``legendary event flags can be set`` () =
         Assert.True(World.hasEvent flag world, $"{flag} should be settable")
 
 [<Fact>]
-let ``NPC trades table has entries`` () =
-    Assert.True(NpcTrades.trades.Length > 0)
+let ``NPC trades preserve Mike's zero-based source index`` () =
+    let mike =
+        NpcTrades.trades
+        |> List.find (fun trade -> trade.Give = "DROWZEE")
+
+    Assert.Equal(0, mike.Id)
+    Assert.Equal("NPC_TRADE_MIKE", mike.Constant)
+    Assert.Equal("MACHOP", mike.Receive)
+    Assert.Equal("MUSCLE", mike.Nickname)
+    Assert.Equal(0x3766, mike.Dvs)
+    Assert.Equal("GOLD_BERRY", mike.HeldItem)
+    Assert.Equal(37460, mike.OtId)
+    Assert.Equal("MIKE", mike.OtName)
+    Assert.Equal("TRADE_GENDER_EITHER", mike.Gender)
 
 [<Fact>]
 let ``S.S. Aqua is gated by EVENT_BEAT_ELITE_FOUR`` () =

@@ -73,6 +73,44 @@ let private runModalScene (scene: Scene) maxFrames =
     Assert.Equal(1, stack.Count)
 
 [<Fact>]
+let ``Mike NPC trade appends source Machop metadata at the offered level`` () =
+    let drowzee = PartyMon.create (Species.byName "DROWZEE").Dex 10
+    let pidgey = PartyMon.create (Species.byName "PIDGEY").Dex 8
+    let player = { PlayerStateOps.initial with Party = [ drowzee; pidgey ] }
+    let mike = NpcTrades.tryFind "NPC_TRADE_MIKE" |> Option.defaultWith (fun () -> failwith "missing Mike trade")
+    let mutable traded: PlayerState option = None
+    let scene = NpcTradeScene(Content(), player, mike, false, fun updated -> traded <- Some updated)
+
+    press { Buttons.none with A = true } (scene :> Scene) |> ignore
+    press { Buttons.none with A = true } (scene :> Scene) |> ignore
+
+    let updated = traded |> Option.defaultWith (fun () -> failwith "expected Mike trade callback")
+    let machop = updated.Party.[1]
+
+    Assert.Equal<int list>([ pidgey.SpeciesId; (Species.byName "MACHOP").Dex ], updated.Party |> List.map _.SpeciesId)
+    Assert.Equal(10, machop.Level)
+    Assert.Equal("MUSCLE", machop.Nickname)
+    Assert.Equal(0x3766, machop.Dvs)
+    Assert.Equal(Some "GOLD_BERRY", machop.HeldItem)
+    Assert.Equal("MIKE", machop.OtName)
+    Assert.Equal(37460, machop.OtId)
+    Assert.Contains(machop.SpeciesId, updated.DexSeen)
+    Assert.Contains(machop.SpeciesId, updated.DexOwn)
+
+[<Fact>]
+let ``Emy NPC trade rejects a male Dragonair`` () =
+    let dragonair = PartyMon.createWithDvs (Species.byName "DRAGONAIR").Dex 40 0xffff
+    let player = { PlayerStateOps.initial with Party = [ dragonair ] }
+    let emy = NpcTrades.tryFind "NPC_TRADE_EMY" |> Option.defaultWith (fun () -> failwith "missing Emy trade")
+    let mutable traded = false
+    let scene = NpcTradeScene(Content(), player, emy, false, fun _ -> traded <- true)
+
+    press { Buttons.none with A = true } (scene :> Scene) |> ignore
+    press { Buttons.none with A = true } (scene :> Scene) |> ignore
+
+    Assert.False(traded)
+
+[<Fact>]
 let ``Mom bank scene deposits and withdraws money`` () =
     let mutable changed = PlayerStateOps.initial
     let scene =

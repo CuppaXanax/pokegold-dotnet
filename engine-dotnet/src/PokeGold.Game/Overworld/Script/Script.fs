@@ -79,6 +79,8 @@ type ScriptEffect =
     | GivePoke of species: string * level: int * item: string option
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
     | CheckPoke of species: string
+    /// `trade` — run an NPC trade identified by its source NPC_TRADE_* constant.
+    | OpenNpcTrade of tradeId: string
     /// `setlasttalked` — make this object the active one (for `faceplayer` etc.).
     | SetLastTalked of obj: string
     /// `applymovement` — run a movement script on an object; resume when it ends.
@@ -574,7 +576,7 @@ module Script =
             | ConditionalEvent _ -> run world { next with ScriptVar = 0 }
             | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
             | Catchtutorial battleType -> suspend next world (StartCatchTutorial battleType)
-            | Trade _
+            | Trade tradeId -> suspend next world (OpenNpcTrade tradeId)
             | Givepokemail _ -> run world next
             | Addcellnum phone -> suspend next world (AddPhoneContact phone)
             | Describedecoration _
