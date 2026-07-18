@@ -413,19 +413,6 @@ let ``menu and UI opcodes set script var via control flow`` () =
         | other -> Assert.Fail($"expected ShowText after verticalmenu selection, got {other}")
     | other -> Assert.Fail($"expected menu effect from verticalmenu, got {other}")
 
-    let elevatorProg =
-        parse
-            "S:\n\
-             \televator\n\
-             \tiftrue .Ok\n\
-             \tend\n\
-             .Ok:\n\
-             \tjumptext OkText\n"
-
-    match Script.start "S" World.empty elevatorProg "" with
-    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
-    | other -> Assert.Fail($"expected ShowText from elevator branch, got {other}")
-
     let checkProg =
         parse
             "S:\n\
@@ -453,6 +440,14 @@ let ``conditional event headers gate background scripts with source flag polarit
     Assert.Equal(Some "Gate.Body", Triggers.conditionalBgScript enabled ifSet prog)
     Assert.Equal(Some "Gate.Body", Triggers.conditionalBgScript World.empty ifNotSet prog)
     Assert.Equal(None, Triggers.conditionalBgScript enabled ifNotSet prog)
+
+[<Fact>]
+let ``elevator suspends with its source floor-data label`` () =
+    let prog = parse "S:\n\televator FloorData\n\tend\nFloorData:\n\televfloor FLOOR_1F, 1, TEST_MAP\n"
+
+    match Script.start "S" World.empty prog "TEST" with
+    | { Outcome = Suspended(_, OpenElevator "FloorData") } -> ()
+    | other -> Assert.Fail($"expected OpenElevator FloorData, got {other}")
 
 [<Fact>]
 let ``giveegg suspends as GivePoke`` () =

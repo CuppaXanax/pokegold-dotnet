@@ -103,6 +103,92 @@ let private sceneStackAt mapId x y facing world player =
     stack.Add(scene :> Scene)
     scene, stack
 
+let private enterGoldenrodElevator (driver: GameDriver) =
+    let mapId (snapshot: RuntimeSnapshot) =
+        snapshot.Overworld |> Option.map _.MapId |> Option.defaultValue ""
+
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("GoldenrodDeptStore1F", 2, 1, Some Up))
+    driver.Step Up
+    Assert.Equal("GoldenrodDeptStoreElevator", mapId driver.Snapshot)
+
+    driver.Apply(Teleport(3, 2))
+    driver.Step Up
+    driver.RunUntil(
+        (fun snapshot ->
+            snapshot.Overworld |> Option.exists (fun overworld ->
+                not overworld.Player.Moving
+                && overworld.Player.CellX = 3
+                && overworld.Player.CellY = 1
+                && overworld.Player.Facing = Up)),
+        20)
+    |> ignore
+    let beforeTalk = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    Assert.Equal("GoldenrodDeptStoreElevator", beforeTalk.MapId)
+    Assert.Equal((3, 1, Up), (beforeTalk.Player.CellX, beforeTalk.Player.CellY, beforeTalk.Player.Facing))
+    Assert.False(beforeTalk.Player.Moving)
+    driver.Talk()
+    Assert.Equal("ElevatorScene", driver.Snapshot.TopScene)
+
+[<Fact>]
+let ``Goldenrod elevator cancels current floor and reaches selected 2F`` () =
+    let mapId (snapshot: RuntimeSnapshot) =
+        snapshot.Overworld |> Option.map _.MapId |> Option.defaultValue ""
+
+    let cancelled = GameDriver()
+    enterGoldenrodElevator cancelled
+    cancelled.Press(press "b")
+
+    let afterCancel =
+        cancelled.RunUntil((fun snapshot -> snapshot.TopScene = "OverworldScene"), 20)
+    Assert.Equal("GoldenrodDeptStoreElevator", mapId afterCancel)
+
+    let selected = GameDriver()
+    enterGoldenrodElevator selected
+    selected.Press(directionButton Down)
+    selected.Press(press "a")
+
+    for _ in 1 .. 200 do
+        selected.Tick() |> ignore
+
+    let selectedOverworld = selected.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    Assert.True(selectedOverworld.CanCapture)
+    Assert.Equal("GoldenrodDeptStore2F", mapId selected.Snapshot)
+    selected.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+[<Fact>]
+let ``Celadon elevator resolves its separate source floor table`` () =
+    let mapId (snapshot: RuntimeSnapshot) =
+        snapshot.Overworld |> Option.map _.MapId |> Option.defaultValue ""
+
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("CeladonDeptStore1F", 2, 1, Some Up))
+    driver.Step Up
+    Assert.Equal("CeladonDeptStoreElevator", mapId driver.Snapshot)
+
+    driver.Apply(Teleport(3, 2))
+    driver.Step Up
+    driver.RunUntil(
+        (fun snapshot ->
+            snapshot.Overworld |> Option.exists (fun overworld ->
+                not overworld.Player.Moving
+                && overworld.Player.CellX = 3
+                && overworld.Player.CellY = 1
+                && overworld.Player.Facing = Up)),
+        20)
+    |> ignore
+    driver.Talk()
+    Assert.Equal("ElevatorScene", driver.Snapshot.TopScene)
+
+    driver.Press(directionButton Down)
+    driver.Press(press "a")
+    for _ in 1 .. 200 do
+        driver.Tick() |> ignore
+
+    Assert.Equal("CeladonDeptStore2F", mapId driver.Snapshot)
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
 [<Fact>]
 let ``Mike trades source Drowzee for Machop through the real Goldenrod script`` () =
     let driver = GameDriver()

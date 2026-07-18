@@ -75,6 +75,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   starting the body script: `BGEVENT_IFSET` and `BGEVENT_IFNOTSET` use their
   original polarity and silently ignore failed conditions, including the Rocket
   Base locked-door path after it has opened.
+- Department-store elevators now consume their generated `elevfloor` data,
+  return false on cancellation/current-floor selection, and reach selected
+  Goldenrod/Celadon source warps after the script timing sequence; exact
+  scrolling-menu art and GBC backup-warp storage remain approximations.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -82,7 +86,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1434/1434) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1438/1438) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

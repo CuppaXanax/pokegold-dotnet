@@ -103,9 +103,11 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "ConditionalEvent" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 handles the source map-data macro at BGEVENT_IFSET/BGEVENT_IFNOTSET dispatch rather than as a VM opcode. Polarity tests and the real Rocket Base locked door prove its flag-gated body and silent no-action path."
 
+          yield! many ScriptCommandCase ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 consumes generated elevfloor table records through a source-style floor selector. Goldenrod proves cancel/current-floor false result and a 2F transition after source timing; Celadon proves its independent table. The port directly resolves the selected map/warp after script completion instead of emulating GBC backup-warp memory."
+            [ "Elevator"; "Elevfloor" ]
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Elevator"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"
-              "Describedecoration"; "Elevfloor" ]
+            [ "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Describedecoration" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
 
@@ -226,6 +228,7 @@ module ConformanceLedger =
           yield entry SceneSurface "PokedexScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "D Pokédex tests cover Start-driven type search, caught-only type filtering from data/types/search_types.asm, AREA wild-encounter nests via FindNest data, and front/question-mark dex pic rendering; exact Pokégear town-map nest icons remain future UI polish."
           yield entry SceneSurface "PokePicWaitScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 runtime coverage opens Elm's Cyndaquil front picture through the real script, asserts visible source-menu-region pixels, dismisses with A, and resumes TakeCyndaquilText; exact original tilemap/SGB restoration remains presentation work."
           yield entry SceneSurface "NpcTradeScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 supports source-record NPC trade confirmation, party selection, requested species/gender validation, one-time completion, recipient metadata, and Pokédex registration. Exact GBC text and cable animation remain presentation work."
+          yield entry SceneSurface "ElevatorScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 selector presents generated source floors, returns cancel/current-floor false, and routes Goldenrod/Celadon selections to source destination warps after the surrounding script finishes. Exact scrolling-menu art and backup-warp memory remain presentation/runtime approximations."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "SummaryScene" ]

@@ -73,6 +73,27 @@ let private runModalScene (scene: Scene) maxFrames =
     Assert.Equal(1, stack.Count)
 
 [<Fact>]
+let ``elevator scene selects a different source floor`` () =
+    let floors =
+        [ { Name = "FLOOR_B1F"; Map = "BASEMENT"; Warp = 2 }
+          { Name = "FLOOR_1F"; Map = "FIRST"; Warp = 4 }
+          { Name = "FLOOR_2F"; Map = "SECOND"; Warp = 3 } ]
+    let mutable selected: ElevatorFloor option = None
+    let scene = ElevatorScene(Content(), floors, 1, fun floor -> selected <- floor)
+
+    Assert.Equal(1, scene.Cursor)
+    (scene :> Scene).Update({ Buttons.none with Down = true }) |> ignore
+    (scene :> Scene).Update(Buttons.none) |> ignore
+    Assert.Equal(2, scene.Cursor)
+
+    let transition = (scene :> Scene).Update({ Buttons.none with A = true })
+    Assert.Equal(Pop, transition)
+
+    match selected with
+    | Some floor -> Assert.Equal("SECOND", floor.Map)
+    | None -> Assert.Fail("expected a selected destination")
+
+[<Fact>]
 let ``Mike NPC trade appends source Machop metadata at the offered level`` () =
     let drowzee = PartyMon.create (Species.byName "DROWZEE").Dex 10
     let pidgey = PartyMon.create (Species.byName "PIDGEY").Dex 8

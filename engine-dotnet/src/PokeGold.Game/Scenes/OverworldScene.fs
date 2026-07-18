@@ -129,6 +129,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable balanceOverlay: BalanceDisplay option = None
     /// A suspended script awaiting the child scene we pushed for an effect.
     let mutable pending: (ScriptVm * ScriptEffect) option = None
+    /// The map visited immediately before the current one, used by source elevators
+    /// to identify their current floor from the map that entered the elevator.
+    let mutable previousMapId: string option = None
+    /// A selected elevator destination remains pending while the source script
+    /// runs its close-window, delay, sound, and quake commands.
+    let mutable pendingElevatorDestination: ElevatorFloor option = None
     /// A child scene transition produced while restoring/loading the overworld.
     let mutable restoreTransition: Transition option = None
     /// Script resumes waiting behind higher-priority map-entry scripts.
@@ -177,6 +183,21 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let speciesNameByDex dex =
         Species.all
         |> Map.tryPick (fun name stats -> if stats.Dex = dex then Some name else None)
+
+    let elevatorFloors (dataLabel: string) =
+        match state.Script.Labels.TryFind dataLabel with
+        | Some start ->
+            state.Script.Commands
+            |> Array.skip start
+            |> Array.takeWhile (function | Elevfloor _ -> true | _ -> false)
+            |> Array.choose (function
+                | Elevfloor(name :: warp :: map :: _) ->
+                    match Int32.TryParse warp with
+                    | true, destinationWarp -> Some { Name = name; Map = map; Warp = destinationWarp }
+                    | _ -> None
+                | _ -> None)
+            |> Array.toList
+        | None -> []
 
     let fadeAlpha (run: PaletteFadeRun) =
         let elapsed = min run.TotalFrames (max 0 run.ElapsedFrames)
@@ -828,6 +849,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeRun <- None
         fadeVm <- None
         pokePicSpecies <- None
+        pendingElevatorDestination <- None
         followPair <- None
         lastTalkedActor <- None
         restoreTransition <- None
@@ -915,6 +937,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         |> Option.iter (fun point -> world <- World.setFlag point.Flag world)
 
     member private this.EnterMap(nextState: OverworldState, playMusic: bool) : Transition =
+        previousMapId <- Some state.MapId
         state <- nextState
         this.RegisterFlyPointArrival()
         this.ResetFlashIfOutOfCave()
@@ -1500,10 +1523,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                 match step.Outcome with
                 | Completed ->
-                    if scriptQueue.Count > 0 then
+                    match pendingElevatorDestination with
+                    | Some destination ->
+                        pendingElevatorDestination <- None
+                        match OverworldState.tryWarp content destination.Map destination.Warp with
+                        | Some nextState -> stop (this.EnterMap(nextState, true))
+                        | None -> stop Stay
+                    | None when scriptQueue.Count > 0 ->
                         let vm, value = scriptQueue.Dequeue()
                         resume value vm
-                    else
+                    | None ->
                         stop Stay
                 | Suspended(vm, effect) ->
                     match effect with
@@ -1641,6 +1670,26 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         menuResult <- 0
                         let optionCount = scriptMenuOptionCount vm.MapId menu
                         stop (Push(ScriptMenuScene(content, menu, optionCount, fun result -> menuResult <- result) :> Scene))
+                    | OpenElevator dataLabel ->
+                        let floors = elevatorFloors dataLabel
+                        let originFloor =
+                            previousMapId
+                            |> Option.bind Maps.canonicalConst
+                            |> Option.bind (fun origin -> floors |> List.tryFindIndex (fun floor -> floor.Map = origin))
+
+                        match originFloor with
+                        | Some currentFloor when not floors.IsEmpty ->
+                            pending <- Some(vm, effect)
+                            pendingElevatorDestination <- None
+                            stop (
+                                Push(
+                                    ElevatorScene(
+                                        content,
+                                        floors,
+                                        currentFloor,
+                                        fun destination -> pendingElevatorDestination <- destination) :> Scene))
+                        | _ ->
+                            resume (Some 0) vm
                     | SelectApricornForKurt ->
                         match Apricorns.available player.Bag with
                         | [] -> resume (Some 0) vm
@@ -2082,6 +2131,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     member private _.CaptureBlockers() : string list =
         [ if pending.IsSome then "pending child scene"
+          if pendingElevatorDestination.IsSome then "elevator transition"
           if runningMove.IsSome then "scripted movement"
           if pauseVm.IsSome || pauseFrames > 0 then "script pause"
           if fadeVm.IsSome || fadeRun.IsSome || fadeOverlay.IsSome then "palette fade"
@@ -2110,6 +2160,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeRun <- None
         fadeVm <- None
         pokePicSpecies <- None
+        previousMapId <- None
+        pendingElevatorDestination <- None
         scriptQueue.Clear()
         this.SyncSurfStateWithTerrain() |> ignore
         resetObjectPresence ()
@@ -2241,6 +2293,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeRun <- None
         fadeVm <- None
         pokePicSpecies <- None
+        pendingElevatorDestination <- None
 
         match this.EnterMap(ns, true) with
         | Stay -> ()
@@ -2413,6 +2466,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | HallOfFame -> None
                         | AskYesNo -> Some yesNoResult
                         | OpenScriptMenu _ -> Some menuResult
+                        | OpenElevator _ -> Some(if pendingElevatorDestination.IsSome then 1 else 0)
                         | SelectApricornForKurt ->
                             match apricornResult with
                             | Some apricorn ->

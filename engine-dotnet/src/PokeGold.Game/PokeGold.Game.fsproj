@@ -176,6 +176,7 @@
     <Compile Include="Scenes\ScriptMenuScene.fs" />
     <Compile Include="Scenes\ApricornSelectionScene.fs" />
     <Compile Include="Scenes\FlyDestinationScene.fs" />
+    <Compile Include="Scenes\ElevatorScene.fs" />
     <Compile Include="Scenes\StartMenuScene.fs" />
     <Compile Include="Scenes\PackUseGive.fs" />
     <Compile Include="Scenes\SummaryScene.fs" />

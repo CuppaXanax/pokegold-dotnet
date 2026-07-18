@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,434 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,438 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -386,8 +386,8 @@ Generated commands are typed, but many are approximate and several required comm
   - ✅ The generated `Stonetable`/`Cmdqueue`/`Writecmdqueue` uses are consumed by OVR-006's Strength resolver for every Ice Path and Blackthorn source pairing. Generic Game Boy command-queue scheduling outside those only generated uses remains unmodelled.
   - ✅ `Trade` now consumes generated source NPC trade records through party selection, requested species/gender validation, source recipient metadata, one-time completion, and Pokédex registration. Exact GBC dialogue/animation and mail restrictions remain UI work.
   - ✅ `ConditionalEvent` is handled at `BGEVENT_IFSET`/`BGEVENT_IFNOTSET` dispatch as source map metadata, with correct flag polarity and silent no-action behavior when its condition fails.
+  - ✅ `Elevator` now consumes generated `elevfloor` data through a floor selector; cancellation/current-floor selection returns false and a selected Goldenrod or Celadon floor enters its source warp after the surrounding script completes. GBC backup-warp memory and exact scrolling-menu art remain approximations.
   - Audit and implement or accurately exclude:
-    - `Elevator`, `Elevfloor`
     - `Givepokemail`, `Checkpokemail`
     - `Writeobjectxy`, `Ugdoor`
     - `Describedecoration`

@@ -154,6 +154,9 @@ type ScriptEffect =
     | CloseWindow
     /// `verticalmenu` / `2dmenu` — show the currently loaded script menu.
     | OpenScriptMenu of menu: string
+    /// `elevator` — select a source `elevfloor` destination. → resume value:
+    /// 1 for a different floor, 0 for cancel/current floor.
+    | OpenElevator of dataLabel: string
     /// `special SelectApricornForKurt` — pick an apricorn from the bag.
     /// Resume with its numeric item id, or 0 for cancel/no apricorn.
     | SelectApricornForKurt
@@ -571,7 +574,10 @@ module Script =
                 |> fun clearedWorld -> suspend next clearedWorld ClosePokePic
             | Itemnotify -> suspend next world ShowItemNotification
             | Closewindow -> suspend next world CloseWindow
-            | Elevator _ -> run world { next with ScriptVar = 1 }
+            | Elevator args ->
+                match args with
+                | dataLabel :: _ -> suspend next world (OpenElevator dataLabel)
+                | [] -> run world { next with ScriptVar = 0 }
             | Checkpokemail _
             | ConditionalEvent _ -> run world next
             | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
