@@ -101,9 +101,11 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "Trade" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 generates all six source NPC trade records and runs a player-facing party selection flow. Mike's real Goldenrod script proves source replacement, trade marker, and script resumption; scene tests prove recipient level/order/DVs/item/OT/Dex registration and Emy's female-only gate. Exact dialogue/animation and mail restrictions remain UI work."
 
+          yield entry ScriptCommandCase "ConditionalEvent" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 handles the source map-data macro at BGEVENT_IFSET/BGEVENT_IFNOTSET dispatch rather than as a VM opcode. Polarity tests and the real Rocket Base locked door prove its flag-gated body and silent no-action path."
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
             [ "Elevator"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"
-              "ConditionalEvent"; "Describedecoration"; "Elevfloor" ]
+              "Describedecoration"; "Elevfloor" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
 

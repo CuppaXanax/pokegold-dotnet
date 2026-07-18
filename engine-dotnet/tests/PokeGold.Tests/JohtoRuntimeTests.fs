@@ -1498,6 +1498,25 @@ let ``A11 TeamRocketBaseB1F stairs load TeamRocketBaseB2F`` () =
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
 [<Fact>]
+let ``A11 Rocket Base conditional door runs only while its event is clear`` () =
+    let locked = GameDriver()
+    locked.Apply(StartNewGame "A")
+    locked.Apply(SetEvent("EVENT_OPENED_DOOR_TO_ROCKET_HIDEOUT_TRANSMITTER", false))
+    locked.Apply(Warp("TeamRocketBaseB2F", 14, 13, Some Up))
+
+    locked.Talk()
+    Assert.Equal("TextBoxScene", locked.Snapshot.TopScene)
+
+    let opened = GameDriver()
+    opened.Apply(StartNewGame "A")
+    opened.Apply(SetEvent("EVENT_OPENED_DOOR_TO_ROCKET_HIDEOUT_TRANSMITTER", true))
+    opened.Apply(Warp("TeamRocketBaseB2F", 14, 13, Some Up))
+
+    opened.Talk()
+    Assert.Equal("OverworldScene", opened.Snapshot.TopScene)
+    opened.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
 let ``A11 TeamRocketBaseB1F security camera starts Rocket battle`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")

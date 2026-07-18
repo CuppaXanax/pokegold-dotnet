@@ -48,6 +48,35 @@ module Triggers =
         | Some s when s <> "" && s <> "ObjectEvent" -> Some s
         | _ -> MapEvents.bgAt fx fy events |> Option.bind (fun b -> if b.Script <> "" then Some b.Script else None)
 
+    /// Resolve a background event's source `conditional_event FLAG, .Script`
+    /// header. The macro is map-event data, not a VM opcode: IFSET runs its body
+    /// only when the flag is set and IFNOTSET only when it is clear.
+    let conditionalBgScript (world: World) (bg: BgEvent) (program: ScriptProgram) : string option =
+        match bg.Kind with
+        | "BGEVENT_IFSET"
+        | "BGEVENT_IFNOTSET" ->
+            let header =
+                match program.Labels.TryFind bg.Script with
+                | Some pc when pc >= 0 && pc < program.Commands.Length ->
+                    match program.Commands.[pc] with
+                    | ConditionalEvent(flag :: target :: _) -> Some(flag, target)
+                    | _ -> None
+                | _ -> None
+
+            match header with
+            | Some(flag, target) ->
+                let flagSet = World.hasEvent flag world
+                let allowed =
+                    (bg.Kind = "BGEVENT_IFSET" && flagSet)
+                    || (bg.Kind = "BGEVENT_IFNOTSET" && not flagSet)
+
+                if allowed then
+                    if target.StartsWith "." then Some(bg.Script + target) else Some target
+                else
+                    None
+            | None -> None
+        | _ -> Some bg.Script
+
     /// The coord trigger a step onto `(cellX, cellY)` fires: one on that cell whose
     /// scene is the map's active scene and that hasn't fired yet. `None` otherwise.
     let coordToFire

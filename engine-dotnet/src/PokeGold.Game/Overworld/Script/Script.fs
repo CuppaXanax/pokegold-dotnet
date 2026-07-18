@@ -573,7 +573,7 @@ module Script =
             | Closewindow -> suspend next world CloseWindow
             | Elevator _ -> run world { next with ScriptVar = 1 }
             | Checkpokemail _
-            | ConditionalEvent _ -> run world { next with ScriptVar = 0 }
+            | ConditionalEvent _ -> run world next
             | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None))
             | Catchtutorial battleType -> suspend next world (StartCatchTutorial battleType)
             | Trade tradeId -> suspend next world (OpenNpcTrade tradeId)

@@ -2511,6 +2511,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                         this.Drive(Script.start label world state.Script state.MapId)
 
+                    let startBgScript bg =
+                        match Triggers.conditionalBgScript world bg state.Script with
+                        | Some label when state.Script.Labels.ContainsKey label -> startScript label
+                        | _ -> Stay
+
                     match objectScriptAt fx fy with
                     | Some label when state.Script.Labels.ContainsKey label -> startScript label
                     | _ ->
@@ -2521,7 +2526,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy)
 
                         match Triggers.actionScript objectScriptAt isCounter state.Events state.Player.CellX state.Player.CellY state.Player.Facing with
-                        | Some label when state.Script.Labels.ContainsKey label -> startScript label
+                        | Some label when state.Script.Labels.ContainsKey label ->
+                            match MapEvents.bgAt fx fy state.Events with
+                            | Some bg when bg.Script = label -> startBgScript bg
+                            | _ -> startScript label
                         | _ ->
                             match collId with
                             | id when id = FieldMoves.CollCutTree || id = FieldMoves.CollCutTree1A ->

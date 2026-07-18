@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,432 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,434 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -385,11 +385,12 @@ Generated commands are typed, but many are approximate and several required comm
   - ✅ `Warpcheck` resolves the generated current-cell warp event after a scripted arrival and enters its source destination; the Kabuto puzzle runtime test proves the opened chamber hole reaches the inner chamber.
   - ✅ The generated `Stonetable`/`Cmdqueue`/`Writecmdqueue` uses are consumed by OVR-006's Strength resolver for every Ice Path and Blackthorn source pairing. Generic Game Boy command-queue scheduling outside those only generated uses remains unmodelled.
   - ✅ `Trade` now consumes generated source NPC trade records through party selection, requested species/gender validation, source recipient metadata, one-time completion, and Pokédex registration. Exact GBC dialogue/animation and mail restrictions remain UI work.
+  - ✅ `ConditionalEvent` is handled at `BGEVENT_IFSET`/`BGEVENT_IFNOTSET` dispatch as source map metadata, with correct flag polarity and silent no-action behavior when its condition fails.
   - Audit and implement or accurately exclude:
     - `Elevator`, `Elevfloor`
     - `Givepokemail`, `Checkpokemail`
     - `Writeobjectxy`, `Ugdoor`
-    - `ConditionalEvent`, `Describedecoration`
+    - `Describedecoration`
   - No item may remain tagged `RequiredFor100Percent` and `StubNoOp` at release.
 
 - ⬜ **SCR-004 — Add command-level conformance tests for approximate critical commands.**

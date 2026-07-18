@@ -71,6 +71,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   recipient with its DVs/item/OT data at the offered level, records completion,
   and registers the recipient in the Pokédex; original dialogue/animation and
   mail restrictions remain approximations.
+- Conditional background events now evaluate their source event flag before
+  starting the body script: `BGEVENT_IFSET` and `BGEVENT_IFNOTSET` use their
+  original polarity and silently ignore failed conditions, including the Rocket
+  Base locked-door path after it has opened.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -78,7 +82,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1432/1432) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1434/1434) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

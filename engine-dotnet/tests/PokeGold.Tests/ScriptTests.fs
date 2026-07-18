@@ -439,18 +439,20 @@ let ``menu and UI opcodes set script var via control flow`` () =
     | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
     | other -> Assert.Fail($"expected ShowText from checkpokemail branch, got {other}")
 
-    let conditionalProg =
-        parse
-            "S:\n\
-             \tconditional_event\n\
-             \tiffalse .Ok\n\
-             \tend\n\
-             .Ok:\n\
-             \tjumptext OkText\n"
 
-    match Script.start "S" World.empty conditionalProg "" with
-    | { Outcome = Suspended(_, ShowText("OkText", _)) } -> ()
-    | other -> Assert.Fail($"expected ShowText from conditional_event branch, got {other}")
+[<Fact>]
+let ``conditional event headers gate background scripts with source flag polarity`` () =
+    let prog =
+        parse "Gate:\n\tconditional_event EVENT_GATE, .Body\n.Body:\n\tjumptext GatedText\n"
+
+    let ifSet = { X = 0; Y = 0; Kind = "BGEVENT_IFSET"; Script = "Gate" }
+    let ifNotSet = { ifSet with Kind = "BGEVENT_IFNOTSET" }
+    let enabled = World.setEvent "EVENT_GATE" World.empty
+
+    Assert.Equal(None, Triggers.conditionalBgScript World.empty ifSet prog)
+    Assert.Equal(Some "Gate.Body", Triggers.conditionalBgScript enabled ifSet prog)
+    Assert.Equal(Some "Gate.Body", Triggers.conditionalBgScript World.empty ifNotSet prog)
+    Assert.Equal(None, Triggers.conditionalBgScript enabled ifNotSet prog)
 
 [<Fact>]
 let ``giveegg suspends as GivePoke`` () =
