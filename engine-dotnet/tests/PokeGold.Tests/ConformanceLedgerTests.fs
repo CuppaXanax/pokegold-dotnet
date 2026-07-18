@@ -91,8 +91,11 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "Startbattle" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 runtime tests prove script-visible WIN=0 for capture, DRAW=2 for wild RUN, and existing BAT-016 through BAT-019 loss blackout/abort behavior. reloadmapafterbattle's Mom/Bill post-battle dispatch remains open."
 
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 VM and Elm's Lab runtime tests prove source operand-0 species resolution, visible front-pic rendering, A/B waitbutton dismissal, and close-to-text script resumption. Exact GBC tilemap/SGB restoration remains presentation work."
+            [ "Pokepic"; "Closepokepic" ]
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Pokepic"; "Closepokepic"; "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
+            [ "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Elevfloor" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
@@ -212,6 +215,7 @@ module ConformanceLedger =
           yield entry SceneSurface "LearnMoveScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BAT-012 tests cover explicit slot replacement, two-stage decline confirmation, HM rejection, cancellation, and one-shot decisions."
           yield entry SceneSurface "EvolutionScene" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BAT-014 tests cover explicit evolution acceptance/cancellation and one-shot decisions; persistent mutation remains deferred until acceptance."
           yield entry SceneSurface "PokedexScene" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "D Pokédex tests cover Start-driven type search, caught-only type filtering from data/types/search_types.asm, AREA wild-encounter nests via FindNest data, and front/question-mark dex pic rendering; exact Pokégear town-map nest icons remain future UI polish."
+          yield entry SceneSurface "PokePicWaitScene" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 runtime coverage opens Elm's Cyndaquil front picture through the real script, asserts visible source-menu-region pixels, dismisses with A, and resumes TakeCyndaquilText; exact original tilemap/SGB restoration remains presentation work."
 
           yield! many SceneSurface ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work for side systems."
             [ "PCBoxScene"; "PcMenuScene"; "PlayerPCScene"; "SummaryScene" ]

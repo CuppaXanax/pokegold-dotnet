@@ -149,6 +149,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     let mutable fadeOverlay: (PaletteFadeColor * byte) option = None
     let mutable fadeRun: PaletteFadeRun option = None
     let mutable fadeVm: ScriptVm option = None
+    let mutable pokePicSpecies: string option = None
     let paletteFadeFrames = 8
     /// Active `follow follower, leader` relationship.
     let mutable followPair: (ActorId * ActorId) option = None
@@ -610,6 +611,28 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 pixels.[i + 2] <- byte (int pixels.[i + 2] / 5)
                 i <- i + 4
 
+    member private _.PokePicPath(species: string) =
+        let candidate = $"gfx/pokemon/{species.ToLowerInvariant()}/front_gold.png"
+        if Assets.exists candidate then candidate else "gfx/pokedex/question_mark.png"
+
+    member private this.RenderPokePic(fb: Framebuffer) =
+        match pokePicSpecies with
+        | None -> ()
+        | Some species ->
+            // `PokepicMenuHeader` uses menu_coords 6,4 through 14,13 and
+            // PlaceGraphic writes the source 7x7 front picture at its interior.
+            WindowRenderer.drawBox fb content.Font TextRenderer.palette 6 4 9 10
+            let picture = Image.loadTilesWithSize (this.PokePicPath species)
+            let tilesWide = max 1 (picture.Width / 8)
+            let pictureLeft = 7 * 8 + max 0 ((7 * 8 - picture.Width) / 2)
+            let pictureTop = 5 * 8 + max 0 ((7 * 8 - picture.Height) / 2)
+
+            picture.Tiles
+            |> Array.iteri (fun index tile ->
+                let x = pictureLeft + (index % tilesWide) * 8
+                let y = pictureTop + (index / tilesWide) * 8
+                Graphics.drawTile fb TextRenderer.palette x y tile)
+
     member private _.ButtonsForDirection(direction) =
         match direction with
         | Down -> { Buttons.none with Down = true }
@@ -804,6 +827,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeOverlay <- None
         fadeRun <- None
         fadeVm <- None
+        pokePicSpecies <- None
         followPair <- None
         lastTalkedActor <- None
         restoreTransition <- None
@@ -1484,6 +1508,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 | Suspended(vm, effect) ->
                     match effect with
                     // ----- effects that push a child scene and suspend -----
+                    | WaitPokePic ->
+                        pending <- Some(vm, effect)
+                        stop (Push(PokePicWaitScene() :> Scene))
                     | ShowText(label, _faceFirst) ->
                         pending <- Some(vm, effect)
                         let speed = Options.textSpeedDelay player.Options.TextSpeed
@@ -1718,6 +1745,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
+                    | ShowPokePic species ->
+                        pokePicSpecies <- Some species
+                        resume None vm
+                    | ClosePokePic ->
+                        pokePicSpecies <- None
+                        resume None vm
                     | GiveItem(item, qty, false) ->
                         this.AddItem item qty
                         world <- World.setBuffer "__current_item" item world
@@ -2049,6 +2082,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeOverlay <- None
         fadeRun <- None
         fadeVm <- None
+        pokePicSpecies <- None
         scriptQueue.Clear()
         this.SyncSurfStateWithTerrain() |> ignore
         resetObjectPresence ()
@@ -2179,6 +2213,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeOverlay <- None
         fadeRun <- None
         fadeVm <- None
+        pokePicSpecies <- None
 
         match this.EnterMap(ns, true) with
         | Stay -> ()
@@ -2624,4 +2659,5 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 WindowRenderer.drawString fb content.Font TextRenderer.palette 6 3 (sprintf "COIN %d" player.Coins)
 
             this.ApplyDarknessOverlay(fb)
+            this.RenderPokePic(fb)
             applyFadeOverlay fb

@@ -42,6 +42,7 @@ let private tickStoryFlow (driver: GameDriver) maxFrames completed =
         let buttons =
             match driver.Snapshot.TopScene with
             | "TextBoxScene"
+            | "PokePicWaitScene"
             | "YesNoScene" when frame % 2 = 0 -> press "a"
             | _ -> Buttons.none
 
@@ -144,6 +145,42 @@ let ``Elm starter flow gives Totodile and unlocks New Bark exit`` () =
     Assert.Equal(1, after.SceneId)
     Assert.Equal(1, after.Player.CellX)
     Assert.False(newTextAfterWarp, "teacher blocker should not fire after actual starter acquisition")
+
+[<Fact>]
+let ``Cyndaquil starter preview displays Pokepic until dismissal then resumes`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("ELMS_LAB", 1))
+    driver.Apply(Warp("ElmsLab", 6, 4, Some Up))
+
+    let baseline = Array.copy driver.Game.Framebuffer.Pixels
+    driver.Talk()
+
+    Assert.Equal("PokePicWaitScene", driver.Snapshot.TopScene)
+
+    let picturePixelsChanged =
+        seq {
+            for y in 32 .. 111 do
+                for x in 48 .. 119 do
+                    let offset = (y * Display.Width + x) * 4
+                    yield
+                        baseline.[offset] <> driver.Game.Framebuffer.Pixels.[offset]
+                        || baseline.[offset + 1] <> driver.Game.Framebuffer.Pixels.[offset + 1]
+                        || baseline.[offset + 2] <> driver.Game.Framebuffer.Pixels.[offset + 2]
+        }
+        |> Seq.exists id
+    Assert.True(picturePixelsChanged, "Pokepic should visibly replace Elm's Lab in the source menu region")
+
+    driver.Press(press "a")
+    let resumed =
+        driver.RunUntil(
+            (fun snapshot ->
+                snapshot.TopScene = "TextBoxScene"
+                && snapshot.Overworld |> Option.exists (fun overworld -> overworld.LastTextLabel = Some "TakeCyndaquilText")),
+            20)
+
+    Assert.Equal("TextBoxScene", resumed.TopScene)
+    assertTraceCore driver
 
 [<Fact>]
 let ``new game reaches PlayersHouse2F through title menu and naming input`` () =

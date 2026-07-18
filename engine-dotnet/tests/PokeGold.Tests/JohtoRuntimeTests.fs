@@ -214,6 +214,7 @@ let private advanceFreshSaveRouteUntil (driver: GameDriver) maxFrames predicate 
         let buttons =
             match driver.Snapshot.TopScene with
             | "TextBoxScene"
+            | "PokePicWaitScene"
             | "YesNoScene" when frame % 2 = 0 -> press "a"
             | "WeekdayScene" ->
                 match weekdayStep with

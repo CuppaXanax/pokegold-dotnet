@@ -31,11 +31,18 @@ type PaletteFadeDirection =
 /// Text handling is collapsed to the player-visible behaviour: `writetext`
 /// (and the `jumptext`/`jumptextfaceplayer` shorthands) all surface as `ShowText`,
 /// which the text scene prints, waits a button on, and closes — so `opentext`,
-/// `closetext`, `waitbutton`, and `promptbutton` are pure no-ops in the VM.
+/// `closetext`, and `promptbutton` are pure no-ops in the VM. `waitbutton`
+/// suspends only while a preceding `pokepic` is active.
 type ScriptEffect =
     /// `writetext` / `jumptext` / `jumptextfaceplayer` — print a text label
     /// (face the player first when `faceFirst`), wait for a button, close.
     | ShowText of text: string * faceFirst: bool
+    /// `pokepic` — render a source Pokémon front picture over the overworld.
+    | ShowPokePic of species: string
+    /// `waitbutton` after `pokepic` — wait for the player to dismiss the picture.
+    | WaitPokePic
+    /// `closepokepic` — restore the ordinary overworld render path.
+    | ClosePokePic
     /// `itemnotify` — show the current item and its source bag pocket.
     | ShowItemNotification
     /// `yesorno` — yes/no menu. → resume value: 1 (yes) / 0 (no).
@@ -395,8 +402,12 @@ module Script =
             // ---- Pure no-ops (text-window mgmt is implicit in ShowText) ------
             | Opentext
             | Closetext
-            | Waitbutton
             | Promptbutton -> run world next
+            | Waitbutton ->
+                if World.getBuffer "__pokepic_species" world <> "" then
+                    suspend next world WaitPokePic
+                else
+                    run world next
 
             // ---- Suspending effects ----------------------------------------
             | Writetext text -> suspend next world (ShowText(text, false))
@@ -539,8 +550,21 @@ module Script =
                 suspend next world (OpenScriptMenu(if menu = "" then "MENU" else menu))
             | Loadmenu menu -> run (World.setBuffer "__loaded_menu" menu world) next
             | MenuCoords coords -> run (World.setBuffer "__menu_coords" (String.concat "," coords) world) next
-            | Pokepic _
-            | Closepokepic -> run world next
+            | Pokepic operand ->
+                let species =
+                    match operand.Trim() with
+                    | "0"
+                    | "$0" -> speciesNameByDex vm.ScriptVar
+                    | name -> Some name
+
+                match species with
+                | Some name ->
+                    World.setBuffer "__pokepic_species" name world
+                    |> fun pictureWorld -> suspend next pictureWorld (ShowPokePic name)
+                | None -> run world next
+            | Closepokepic ->
+                World.clearBuffer "__pokepic_species" world
+                |> fun clearedWorld -> suspend next clearedWorld ClosePokePic
             | Itemnotify -> suspend next world ShowItemNotification
             | Closewindow -> suspend next world CloseWindow
             | Elevator _ -> run world { next with ScriptVar = 1 }
@@ -669,7 +693,13 @@ module Script =
     let start (label: string) (world: World) (prog: ScriptProgram) (mapId: string) : ScriptStep =
         match prog.Labels.TryFind label with
         | None -> { World = world; Outcome = Completed }
-        | Some pc -> run world { Program = prog; Pc = pc; Stack = []; ScriptVar = 0; MapId = mapId }
+        | Some pc ->
+            run world
+                { Program = prog
+                  Pc = pc
+                  Stack = []
+                  ScriptVar = 0
+                  MapId = mapId }
 
     /// Continue a suspended script after its effect was enacted. For result-bearing
     /// effects, pass `Some value` to feed `wScriptVar` (e.g. the yes/no choice or

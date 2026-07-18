@@ -166,6 +166,7 @@
     <!-- Scenes: the scene-stack abstraction and the overworld scene. -->
     <Compile Include="Scenes\Scene.fs" />
     <Compile Include="Scenes\TextBoxScene.fs" />
+    <Compile Include="Scenes\PokePicWaitScene.fs" />
     <Compile Include="Scenes\BattleScene.fs" />
     <Compile Include="Scenes\CatchTutorialScene.fs" />
     <Compile Include="Scenes\YesNoScene.fs" />

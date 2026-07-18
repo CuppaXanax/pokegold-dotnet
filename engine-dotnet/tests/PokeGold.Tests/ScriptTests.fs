@@ -50,6 +50,33 @@ let ``catchtutorial preserves its battle type and suspends for a tutorial scene`
     | other -> failwithf "expected StartCatchTutorial, got %A" other
 
 [<Fact>]
+let ``Pokepic resolves script variable species and waits until closepokepic`` () =
+    let prog =
+        parse "S:\n\tsetval 155\n\tpokepic 0\n\twaitbutton\n\tclosepokepic\n\twritetext AfterText\n\tend\n"
+
+    let shown = Script.start "S" World.empty prog "TEST"
+    let pictureVm =
+        match shown.Outcome with
+        | Suspended(vm, ShowPokePic "CYNDAQUIL") -> vm
+        | other -> failwithf "expected Cyndaquil Pokepic, got %A" other
+
+    let waiting = Script.resume None shown.World pictureVm
+    let closeVm =
+        match waiting.Outcome with
+        | Suspended(vm, WaitPokePic) -> vm
+        | other -> failwithf "expected Pokepic waitbutton, got %A" other
+
+    let closing = Script.resume None waiting.World closeVm
+    let textVm =
+        match closing.Outcome with
+        | Suspended(vm, ClosePokePic) -> vm
+        | other -> failwithf "expected ClosePokePic, got %A" other
+
+    match (Script.resume None closing.World textVm).Outcome with
+    | Suspended(_, ShowText("AfterText", false)) -> ()
+    | other -> failwithf "expected post-close text, got %A" other
+
+[<Fact>]
 let ``parses opcodes with their typed arguments`` () =
     let prog =
         parse

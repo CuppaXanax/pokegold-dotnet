@@ -107,3 +107,7 @@ module World =
     /// Write a text buffer.
     let setBuffer (name: string) (value: string) (w: World) : World =
         { w with StringBuffers = Map.add name value w.StringBuffers }
+
+    /// Remove a text buffer so transient script state cannot alter a save shape.
+    let clearBuffer (name: string) (w: World) : World =
+        { w with StringBuffers = Map.remove name w.StringBuffers }
