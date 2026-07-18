@@ -63,6 +63,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   source front-picture menu region over the real overworld, waits for A/B, and
   `closepokepic` resumes the following script text; exact GBC tilemap/SGB
   restoration remains a presentation approximation.
+- `warpcheck` now resolves a scripted arrival through the generated current-cell
+  warp event and enters its source destination; the real Kabuto puzzle proves
+  its opened chamber hole reaches the inner chamber.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -70,7 +73,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1428/1428) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1429/1429) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

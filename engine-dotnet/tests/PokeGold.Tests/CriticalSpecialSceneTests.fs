@@ -748,7 +748,7 @@ let ``Magikarp house sign prints the current record`` () =
     Assert.True(completed (), "Magikarp house sign should print the stored length record.")
 
 [<Fact>]
-let ``Unown puzzle auto-solve marks Kabuto chamber complete`` () =
+let ``Unown puzzle auto-solve warpchecks into Kabuto inner chamber`` () =
     let content = Content()
     let overworld =
         OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "RuinsOfAlphKabutoChamber" 3 3 Up)
@@ -762,6 +762,7 @@ let ``Unown puzzle auto-solve marks Kabuto chamber complete`` () =
 
     let completed () =
         stack.Count = 1
+        && overworld.DebugState.MapId = "RuinsOfAlphInnerChamber"
         && World.hasEvent "EVENT_SOLVED_KABUTO_PUZZLE" overworld.DebugWorld
         && World.hasFlag "ENGINE_UNLOCKED_UNOWNS_A_TO_K" overworld.DebugWorld
 
@@ -777,7 +778,7 @@ let ``Unown puzzle auto-solve marks Kabuto chamber complete`` () =
 
         tickStack stack buttons
 
-    Assert.True(completed (), "Kabuto chamber puzzle should auto-solve and run the disassembly completion script.")
+    Assert.True(completed (), "Kabuto chamber puzzle should auto-solve, warpcheck the opened hole, and enter the inner chamber.")
 
 [<Fact>]
 let ``Unown printer opens when all Unown forms are counted`` () =

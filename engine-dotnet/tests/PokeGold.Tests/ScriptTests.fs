@@ -77,6 +77,21 @@ let ``Pokepic resolves script variable species and waits until closepokepic`` ()
     | other -> failwithf "expected post-close text, got %A" other
 
 [<Fact>]
+let ``Warpcheck suspends for current-map warp resolution and resumes`` () =
+    let prog =
+        parse "S:\n\twarpcheck\n\twritetext AfterText\n\tend\n"
+
+    let warpStep = Script.start "S" World.empty prog "TEST"
+    let vm =
+        match warpStep.Outcome with
+        | Suspended(vm, WarpCheck) -> vm
+        | other -> failwithf "expected WarpCheck, got %A" other
+
+    match (Script.resume None warpStep.World vm).Outcome with
+    | Suspended(_, ShowText("AfterText", false)) -> ()
+    | other -> failwithf "expected post-warpcheck text, got %A" other
+
+[<Fact>]
 let ``parses opcodes with their typed arguments`` () =
     let prog =
         parse

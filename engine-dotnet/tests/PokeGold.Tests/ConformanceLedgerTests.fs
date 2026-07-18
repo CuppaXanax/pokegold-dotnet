@@ -94,8 +94,10 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 VM and Elm's Lab runtime tests prove source operand-0 species resolution, visible front-pic rendering, A/B waitbutton dismissal, and close-to-text script resumption. Exact GBC tilemap/SGB restoration remains presentation work."
             [ "Pokepic"; "Closepokepic" ]
 
+          yield entry ScriptCommandCase "Warpcheck" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-003 ScriptTests prove the command suspends and resumes; the real Kabuto Ruins puzzle runs source WarpCheck semantics through the generated current-cell warp event into the inner chamber. GBC collision-byte classification and map-entry modes use the port's ordinary warp resolver."
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"; "Warpcheck"
+            [ "Elevator"; "Trade"; "Givepokemail"; "Checkpokemail"; "Writeobjectxy"; "Ugdoor"
               "ConditionalEvent"; "Describedecoration"; "Stonetable"; "Cmdqueue"; "Writecmdqueue"; "Elevfloor" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."

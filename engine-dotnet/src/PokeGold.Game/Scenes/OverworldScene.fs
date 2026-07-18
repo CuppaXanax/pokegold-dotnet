@@ -1917,6 +1917,15 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         if World.getVar "__dont_restart_map_music" world = 0 then
                             this.PlayMapMusic state.MapId
                         resume None vm
+                    | WarpCheck ->
+                        match MapEvents.warpAt state.Player.CellX state.Player.CellY state.Events with
+                        | Some warp ->
+                            match OverworldState.tryWarp content warp.DestMap warp.DestWarp with
+                            | Some nextState ->
+                                scriptQueue.Enqueue(vm, None)
+                                stop (this.EnterMap(nextState, true))
+                            | None -> resume None vm
+                        | None -> resume None vm
                     | ChangeBlock(x, y, blockId) ->
                         this.ChangeBlockAt(x, y, blockId)
                         resume None vm

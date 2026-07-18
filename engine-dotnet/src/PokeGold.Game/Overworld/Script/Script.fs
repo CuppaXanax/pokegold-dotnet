@@ -116,6 +116,8 @@ type ScriptEffect =
     | StartCatchTutorial of battleType: string
     /// `reloadmapafterbattle` / `reloadmap` / `refreshmap` — redraw the map.
     | ReloadMap
+    /// `warpcheck` — enter the current generated warp event, if any.
+    | WarpCheck
     /// `changeblock` — replace a map tile. Enacted by the integration layer.
     | ChangeBlock of x: int * y: int * blockId: int
     /// `playmusic` — change the background music.
@@ -680,7 +682,7 @@ module Script =
             | TreeShake -> suspend next world (ScriptEffect.Pause 30)
             | Ugdoor _ -> run world next
             | Variablesprite(sprite, replacement) -> run (World.setBuffer ("__sprite_" + sprite) replacement world) next
-            | Warpcheck -> run world next
+            | Warpcheck -> suspend next world WarpCheck
             | Writeobjectxy _ -> run world next
 
             // Generated data is validated to contain no generic Unsupported commands.

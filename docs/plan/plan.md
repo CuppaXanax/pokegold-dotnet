@@ -13,7 +13,7 @@ Estimated current position:
 - Approximately **55% complete toward a 100%-able Pokémon Gold**.
 - Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,428 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **1,429 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
@@ -382,11 +382,12 @@ Generated commands are typed, but many are approximate and several required comm
 - ⬜ **SCR-003 — Implement required side-system command stubs.**
   - ✅ `Itemnotify` renders the source item and pocket names from the current `giveitem`, waits for dismissal, and resumes the script.
   - ✅ `Pokepic` resolves direct and source operand-0 species, renders the direct front picture through a real overworld overlay, waits for A/B, and `Closepokepic` resumes the following script. Exact GBC tilemap/SGB restoration remains presentation work.
+  - ✅ `Warpcheck` resolves the generated current-cell warp event after a scripted arrival and enters its source destination; the Kabuto puzzle runtime test proves the opened chamber hole reaches the inner chamber.
   - Audit and implement or accurately exclude:
     - `Elevator`, `Elevfloor`
     - `Trade`
     - `Givepokemail`, `Checkpokemail`
-    - `Writeobjectxy`, `Ugdoor`, `Warpcheck`
+    - `Writeobjectxy`, `Ugdoor`
     - `ConditionalEvent`, `Describedecoration`, `Stonetable`
     - `Cmdqueue`, `Writecmdqueue`
   - No item may remain tagged `RequiredFor100Percent` and `StubNoOp` at release.
