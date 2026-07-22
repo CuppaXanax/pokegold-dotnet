@@ -2030,6 +2030,32 @@ let ``A12 Route44 cave warp loads IcePath1F`` () =
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
 [<Fact>]
+let ``OVR-003 Victory Road pit collision reaches its paired lower landing`` () =
+    let content = Content()
+    let probe = OverworldState.loadByIdAt content "VictoryRoad" 0 10 Down
+
+    Assert.Equal(0x60uy, Movement.collisionIdAtCell probe.Map probe.Collision 0 11)
+
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    // VictoryRoad.asm: pit warp_event 0, 11, VICTORY_ROAD, 9 lands at (0,27).
+    driver.Apply(Warp("VictoryRoad", 0, 10, Some Down))
+
+    driver.Step Down
+
+    let snap =
+        driver.RunUntil(
+            (fun snapshot ->
+                let overworld = owOf snapshot
+                overworld.MapId = "VictoryRoad"
+                && (overworld.Player.CellX, overworld.Player.CellY) = (0, 27)),
+            100)
+    let overworld = owOf snap
+
+    Assert.Equal((0, 27), (overworld.Player.CellX, overworld.Player.CellY))
+    driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+[<Fact>]
 let ``A12 IcePath1F east exit warp loads BlackthornCity`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")

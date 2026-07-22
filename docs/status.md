@@ -87,6 +87,9 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   source map-entry callback, shows `LookTownMapText`, and opens the Map tab via
   the baked `TownMapScript`. Custom decoration selection, save state, and
   alternate poster/doll/console descriptions remain decoration UI work.
+- Victory Road now has real `COLL_PIT` runtime coverage: stepping onto the source
+  pit reaches its paired lower landing at `(0,27)`. The original fall setup,
+  skyfall motion, SFX, and landing earthquake remain presentation approximations.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.
@@ -94,7 +97,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1446/1446) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1448/1448) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

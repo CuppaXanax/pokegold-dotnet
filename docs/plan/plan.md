@@ -316,6 +316,7 @@ Basic walking, collision, warps, connections, ledges, objects, trainer sight, an
 - ✅ **OVR-002 — Preserve object visibility, A-press dispatch, trainer sight, and coordinate-trigger scheduling.**
 - 🟡 **OVR-003 — Verify special collision families across representative maps.**
   - Ice, currents, conveyors, directional walls, pits, warp carpets, stairs, doors, ladders, and water features each require runtime tests using real map cells.
+  - ✅ Victory Road `COLL_PIT` coverage now proves the source paired lower landing after a real step onto `(0,11)`. The GBC fall setup, skyfall motion, SFX, and landing earthquake remain presentation approximations.
   - Replace Azalea-only representative coverage with a matrix across indoor, outdoor, cave, water, ice, and Kanto maps.
 
 ## Story 2.2 — Every route-required field move performs its complete action
