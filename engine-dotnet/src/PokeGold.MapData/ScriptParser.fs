@@ -283,7 +283,6 @@ module ScriptParser =
         | "follow" -> Some(Follow(arg 0, arg 1))
         | "stopfollow" -> Some Stopfollow
         | "variablesprite" -> Some(Variablesprite(arg 0, arg 1))
-        | "writeobjectxy" -> Some(Writeobjectxy(arg 0))
         | "pause" -> Some(Pause(i 0))
         | "showemote" -> Some(Showemote(arg 0, arg 1, i 2))
         | "earthquake" -> Some(Earthquake(if args.Length > 0 then Some(i 0) else None))

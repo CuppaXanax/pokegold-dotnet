@@ -489,7 +489,6 @@ let ``object and cosmetic opcodes are parsed as typed deferred commands`` () =
              \tfollow PLAYER, RIVAL\n\
              \tstopfollow\n\
              \tvariablesprite VAR_SPRITE, SPRITE_POKEMON\n\
-             \twriteobjectxy PLAYER\n\
              \tpause 30\n\
              \tshowemote EMOTE_SHOCK, PLAYER, 15\n\
              \tearthquake 8\n\
@@ -508,7 +507,6 @@ let ``object and cosmetic opcodes are parsed as typed deferred commands`` () =
           Follow("PLAYER", "RIVAL")
           Stopfollow
           Variablesprite("VAR_SPRITE", "SPRITE_POKEMON")
-          Writeobjectxy "PLAYER"
           Pause 30
           Showemote("EMOTE_SHOCK", "PLAYER", 15)
           Earthquake(Some 8)

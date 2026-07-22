@@ -100,7 +100,6 @@ module EmitMaps =
         | Follow(leader, follower) -> sprintf "Follow(%s, %s)" (str leader) (str follower)
         | Stopfollow -> "Stopfollow"
         | Variablesprite(sprite, replacement) -> sprintf "Variablesprite(%s, %s)" (str sprite) (str replacement)
-        | Writeobjectxy o -> sprintf "Writeobjectxy %s" (str o)
         | Pause frames -> sprintf "Pause %d" frames
         | Showemote(emote, obj, frames) -> sprintf "Showemote(%s, %s, %d)" (str emote) (str obj) frames
         | Earthquake frames -> sprintf "Earthquake(%s)" (intOpt frames)

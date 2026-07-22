@@ -161,7 +161,6 @@ type ScriptCommand =
     | Follow of leader: string * follower: string
     | Stopfollow
     | Variablesprite of sprite: string * replacement: string
-    | Writeobjectxy of obj: string
     | Pause of frames: int
     | Showemote of emote: string * obj: string * frames: int
     | Earthquake of frames: int option

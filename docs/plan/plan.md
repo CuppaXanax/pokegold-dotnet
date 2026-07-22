@@ -391,8 +391,7 @@ Generated commands are typed, but many are approximate and several required comm
   - ✅ `Givepokemail`/`Checkpokemail` now preserve source mail payload on the party Pokémon, persist it through saves, and route Route 31 delivery through a party picker with source result codes. Player-authored mail, mailbox composition, and full mail UI remain storage work.
   - ✅ The default Player's House `Describedecoration` Town Map poster is enabled by its map-entry callback, shows its source text, and opens the Map tab through the baked `TownMapScript`. Custom decoration selection, save state, and alternate poster/doll/console descriptions remain decoration UI work.
   - ✅ `Ugdoor` is not a source runtime command: Goldenrod's `changeugdoor` assembler macro lowers to `changeblock`, and the parser emits only those concrete commands. The unreachable typed/parser/VM cases were removed; parser coverage proves the expansion.
-  - Audit and implement or accurately exclude:
-    - `Writeobjectxy`
+  - ✅ `Writeobjectxy` exists only in the native `SeenByTrainerScript` wrapper, which the port neither generates nor dispatches; generated map scripts contain no use. The unreachable typed/parser/VM cases were removed so a future live use fails generation instead of silently no-oping.
   - No item may remain tagged `RequiredFor100Percent` and `StubNoOp` at release.
 
 - ⬜ **SCR-004 — Add command-level conformance tests for approximate critical commands.**

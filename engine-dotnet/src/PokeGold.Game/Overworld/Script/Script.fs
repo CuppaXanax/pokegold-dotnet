@@ -708,7 +708,6 @@ module Script =
             | TreeShake -> suspend next world (ScriptEffect.Pause 30)
             | Variablesprite(sprite, replacement) -> run (World.setBuffer ("__sprite_" + sprite) replacement world) next
             | Warpcheck -> suspend next world WarpCheck
-            | Writeobjectxy _ -> run world next
 
             // Generated data is validated to contain no generic Unsupported commands.
             // This fallback only keeps ad-hoc parser tests and exploratory snippets
