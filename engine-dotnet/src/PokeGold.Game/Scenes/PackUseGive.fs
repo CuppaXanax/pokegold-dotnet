@@ -7,18 +7,15 @@ open PokeGold.Game.Player
 //
 // The FieldMenu metadata does not distinguish HP-restore items from status-heals,
 // revives, vitamins, evolution stones, TMs/HMs — all use "ITEMMENU_PARTY".
-// Decision: maintain an explicit set of IDs whose field-use effect is HP restore.
-// Deferred item categories (status cures, revives, vitamins, evo stones, elixirs,
-// TMs/HMs, key-item field effects) route to the gated "Can't use that here yet."
-// message and are enumerated in docs/m11-coverage.md.
+// Decision: maintain explicit source item taxonomies for each implemented field
+// effect. Other item categories still route to the gated deferred-use message.
 
 /// Item IDs whose field effect is HP restoration.
-/// Param > 0  → heal that many HP; Param < 0 → full heal (MAX_POTION / FULL_RESTORE).
-/// Note: FULL_RESTORE also clears status in the original game; that part is deferred
-/// — only the HP component is applied here.
+/// Param > 0  → heal that many HP; Param < 0 → full heal (MAX_POTION).
+/// FULL_RESTORE uses its separate combined HP/status path below.
 let private hpRestoreIds =
     Set.ofList
-        [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION"; "FULL_RESTORE"
+        [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION"
           "FRESH_WATER"; "SODA_POP"; "LEMONADE"; "MOOMOO_MILK"; "BERRY_JUICE"
           "RAGECANDYBAR"; "BERRY"; "GOLD_BERRY" ]
 
@@ -27,9 +24,23 @@ let private repelItems =
 
 let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
 let private evolutionStones = Set.ofList [ "MOON_STONE"; "FIRE_STONE"; "THUNDERSTONE"; "WATER_STONE"; "LEAF_STONE"; "SUN_STONE" ]
+let private statusCures =
+    Map.ofList
+        [ "ANTIDOTE", (fun status -> status = "PSN")
+          "BURN_HEAL", (fun status -> status = "BRN")
+          "ICE_HEAL", (fun status -> status = "FRZ")
+          "AWAKENING", (fun status -> status.StartsWith("SLP", System.StringComparison.Ordinal))
+          "PARLYZ_HEAL", (fun status -> status = "PAR")
+          "FULL_HEAL", (fun status -> status <> "") ]
 
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
+
+/// True when this item's field-USE cures a matching persistent status.
+let isStatusCure (itemId: string) : bool = Map.containsKey itemId statusCures
+
+/// True when this item's field-USE restores both HP and status.
+let isFullRestore (itemId: string) : bool = itemId = "FULL_RESTORE"
 
 /// True when this item is a TM/HM that can teach a move.
 let isTmHm (itemId: string) : bool = TmHm.moveForItem itemId |> Option.isSome
@@ -79,6 +90,29 @@ let applyHpHeal (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerSt
         let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then newMon else m)
         let newBag   = Bag.remove itemId 1 player.Bag
         Some { player with Party = newParty; Bag = newBag }
+
+/// Apply a matching source status-healing item to one conscious party member.
+/// Returns None when the item cannot cure that member, leaving the bag unchanged.
+let applyStatusCure (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerState option =
+    let mon = List.item slotIdx player.Party
+
+    match Map.tryFind itemId statusCures with
+    | Some cures when mon.Hp > 0 && cures mon.Status ->
+        let party = player.Party |> List.mapi (fun index current -> if index = slotIdx then { mon with Status = "" } else current)
+        Some { player with Party = party; Bag = Bag.remove itemId 1 player.Bag }
+    | _ -> None
+
+/// Apply FULL_RESTORE to a conscious party member when either HP or status needs
+/// restoring. This mirrors the source's combined full-HP/status item path.
+let applyFullRestore (slotIdx: int) (player: PlayerState) : PlayerState option =
+    let mon = List.item slotIdx player.Party
+
+    if mon.Hp <= 0 || (mon.Hp >= mon.MaxHp && mon.Status = "") then
+        None
+    else
+        let restored = { mon with Hp = mon.MaxHp; Status = "" }
+        let party = player.Party |> List.mapi (fun index current -> if index = slotIdx then restored else current)
+        Some { player with Party = party; Bag = Bag.remove "FULL_RESTORE" 1 player.Bag }
 
 /// Apply a REPEL item: consume one copy and set the repel counter.
 let applyRepel (itemName: string) (player: PlayerState) : PlayerState option =

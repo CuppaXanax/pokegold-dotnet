@@ -447,7 +447,8 @@ The menu framework is broad, but several actions are missing or simplified.
   - Fishing cast/bite animation and SFX, the fishing battle catch-rate modifier, and phone-driven swarm group switching remain approximations or open swarm work.
 
 - ⬜ **UI-002 — Complete item field-use behavior.**
-  - Stones, Rare Candy, vitamins, PP items, Escape Rope, Repels, evolutionary items, key items, rods, bicycles, and TM/HM use have runtime outcomes.
+  - ✅ ANTIDOTE, Burn Heal, Ice Heal, Awakening, Parlyz Heal, Full Heal, and Full Restore use the Party picker, honor their source status gates, consume only on success, and leave fainted/healthy targets unchanged when applicable.
+  - Stones, Rare Candy, vitamins, PP items, Escape Rope, revives, remaining status/bitter items, and other key-item workflows still need runtime outcomes.
 
 - 🟡 **UI-003 — Complete party, storage, mail, and PC workflows.**
   - Deposit, withdraw, move, release, held items, mail, full boxes, and last-usable-party constraints work through menus and save/load.

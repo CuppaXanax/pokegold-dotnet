@@ -118,6 +118,57 @@ let ``applyHpHeal does not decrement bag when mon is at full HP`` () =
     let _  = PackUseGive.applyHpHeal "POTION" 1 p
     Assert.Equal(5, Bag.count "POTION" p.Bag)  // original unchanged
 
+// ── Status-heal item use ──────────────────────────────────────────────────────
+
+[<Fact>]
+let ``applyStatusCure clears matching source statuses and consumes the item`` () =
+    for item, status in
+        [ "ANTIDOTE", "PSN"
+          "BURN_HEAL", "BRN"
+          "ICE_HEAL", "FRZ"
+          "AWAKENING", "SLP:3"
+          "PARLYZ_HEAL", "PAR"
+          "FULL_HEAL", "PSN" ] do
+        let mon = { PartyMon.create 4 10 with Status = status }
+        let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add item 1 Bag.empty }
+
+        match PackUseGive.applyStatusCure item 0 player with
+        | Some healed ->
+            Assert.Equal("", healed.Party.[0].Status)
+            Assert.Equal(0, Bag.count item healed.Bag)
+        | None -> Assert.Fail(sprintf "%s should cure %s" item status)
+
+[<Fact>]
+let ``applyStatusCure rejects a nonmatching status without consuming the item`` () =
+    let mon = { PartyMon.create 4 10 with Status = "BRN" }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ANTIDOTE" 1 Bag.empty }
+
+    Assert.True(PackUseGive.applyStatusCure "ANTIDOTE" 0 player |> Option.isNone)
+    Assert.Equal(1, Bag.count "ANTIDOTE" player.Bag)
+
+[<Fact>]
+let ``applyFullRestore heals status even when HP is already full`` () =
+    let mon = { PartyMon.create 4 10 with Status = "PSN" }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "FULL_RESTORE" 1 Bag.empty }
+
+    match PackUseGive.applyFullRestore 0 player with
+    | Some healed ->
+        Assert.Equal(healed.Party.[0].MaxHp, healed.Party.[0].Hp)
+        Assert.Equal("", healed.Party.[0].Status)
+        Assert.Equal(0, Bag.count "FULL_RESTORE" healed.Bag)
+    | None -> Assert.Fail("FULL_RESTORE should cure a full-HP poisoned party mon")
+
+[<Fact>]
+let ``applyFullRestore rejects healthy and fainted targets without consumption`` () =
+    let healthy = PartyMon.create 4 10
+    let fainted = { PartyMon.create 4 10 with Hp = 0; Status = "PSN" }
+
+    for mon in [ healthy; fainted ] do
+        let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "FULL_RESTORE" 1 Bag.empty }
+
+        Assert.True(PackUseGive.applyFullRestore 0 player |> Option.isNone)
+        Assert.Equal(1, Bag.count "FULL_RESTORE" player.Bag)
+
 [<Fact>]
 let ``applyRepel sets step counter and removes item`` () =
     let player = { PlayerStateOps.initial with Bag = Bag.add "REPEL" 1 Bag.empty }
@@ -199,8 +250,8 @@ let ``BAT-015 accepted evolution retains prior dex entry and registers target`` 
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
 [<Fact>]
-let ``isHpHeal true for POTION SUPER_POTION HYPER_POTION MAX_POTION FULL_RESTORE`` () =
-    for id in [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION"; "FULL_RESTORE" ] do
+let ``isHpHeal true for POTION SUPER_POTION HYPER_POTION MAX_POTION`` () =
+    for id in [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION" ] do
         Assert.True(PackUseGive.isHpHeal id, sprintf "%s should be an HP heal item" id)
 
 [<Fact>]
@@ -321,13 +372,14 @@ let ``PackScene USE POTION on full-HP mon pops without consuming item`` () =
     Assert.True(getCaptured().IsNone, "onChange must not fire when mon is at full HP")
     Assert.Equal(5, Bag.count "POTION" scene.CurrentPlayer.Bag)
 
-// ── Scene integration: USE deferred item routes to gated message ──────────────
+// ── Scene integration: status-heal USE ───────────────────────────────────────
 
 [<Fact>]
-let ``PackScene USE ANTIDOTE (deferred status cure) pushes TextBoxScene`` () =
+let ``PackScene USE ANTIDOTE pushes PartyScene and cures a poisoned mon`` () =
     let antidotePlayer =
         let bag = Bag.empty |> Bag.add "ANTIDOTE" 3
-        { PlayerStateOps.initial with Bag = bag; Party = makeParty () }
+        let poisoned = { PartyMon.create 4 10 with Status = "PSN" }
+        { PlayerStateOps.initial with Bag = bag; Party = [ poisoned ] }
     let mutable captured: PlayerState option = None
     let scene = PackScene(Content(), antidotePlayer, fun p -> captured <- Some p)
     // A → action menu for ANTIDOTE. Actions = [USE, GIVE, TOSS, CANCEL].
@@ -336,11 +388,32 @@ let ``PackScene USE ANTIDOTE (deferred status cure) pushes TextBoxScene`` () =
     // Press A on USE (index 0).
     let t = update scene { Buttons.none with A = true }
     update scene Buttons.none |> ignore
-    // Should push something — a TextBoxScene, not a PartyScene.
     match t with
-    | Push s ->
-        Assert.IsNotType<PartyScene>(s)
-    | _ ->
-        Assert.Fail(sprintf "Expected Push, got %A" t)
-    // Bag must be unchanged.
-    Assert.Equal(3, Bag.count "ANTIDOTE" scene.CurrentPlayer.Bag)
+    | Push (:? PartyScene as party) ->
+        Assert.Equal(Pop, (party :> Scene).Update({ Buttons.none with A = true }))
+    | _ -> Assert.Fail(sprintf "Expected PartyScene Push, got %A" t)
+
+    Assert.Equal("", scene.CurrentPlayer.Party.[0].Status)
+    Assert.Equal(2, Bag.count "ANTIDOTE" scene.CurrentPlayer.Bag)
+    Assert.True(captured.IsSome)
+
+[<Fact>]
+let ``PackScene USE FULL_RESTORE cures a full-HP poisoned mon`` () =
+    let mon = { PartyMon.create 4 10 with Status = "PSN" }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "FULL_RESTORE" 1 Bag.empty }
+    let mutable captured: PlayerState option = None
+    let scene = PackScene(Content(), player, fun updated -> captured <- Some updated)
+
+    update scene { Buttons.none with A = true } |> ignore
+    update scene Buttons.none |> ignore
+    let transition = update scene { Buttons.none with A = true }
+    update scene Buttons.none |> ignore
+
+    match transition with
+    | Push (:? PartyScene as party) ->
+        Assert.Equal(Pop, (party :> Scene).Update({ Buttons.none with A = true }))
+    | _ -> Assert.Fail(sprintf "Expected PartyScene Push, got %A" transition)
+
+    Assert.Equal("", scene.CurrentPlayer.Party.[0].Status)
+    Assert.Equal(0, Bag.count "FULL_RESTORE" scene.CurrentPlayer.Bag)
+    Assert.True(captured.IsSome)

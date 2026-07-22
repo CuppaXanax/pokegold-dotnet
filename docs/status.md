@@ -65,6 +65,11 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   a Magikarp battle plus no-bite, dry-tile, and surfing rejection paths. Cast/bite
   animation and SFX, fishing catch-rate handling, and phone-driven fish swarms remain
   approximations or open swarm work.
+- Pack status cures now route ANTIDOTE, Burn Heal, Ice Heal, Awakening, Parlyz
+  Heal, Full Heal, and Full Restore through the Party picker. Matching status is
+  cleared and the item consumed only on success; Full Restore also heals HP and
+  handles a full-HP status target. Revives, vitamins, PP items, and other field
+  item workflows remain UI-002 work.
 - `pokepic` now resolves direct or script-variable species operands, renders the
   source front-picture menu region over the real overworld, waits for A/B, and
   `closepokepic` resumes the following script text; exact GBC tilemap/SGB
@@ -103,7 +108,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1454/1454) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1459/1459) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

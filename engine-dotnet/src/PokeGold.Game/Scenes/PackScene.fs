@@ -268,6 +268,28 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                 Pop
                             | None ->
                                 Pop
+                        elif PackUseGive.isFullRestore id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyFullRestore slotIdx currentPlayer with
+                                        | Some newPlayer ->
+                                            currentPlayer <- newPlayer
+                                            rebuildMenus newPlayer.Bag
+                                            onChange newPlayer
+                                            Pop
+                                        | None -> Pop) :> Scene)
+                        elif PackUseGive.isStatusCure id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyStatusCure id slotIdx currentPlayer with
+                                        | Some newPlayer ->
+                                            currentPlayer <- newPlayer
+                                            rebuildMenus newPlayer.Bag
+                                            onChange newPlayer
+                                            Pop
+                                        | None -> Pop) :> Scene)
                         elif PackUseGive.isHpHeal id then
                             // HP-restore item: push Party as a target picker.
                             Push(
