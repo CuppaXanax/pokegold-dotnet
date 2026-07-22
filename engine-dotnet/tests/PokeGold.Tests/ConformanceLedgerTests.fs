@@ -382,7 +382,7 @@ module ConformanceLedger =
           yield! many MoveEffect Unknown [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated move effect is not yet implemented as a faithful battle command and should stay visible battle debt."
             []
 
-          yield! many ItemFieldMenu ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "PackScene builds action menus from item field-menu metadata: PackTests cover ITEMMENU_CLOSE cant-toss key items and PackUseGiveTests cover ITEMMENU_PARTY use/give plus ITEMMENU_NOUSE deferred-use gating; exact per-key-item field effects remain future item polish."
+          yield! many ItemFieldMenu ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "PackScene builds action menus from item field-menu metadata: UI-001 runtime tests cover OLD_ROD through Pack, source water/surf guards, generated fish-group selection, byte bite/slot thresholds, and no-bite text; PackTests cover ITEMMENU_CLOSE cant-toss key items and PackUseGiveTests cover ITEMMENU_PARTY use/give plus ITEMMENU_NOUSE deferred-use gating. Fishing animation, phone swarms, and other key-item effects remain future work."
             [ "ITEMMENU_CLOSE"; "ITEMMENU_CURRENT"; "ITEMMENU_NOUSE"; "ITEMMENU_PARTY" ]
 
           yield entry ItemBattleMenu "ITEMMENU_PARTY" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "BattleScene PACK command supports party-targeted HP/status item use; BattleTests cover using Potion on a benched party mon."

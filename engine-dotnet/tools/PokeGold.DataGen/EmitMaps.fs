@@ -233,9 +233,9 @@ module EmitMaps =
 
     let private mapMeta (m: MapMeta) : string =
         sprintf
-            "{ Name = %s; Const = %s; Group = %s; WidthBlocks = %d; HeightBlocks = %d; Tileset = %s; Environment = %s; Landmark = %s; Music = %s; Palette = %s; BorderBlock = %d; Blocks = %s; Connections = [| %s |] }"
+            "{ Name = %s; Const = %s; Group = %s; WidthBlocks = %d; HeightBlocks = %d; Tileset = %s; Environment = %s; Landmark = %s; Music = %s; Palette = %s; FishingGroup = %s; BorderBlock = %d; Blocks = %s; Connections = [| %s |] }"
             (str m.Name) (str m.Const) (str m.Group) m.WidthBlocks m.HeightBlocks (str m.Tileset) (str m.Environment)
-            (str m.Landmark) (str m.Music) (str m.Palette) m.BorderBlock (str m.Blocks) (arr connection m.Connections)
+            (str m.Landmark) (str m.Music) (str m.Palette) (str m.FishingGroup) m.BorderBlock (str m.Blocks) (arr connection m.Connections)
 
     let private flyPoint (point: FlyPoint) : string =
         sprintf

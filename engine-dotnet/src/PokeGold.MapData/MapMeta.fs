@@ -30,6 +30,7 @@ type MapMeta =
       Landmark: string
       Music: string
       Palette: string
+      FishingGroup: string
       BorderBlock: int
       /// The blockdata file stem under `maps/` (no extension) this map's layout
       /// lives in. Many interiors **share** one file — every Poké Mart points at
@@ -98,10 +99,10 @@ module MapMetaParser =
         result |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
     /// `data/maps/maps.asm` → `PascalName -> (tileset, environment, landmark,
-    /// music, palette)`. The `map` macro args are
+    /// music, palette, fishing group)`. The `map` macro args are
     /// `name, tileset, env, landmark, music, phoneFlag, palette, fishgroup`.
-    let parseMaps (text: string) : Map<string, string * string * string * string * string> =
-        let result = System.Collections.Generic.Dictionary<string, string * string * string * string * string>()
+    let parseMaps (text: string) : Map<string, string * string * string * string * string * string> =
+        let result = System.Collections.Generic.Dictionary<string, string * string * string * string * string * string>()
 
         for raw in text.Replace("\r\n", "\n").Split('\n') do
             let body = stripComment raw
@@ -113,7 +114,7 @@ module MapMetaParser =
                 if mn = "map" then
                     let name = arg 0
                     if name <> "" then
-                        result.[name] <- (arg 1, arg 2, arg 3, arg 4, arg 6)
+                        result.[name] <- (arg 1, arg 2, arg 3, arg 4, arg 6, arg 7)
 
         result |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
@@ -194,10 +195,10 @@ module MapMetaParser =
                   | Some v -> v
                   | None -> "", 0, 0
 
-              let tileset, env, landmark, music, palette =
+              let tileset, env, landmark, music, palette, fishingGroup =
                   match mapTable.TryFind name with
                   | Some v -> v
-                  | None -> "", "", "", "", ""
+                  | None -> "", "", "", "", "", ""
 
               yield
                   { Name = name
@@ -210,6 +211,7 @@ module MapMetaParser =
                     Landmark = landmark
                     Music = music
                     Palette = palette
+                    FishingGroup = fishingGroup
                     BorderBlock = border
                     Blocks = (blockFiles.TryFind name |> Option.defaultValue name)
                     Connections = Array.ofList conns } ]

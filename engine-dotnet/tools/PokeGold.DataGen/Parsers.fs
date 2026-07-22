@@ -1005,6 +1005,202 @@ module Parsers =
         flush ()
         List.ofSeq result
 
+    // --- Fishing encounters ---------------------------------------------------
+
+    type FishSlot =
+        { Threshold: int
+          Species: string option
+          Level: int
+          TimeGroup: int option }
+
+    type FishGroupTable =
+        { Group: string
+          BiteThreshold: int
+          OldRod: FishSlot list
+          GoodRod: FishSlot list
+          SuperRod: FishSlot list }
+
+    type FishTimeGroup =
+        { DaySpecies: string
+          DayLevel: int
+          NightSpecies: string
+          NightLevel: int }
+
+    let private fishGroupRx =
+        Regex(
+            @"^fishgroup\s+(.+?),\s*\.([A-Za-z0-9_]+),\s*\.([A-Za-z0-9_]+),\s*\.([A-Za-z0-9_]+)$",
+            RegexOptions.IgnoreCase)
+
+    let private fishLabelRx = Regex(@"^\.([A-Za-z0-9_]+):$", RegexOptions.IgnoreCase)
+    let private fishPercentRx = Regex(@"^(\d+)\s+percent(?:\s*(\+\s*1))?$", RegexOptions.IgnoreCase)
+    let private fishTimeGroupRx = Regex(@"^time_group\s+(\d+)$", RegexOptions.IgnoreCase)
+    let private fishTimeEntryRx = Regex(@"^db\s+([A-Z0-9_]+),\s*(\d+),\s*([A-Z0-9_]+),\s*(\d+)$", RegexOptions.IgnoreCase)
+
+    let private fishThreshold (text: string) : int option =
+        let matched = fishPercentRx.Match(text.Trim())
+
+        if not matched.Success then
+            None
+        else
+            let percent = int matched.Groups.[1].Value
+            let plusOne = matched.Groups.[2].Success
+            Some(percent * 255 / 100 + if plusOne then 1 else 0)
+
+    let private parseFishSlot (line: string) : FishSlot option =
+        if not (line.StartsWith("db ")) then
+            None
+        else
+            let args =
+                line.Substring(3).Split(',')
+                |> Array.map (fun arg -> arg.Trim())
+                |> Array.toList
+
+            match args with
+            | thresholdText :: encounter :: rest ->
+                match fishThreshold thresholdText with
+                | None -> None
+                | Some threshold ->
+                    let timeGroup = fishTimeGroupRx.Match encounter
+
+                    if timeGroup.Success then
+                        Some
+                            { Threshold = threshold
+                              Species = None
+                              Level = 0
+                              TimeGroup = Some(int timeGroup.Groups.[1].Value) }
+                    else
+                        match rest with
+                        | level :: _ ->
+                            Some
+                                { Threshold = threshold
+                                  Species = Some encounter
+                                  Level = int level
+                                  TimeGroup = None }
+                        | [] -> None
+            | _ -> None
+
+    let private fishGroupConstants =
+        AsmConstants.load "constants/map_data_constants.asm"
+        |> Map.toList
+        |> List.filter (fun (name, _) -> name.StartsWith("FISHGROUP_") && name <> "FISHGROUP_NONE")
+        |> List.sortBy snd
+        |> List.map fst
+
+    let private fishGroupPointers =
+        let mutable inFishGroups = false
+        let result = ResizeArray<int * string * string * string>()
+
+        for raw in Repo.readText("data/wild/fish.asm").Split('\n') do
+            let line = cleanAsmLine raw
+
+            if line = "FishGroups:" then
+                inFishGroups <- true
+            elif line = "TimeFishGroups:" then
+                inFishGroups <- false
+            elif inFishGroups then
+                let matched = fishGroupRx.Match line
+
+                if matched.Success then
+                    match fishThreshold matched.Groups.[1].Value with
+                    | Some threshold ->
+                        result.Add(
+                            threshold,
+                            matched.Groups.[2].Value,
+                            matched.Groups.[3].Value,
+                            matched.Groups.[4].Value)
+                    | None -> failwithf "Invalid fishing bite threshold: %s" line
+
+        List.ofSeq result
+
+    let private fishTables : Map<string, FishSlot list> =
+        let mutable inFishTables = false
+        let labels = ResizeArray<string>()
+        let slots = ResizeArray<FishSlot>()
+        let tables = System.Collections.Generic.Dictionary<string, FishSlot list>()
+
+        let flush () =
+            if labels.Count > 0 && slots.Count > 0 then
+                let table = List.ofSeq slots
+
+                for label in labels do
+                    tables.[label] <- table
+
+            labels.Clear()
+            slots.Clear()
+
+        for raw in Repo.readText("data/wild/fish.asm").Split('\n') do
+            let line = cleanAsmLine raw
+
+            if line = "FishGroups:" then
+                inFishTables <- true
+            elif line = "TimeFishGroups:" then
+                flush ()
+                inFishTables <- false
+            elif inFishTables then
+                let label = fishLabelRx.Match line
+
+                if label.Success then
+                    if slots.Count > 0 then
+                        flush ()
+
+                    labels.Add label.Groups.[1].Value
+                else
+                    match parseFishSlot line with
+                    | Some slot when labels.Count > 0 -> slots.Add slot
+                    | _ -> ()
+
+        flush ()
+        tables |> Seq.map (fun pair -> pair.Key, pair.Value) |> Map.ofSeq
+
+    let fishTimeGroups : FishTimeGroup list =
+        let mutable inTimeGroups = false
+        let result = ResizeArray<FishTimeGroup>()
+
+        for raw in Repo.readText("data/wild/fish.asm").Split('\n') do
+            let line = cleanAsmLine raw
+
+            if line = "TimeFishGroups:" then
+                inTimeGroups <- true
+            elif inTimeGroups then
+                let matched = fishTimeEntryRx.Match line
+
+                if matched.Success then
+                    result.Add
+                        { DaySpecies = matched.Groups.[1].Value
+                          DayLevel = int matched.Groups.[2].Value
+                          NightSpecies = matched.Groups.[3].Value
+                          NightLevel = int matched.Groups.[4].Value }
+
+        List.ofSeq result
+
+    let fishGroups : FishGroupTable list =
+        if fishGroupConstants.Length <> fishGroupPointers.Length then
+            failwithf "Expected %d fishing groups, found %d" fishGroupConstants.Length fishGroupPointers.Length
+
+        let resolveTable label =
+            match fishTables.TryFind label with
+            | Some slots when not slots.IsEmpty && (List.last slots).Threshold = 255 -> slots
+            | Some _ -> failwithf "Fishing table %s does not end at the source 255 threshold" label
+            | None -> failwithf "Fishing table %s was not found" label
+
+        List.zip fishGroupConstants fishGroupPointers
+        |> List.map (fun (group, (biteThreshold, oldRod, goodRod, superRod)) ->
+            { Group = group
+              BiteThreshold = biteThreshold
+              OldRod = resolveTable oldRod
+              GoodRod = resolveTable goodRod
+              SuperRod = resolveTable superRod })
+
+    do
+        let count = fishTimeGroups.Length
+
+        fishGroups
+        |> List.collect (fun group -> group.OldRod @ group.GoodRod @ group.SuperRod)
+        |> List.iter (fun slot ->
+            match slot.TimeGroup with
+            | Some index when index < 0 || index >= count -> failwithf "Fishing time group %d is out of range" index
+            | _ -> ())
+
     // --- NPC trades -----------------------------------------------------------
 
     type NpcTrade =

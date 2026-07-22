@@ -135,6 +135,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// A selected elevator destination remains pending while the source script
     /// runs its close-window, delay, sound, and quake commands.
     let mutable pendingElevatorDestination: ElevatorFloor option = None
+    let mutable pendingFishingRod: string option = None
     /// A child scene transition produced while restoring/loading the overworld.
     let mutable restoreTransition: Transition option = None
     /// Script resumes waiting behind higher-priority map-entry scripts.
@@ -820,6 +821,40 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
             Push(TextBoxScene.Of(content, message + "<DONE>") :> Scene)
 
+    member private this.UseFishingRod(rod: string) : Transition =
+        let x, y = this.FacingCell()
+        let facingPermission = MapConnections.tilePermission state.Map state.Collision state.Neighbors x y
+
+        let noBite () =
+            let text = "Not even a nibble!<PROMPT>"
+            lastText <- Some("RodNothingText", text)
+            Push(TextBoxScene.Of(content, text) :> Scene)
+
+        if World.getVar "__surfing" world <> 0 || facingPermission <> state.Collision.Water then
+            noBite ()
+        else
+            let fishingGroup =
+                MapsData.byName state.MapId
+                |> Option.map (fun map -> map.Meta.FishingGroup)
+                |> Option.defaultValue "FISHGROUP_NONE"
+
+            match WildEncounter.tryFish fishingGroup rod (TimeOfDay.current()) encounterRng with
+            | Some(species, level) ->
+                stagedWild <- Some(species, level)
+                stagedTrainer <- None
+                world <- World.setVar "VAR_BATTLETYPE" 4 world
+                let text = "Oh!<LINE>A bite!<PROMPT>"
+                lastText <- Some("RodBiteText", text)
+                Push(
+                    TextBoxScene.Of(
+                        content,
+                        text,
+                        onDone = fun () ->
+                            let battle = this.BuildBattle()
+                            world <- World.setVar "VAR_BATTLETYPE" 0 world
+                            Replace(battle)) :> Scene)
+            | None -> noBite ()
+
     /// The Pokégear with the radio dial the player can currently receive. The
     /// Poké Flute channel needs the EXPN CARD (it only broadcasts in Kanto,
     /// where the card is obtained); tuning persists to `__radio_station`,
@@ -885,6 +920,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         fadeVm <- None
         pokePicSpecies <- None
         pendingElevatorDestination <- None
+        pendingFishingRod <- None
         mailCheckResult <- None
         followPair <- None
         lastTalkedActor <- None
@@ -2220,6 +2256,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         pokePicSpecies <- None
         previousMapId <- None
         pendingElevatorDestination <- None
+        pendingFishingRod <- None
         mailCheckResult <- None
         scriptQueue.Clear()
         this.SyncSurfStateWithTerrain() |> ignore
@@ -2430,6 +2467,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     runningMove <- Some(vm, actor, run')
                     Stay
+            | None, None when pendingFishingRod.IsSome ->
+                let rod = pendingFishingRod.Value
+                pendingFishingRod <- None
+                this.UseFishingRod rod
             | None, None ->
 
             if pauseFrames > 0 then
@@ -2592,14 +2633,16 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | Pokedex -> Push(PokedexScene(content, player) :> Scene)
                         | Pokemon -> Push(PartyScene(content, player, (fun p -> player <- p), onFieldMove = this.UseFieldMove) :> Scene)
                         | Pack    ->
-                            // TODO: once PackScene reports which rod was used, wire that
-                            // result back into the overworld so fishing checks the
-                            // facing water tile and stages fishEncounter here.
-                            Push(PackScene(content, player, fun p -> player <- p) :> Scene)
+                            Push(
+                                PackScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onFishingRod = fun rod -> pendingFishingRod <- Some rod) :> Scene)
                         | Pokegear -> Push(this.MakePokegear(PhoneTab, state.MapId, None))
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
-                        | Exit    -> Pop), buttons) :> Scene)
+                        | Exit    -> Pop), heldAtOpen = buttons, closeWhen = fun () -> pendingFishingRod.IsSome) :> Scene)
                 elif aPressed && not state.Player.Moving then
                     let fx, fy = Triggers.facedCell state.Player.CellX state.Player.CellY state.Player.Facing
                     let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy

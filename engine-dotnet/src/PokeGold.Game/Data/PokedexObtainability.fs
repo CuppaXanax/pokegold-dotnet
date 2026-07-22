@@ -19,11 +19,25 @@ module PokedexObtainability =
         species |> List.fold (fun acc species -> addSource species source acc) sources
 
     let private fishingSpecies =
-        // data\wild\fish.asm, including time-group and swarm rod slots.
-        [ "CHINCHOU"; "CORSOLA"; "DRAGONAIR"; "DRATINI"; "GOLDEEN"; "GYARADOS"
-          "HORSEA"; "KINGLER"; "KRABBY"; "MAGIKARP"; "POLIWAG"; "QWILFISH"
-          "REMORAID"; "SEADRA"; "SEAKING"; "SHELLDER"; "STARYU"; "TENTACOOL"
-          "TENTACRUEL" ]
+        let slots =
+            FishEncountersData.byGroup
+            |> Seq.collect (fun (KeyValue(_, group)) -> group.OldRod @ group.GoodRod @ group.SuperRod)
+            |> Seq.toList
+
+        let timedSpecies =
+            slots
+            |> List.choose (fun slot -> slot.TimeGroup)
+            |> List.distinct
+            |> List.collect (fun index ->
+                match FishEncountersData.timeGroups |> Array.tryItem index with
+                | Some group -> [ group.DaySpecies; group.NightSpecies ]
+                | None -> [])
+
+        slots
+        |> List.choose (fun slot -> slot.Species)
+        |> List.append timedSpecies
+        |> Set.ofList
+        |> Set.toList
 
     let private headbuttSpecies =
         // data\wild\treemons.asm.

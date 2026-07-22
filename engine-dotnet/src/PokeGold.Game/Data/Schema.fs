@@ -97,6 +97,29 @@ type WildEncounterTable =
       WaterRate: int
       Water: WildSlot list }
 
+/// A source fishing slot. Species is absent when the slot delegates to a
+/// time-of-day entry instead.
+type FishSlot =
+    { Threshold: int
+      Species: string option
+      Level: int
+      TimeGroup: int option }
+
+/// One source fishing group, including its bite threshold and three rod tables.
+type FishGroupTable =
+    { Group: string
+      BiteThreshold: int
+      OldRod: FishSlot list
+      GoodRod: FishSlot list
+      SuperRod: FishSlot list }
+
+/// Day/night resolution data referenced by source `time_group` fish slots.
+type FishTimeGroup =
+    { DaySpecies: string
+      DayLevel: int
+      NightSpecies: string
+      NightLevel: int }
+
 /// A weighted Headbutt/Rock Smash encounter entry from `treemons.asm`.
 type TreeMonSlot =
     { Weight: int

@@ -253,22 +253,40 @@ module WildEncounter =
            { Level = 20; Species = "TENTACRUEL" }
            { Level = 25; Species = "TENTACRUEL" } |]
 
-    /// Fishing encounter tables (simplified — real tables from fish_group data are M16).
-    let fishEncounter (rod: string) (rng: System.Random) : (string * int) =
+    let private rodSlots (rod: string) (group: FishGroupTable) =
         match rod with
-        | "OLD_ROD" -> ("MAGIKARP", 10)
-        | "GOOD_ROD" ->
-            match rng.Next(3) with
-            | 0 -> ("MAGIKARP", 15 + rng.Next(10))
-            | 1 -> ("POLIWAG", 15 + rng.Next(10))
-            | _ -> ("MAGIKARP", 20 + rng.Next(5))
-        | "SUPER_ROD" ->
-            match rng.Next(4) with
-            | 0 -> ("POLIWAG", 20 + rng.Next(10))
-            | 1 -> ("MAGIKARP", 25 + rng.Next(10))
-            | 2 -> ("POLIWHIRL", 25 + rng.Next(10))
-            | _ -> ("TENTACRUEL", 25 + rng.Next(10))
-        | _ -> ("MAGIKARP", 10)
+        | "OLD_ROD" -> group.OldRod
+        | "GOOD_ROD" -> group.GoodRod
+        | "SUPER_ROD" -> group.SuperRod
+        | _ -> []
+
+    let private resolveFishSlot (timeOfDay: TimeOfDay) (slot: FishSlot) =
+        match slot.Species, slot.TimeGroup with
+        | Some species, _ -> Some(species, slot.Level)
+        | None, Some index ->
+            FishEncountersData.timeGroups
+            |> Array.tryItem index
+            |> Option.map (fun timeGroup ->
+                match timeOfDay with
+                | Nite -> timeGroup.NightSpecies, timeGroup.NightLevel
+                | Morn
+                | Day -> timeGroup.DaySpecies, timeGroup.DayLevel)
+        | None, None -> None
+
+    let tryFish (groupName: string) (rod: string) (timeOfDay: TimeOfDay) (rng: System.Random) : (string * int) option =
+        FishEncountersData.byGroup
+        |> Map.tryFind groupName
+        |> Option.bind (fun group ->
+            let slots = rodSlots rod group
+
+            if slots.IsEmpty || rng.Next(256) >= group.BiteThreshold then
+                None
+            else
+                let roll = rng.Next(256)
+
+                slots
+                |> List.tryFind (fun slot -> roll <= slot.Threshold)
+                |> Option.bind (resolveFishSlot timeOfDay))
 
     /// Default encounter rate for grass (25%) and water (15%).
     let grassRate = 25

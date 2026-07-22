@@ -480,6 +480,53 @@ module Emit =
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
+    let private fishEncountersFile () : string =
+        let slot (entry: Parsers.FishSlot) =
+            let species = entry.Species |> Option.map (fun value -> sprintf "Some \"%s\"" value) |> Option.defaultValue "None"
+            let timeGroup = entry.TimeGroup |> Option.map string |> Option.map (sprintf "Some %s") |> Option.defaultValue "None"
+            sprintf "{ Threshold = %d; Species = %s; Level = %d; TimeGroup = %s }" entry.Threshold species entry.Level timeGroup
+
+        let slots entries = entries |> List.map slot |> String.concat "; "
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated fishing encounter tables from data/wild/fish.asm.") |> ignore
+        sb.AppendLine("module FishEncountersData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let timeGroups : FishTimeGroup array =") |> ignore
+        sb.AppendLine("        [|") |> ignore
+
+        for entry in Parsers.fishTimeGroups do
+            sb.AppendLine(
+                sprintf
+                    "            { DaySpecies = \"%s\"; DayLevel = %d; NightSpecies = \"%s\"; NightLevel = %d }"
+                    entry.DaySpecies
+                    entry.DayLevel
+                    entry.NightSpecies
+                    entry.NightLevel)
+            |> ignore
+
+        sb.AppendLine("        |]") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let byGroup : Map<string, FishGroupTable> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for group in Parsers.fishGroups do
+            sb.AppendLine(
+                sprintf
+                    "            (\"%s\", { Group = \"%s\"; BiteThreshold = %d; OldRod = [ %s ]; GoodRod = [ %s ]; SuperRod = [ %s ] })"
+                    group.Group
+                    group.Group
+                    group.BiteThreshold
+                    (slots group.OldRod)
+                    (slots group.GoodRod)
+                    (slots group.SuperRod))
+            |> ignore
+
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
     let private scriptMailFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -589,6 +636,7 @@ module Emit =
           "Trainers.Generated.fs", trainersFile ()
           "WildEncounters.Generated.fs", wildEncountersFile ()
           "TreeMons.Generated.fs", treeMonsFile ()
+          "FishEncounters.Generated.fs", fishEncountersFile ()
           "ScriptMail.Generated.fs", scriptMailFile ()
           "NpcTrades.Generated.fs", npcTradesFile ()
           "Dex.Generated.fs", dexFile () ]

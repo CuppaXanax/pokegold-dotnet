@@ -442,10 +442,10 @@ The menu framework is broad, but several actions are missing or simplified.
 
 ### Work items
 
-- ⬜ **UI-001 — Wire fishing rods from Pack to overworld.**
-  - `PackScene` returns the selected rod.
-  - The overworld validates facing water, chooses from generated fish-group data, and starts a battle.
-  - The existing hard-coded helper is replaced or restricted to tests.
+- ✅ **UI-001 — Wire fishing rods from Pack to overworld.**
+  - `PackScene` returns the selected rod, closes its parent menu, and the overworld validates source water permission and rejects fishing while surfing.
+  - Generated map fish groups plus source byte bite/slot thresholds and day/night time groups choose the battle opponent. Union Cave Old Rod coverage proves a real Pack-to-Magikarp flow, no-bite text, dry-tile rejection, and surfing rejection.
+  - Fishing cast/bite animation and SFX, the fishing battle catch-rate modifier, and phone-driven swarm group switching remain approximations or open swarm work.
 
 - ⬜ **UI-002 — Complete item field-use behavior.**
   - Stones, Rare Candy, vitamins, PP items, Escape Rope, Repels, evolutionary items, key items, rods, bicycles, and TM/HM use have runtime outcomes.
@@ -723,9 +723,9 @@ The current static obtainability graph is useful as an inventory, but it is not 
 - 🟡 **DEX-004 — Verify grass and surfing encounters.**
   - Generated time-of-day slots, encounter rates, Repel, held modifiers, and catches update party/storage/dex state.
 
-- ⬜ **DEX-005 — Implement generated fishing encounters.**
-  - Use the real fish groups, rod slots, time groups, and swarms.
-  - Prove at least one species unique to fishing.
+- 🟡 **DEX-005 — Implement generated fishing encounters.**
+  - Real fish groups, rod slots, and day/night time groups are generated from `data/wild/fish.asm` and drive Pack fishing.
+  - Phone-driven swarm group switching and a runtime acquisition proof for a fishing-unique species remain open.
 
 - ⬜ **DEX-006 — Implement headbutt encounters.**
   - Use generated tree groups and rare-tree behavior.
@@ -944,7 +944,7 @@ Actions:
 
 ## 3. Reclassify the all-251 graph as an inventory
 
-`PokedexObtainability` currently mixes real generated encounters with hard-coded fishing, headbutt, roamer, offline import, and event source lists.
+`PokedexObtainability` now reads generated fishing data, but still mixes generated encounters with hard-coded headbutt, roamer, offline import, and event source lists.
 
 Actions:
 

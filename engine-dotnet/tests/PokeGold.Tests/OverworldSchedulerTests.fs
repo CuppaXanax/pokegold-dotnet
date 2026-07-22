@@ -2247,6 +2247,121 @@ let ``OVR-011 Route39 Headbutt reports the source no-encounter branch`` () =
 
     Assert.True(scene.CanCapture)
 
+let private oldRodPlayer () =
+    { PlayerStateOps.initial with
+        Party = [ MoveLearn.seedStartingMoves (PartyMon.create 155 10) ]
+        Bag = Bag.add "OLD_ROD" 1 Bag.empty }
+
+let private selectOldRodFromPack (scene: OverworldScene) =
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+
+    let press buttons =
+        let top = stack.[stack.Count - 1]
+        applyTransition stack (top.Update buttons)
+        applyTransition stack (stack.[stack.Count - 1].Update Buttons.none)
+
+    press { Buttons.none with Start = true }
+    press { Buttons.none with Down = true }
+    press { Buttons.none with Down = true }
+    press { Buttons.none with A = true }
+    press { Buttons.none with Right = true }
+    press { Buttons.none with Right = true }
+    press { Buttons.none with A = true }
+    press { Buttons.none with A = true }
+    stack
+
+[<Fact>]
+let ``UI-001 Pack Old Rod starts a generated Union Cave fish battle`` () =
+    let content = Content()
+    let state = OverworldState.loadByIdAt content "UnionCave1F" 5 4 Right
+
+    Assert.Equal(0x29uy, Movement.collisionIdAtCell state.Map state.Collision 6 4)
+    Assert.Equal("FISHGROUP_LAKE", MapsData.byName "UnionCave1F" |> Option.get |> fun map -> map.Meta.FishingGroup)
+
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            state,
+            encounterRandom = FixedRandom([ 0; 0; 191; 0xAB; 0xCD ]))
+    scene.Restore(World.empty, oldRodPlayer ())
+
+    let stack = selectOldRodFromPack scene
+
+    let mutable frame = 0
+    while frame < 300 && not (stack.[stack.Count - 1] :? BattleScene) do
+        frame <- frame + 1
+        tickStack stack frame
+
+    match stack.[stack.Count - 1] with
+    | :? BattleScene as battle ->
+        let opponent = Assert.Single(battle.CurrentState.EnemyTeam)
+        Assert.Equal("MAGIKARP", opponent.Species.Name)
+        Assert.Equal(10, opponent.Level)
+        Assert.Equal(1, Bag.count "OLD_ROD" scene.DebugPlayer.Bag)
+        Assert.Equal(0, World.getVar "VAR_BATTLETYPE" scene.DebugWorld)
+    | other -> failwithf "expected a fishing battle after Old Rod USE, got %s" (other.GetType().Name)
+
+[<Fact>]
+let ``UI-001 Pack Old Rod reports the source no-bite branch`` () =
+    let content = Content()
+    let scene =
+        OverworldScene(
+            content,
+            SilentSound(),
+            OverworldState.loadByIdAt content "UnionCave1F" 5 4 Right,
+            encounterRandom = FixedRandom([ 128 ]))
+    scene.Restore(World.empty, oldRodPlayer ())
+
+    let stack = selectOldRodFromPack scene
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+    Assert.Equal(Some "RodNothingText", scene.RuntimeSnapshot.LastTextLabel)
+    Assert.Equal(Some "Not even a nibble!<PROMPT>", scene.RuntimeSnapshot.LastRenderedText)
+
+    let mutable frame = 0
+    while frame < 300 && stack.Count > 1 do
+        frame <- frame + 1
+        tickStack stack frame
+
+    Assert.Equal(1, stack.Count)
+    Assert.True(scene.CanCapture)
+
+[<Fact>]
+let ``UI-001 Pack Old Rod rejects non-water and surfing`` () =
+    let content = Content()
+
+    let assertNoFish state expectedFacingCollision =
+        let scene =
+            OverworldScene(
+                content,
+                SilentSound(),
+                state,
+                encounterRandom = FixedRandom([ 0; 0 ]))
+        scene.Restore(World.empty, oldRodPlayer ())
+
+        let facingX, facingY =
+            match state.Player.Facing with
+            | Down -> state.Player.CellX, state.Player.CellY + 1
+            | Up -> state.Player.CellX, state.Player.CellY - 1
+            | Left -> state.Player.CellX - 1, state.Player.CellY
+            | Right -> state.Player.CellX + 1, state.Player.CellY
+
+        Assert.Equal(expectedFacingCollision, Movement.collisionIdAtCell state.Map state.Collision facingX facingY)
+
+        let stack = selectOldRodFromPack scene
+        applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+        Assert.Equal("TextBoxScene", stack.[stack.Count - 1].GetType().Name)
+        Assert.Equal(Some "RodNothingText", scene.RuntimeSnapshot.LastTextLabel)
+
+    assertNoFish (OverworldState.loadByIdAt content "UnionCave1F" 5 4 Left) 0uy
+
+    let surfingState = OverworldState.loadByIdAt content "UnionCave1F" 6 4 Right
+    assertNoFish surfingState 0x29uy
+
 [<Fact>]
 let ``OVR-011 generated tree tables retain source map sets scores and weighted slots`` () =
         Assert.Equal("TREEMON_SET_FOREST", TreeMonsData.mapSets.["ROUTE_39"])

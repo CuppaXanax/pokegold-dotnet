@@ -59,6 +59,12 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Headbutt now uses generated Gold tree-map/weighted encounter data from real tree
   A-press and Party-menu use, producing normal catchable wild battles or its no-encounter text branch;
   confirmation, tree-shake animation/SFX, and random player-ID generation remain approximations.
+- Fishing rods now close the Pack and Start menus, validate source water permission
+  and surfing state, then use generated map fish groups with source byte bite/slot
+  thresholds and day/night time groups. Union Cave Old Rod runtime coverage proves
+  a Magikarp battle plus no-bite, dry-tile, and surfing rejection paths. Cast/bite
+  animation and SFX, fishing catch-rate handling, and phone-driven fish swarms remain
+  approximations or open swarm work.
 - `pokepic` now resolves direct or script-variable species operands, renders the
   source front-picture menu region over the real overworld, waits for A/B, and
   `closepokepic` resumes the following script text; exact GBC tilemap/SGB
@@ -97,7 +103,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1448/1448) are green from `engine-dotnet`.
+  .\tests\PokeGold.Tests` (1454/1454) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

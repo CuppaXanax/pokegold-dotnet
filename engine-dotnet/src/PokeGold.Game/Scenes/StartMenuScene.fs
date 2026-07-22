@@ -25,7 +25,7 @@ type StartEntry =
 /// is pressed; returning `Push child` pushes the child over this scene so it
 /// can later pop back to the menu. `Exit` (and B/Start) always pop the menu
 /// without consulting `openEntry`.
-type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?heldAtOpen: Buttons) =
+type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?heldAtOpen: Buttons, ?closeWhen: unit -> bool) =
 
     // GSC order: POKéDEX, POKéMON, PACK, POKéGEAR, SAVE, OPTION, EXIT.
     let entryLabels = [| "POKéDEX"; "POKéMON"; "PACK"; "POKéGEAR"; "SAVE"; "OPTION"; "EXIT" |]
@@ -36,6 +36,7 @@ type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?held
     // Seed the edge detector with the buttons that were held when the menu opened
     // (Start, typically) so that press doesn't immediately re-fire and close it.
     let input = EdgeDetector(defaultArg heldAtOpen Buttons.none)
+    let closeWhen = defaultArg closeWhen (fun () -> false)
     let palette = TextRenderer.palette
 
     // Box geometry in 8-px tiles, mirroring the GSC start menu's
@@ -70,7 +71,9 @@ type StartMenuScene(content: Content, openEntry: StartEntry -> Transition, ?held
         member _.Update(buttons: Buttons) : Transition =
             let edges = input.Update(buttons)
 
-            if edges.Up then
+            if closeWhen () then
+                Pop
+            elif edges.Up then
                 menu <- MenuList.moveUp menu
                 Stay
             elif edges.Down then

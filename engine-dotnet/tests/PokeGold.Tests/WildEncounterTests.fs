@@ -49,17 +49,25 @@ let ``Cleanse Tag reduces encounter rate`` () =
     Assert.Equal(25, WildEncounter.effectiveRate PlayerStateOps.initial 25)
 
 [<Fact>]
-let ``fishEncounter returns rod-specific encounters`` () =
-    let oldRod = WildEncounter.fishEncounter "OLD_ROD" (System.Random(0))
-    Assert.Equal(("MAGIKARP", 10), oldRod)
+let ``source fishing applies byte bite and Lake slot thresholds`` () =
+    Assert.Equal(Some("MAGIKARP", 10), WildEncounter.tryFish "FISHGROUP_LAKE" "OLD_ROD" Day (FixedRandom([ 127; 0 ])))
+    Assert.Equal(None, WildEncounter.tryFish "FISHGROUP_LAKE" "OLD_ROD" Day (FixedRandom([ 128 ])))
+    Assert.Equal(Some("GOLDEEN", 10), WildEncounter.tryFish "FISHGROUP_LAKE" "OLD_ROD" Day (FixedRandom([ 0; 218 ])))
 
-    let goodRod = WildEncounter.fishEncounter "GOOD_ROD" (System.Random(0))
-    Assert.Contains(fst goodRod, [| "MAGIKARP"; "POLIWAG" |])
-    Assert.True(15 <= snd goodRod && snd goodRod <= 24)
+[<Fact>]
+let ``source fishing resolves time groups by day and night`` () =
+    Assert.Equal(Some("CORSOLA", 20), WildEncounter.tryFish "FISHGROUP_SHORE" "GOOD_ROD" Day (FixedRandom([ 0; 255 ])))
+    Assert.Equal(Some("STARYU", 20), WildEncounter.tryFish "FISHGROUP_SHORE" "GOOD_ROD" Nite (FixedRandom([ 0; 255 ])))
 
-    let superRod = WildEncounter.fishEncounter "SUPER_ROD" (System.Random(0))
-    Assert.Contains(fst superRod, [| "POLIWAG"; "MAGIKARP"; "POLIWHIRL"; "TENTACRUEL" |])
-    Assert.True(20 <= snd superRod && snd superRod <= 34)
+[<Fact>]
+let ``Lake fishing group preserves source Old Rod bite and slot thresholds`` () =
+    let lake = FishEncountersData.byGroup.["FISHGROUP_LAKE"]
+
+    Assert.Equal(128, lake.BiteThreshold)
+    Assert.Equal(3, lake.OldRod.Length)
+    Assert.Equal((179, Some "MAGIKARP", 10, None), (lake.OldRod.[0].Threshold, lake.OldRod.[0].Species, lake.OldRod.[0].Level, lake.OldRod.[0].TimeGroup))
+    Assert.Equal((217, Some "MAGIKARP", 10, None), (lake.OldRod.[1].Threshold, lake.OldRod.[1].Species, lake.OldRod.[1].Level, lake.OldRod.[1].TimeGroup))
+    Assert.Equal((255, Some "GOLDEEN", 10, None), (lake.OldRod.[2].Threshold, lake.OldRod.[2].Species, lake.OldRod.[2].Level, lake.OldRod.[2].TimeGroup))
 
 [<Fact>]
 let ``SPROUT_TOWER_2F has grass encounters`` () =

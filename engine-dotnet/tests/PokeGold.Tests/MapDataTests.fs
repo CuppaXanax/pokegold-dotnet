@@ -44,6 +44,14 @@ let ``NewBarkTown metadata and warps are baked correctly`` () =
     Assert.True(elmsLab.IsSome, "expected a warp to ELMS_LAB")
 
 [<Fact>]
+let ``Route32 preserves its source fishing group`` () =
+    let route32 =
+        MapsData.byName "Route32"
+        |> Option.defaultWith (fun () -> failwith "Route32 missing from generated map data")
+
+    Assert.Equal("FISHGROUP_QWILFISH", route32.Meta.FishingGroup)
+
+[<Fact>]
 let ``map identity resolves ROM constants and runtime names`` () =
     let byRuntimeName = Maps.byName "NewBarkTown" |> Option.defaultWith (fun () -> failwith "NewBarkTown missing")
     let byRomConst = Maps.byName "NEW_BARK_TOWN" |> Option.defaultWith (fun () -> failwith "NEW_BARK_TOWN missing")

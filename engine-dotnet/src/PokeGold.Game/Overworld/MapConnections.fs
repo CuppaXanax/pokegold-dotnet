@@ -78,6 +78,10 @@ module MapConnections =
     let inline private inBounds (map: GameMap) (cx: int) (cy: int) : bool =
         cx >= 0 && cy >= 0 && cx < map.Width * 2 && cy < map.Height * 2
 
+    let private tilePermissionAt (map: GameMap) (coll: Collision) (cx: int) (cy: int) : byte =
+        let blockId = int (Map.blockAt map (cx / 2) (cy / 2))
+        Collision.permissionAt coll blockId (cx % 2) (cy % 2)
+
     /// Walkability across the join: the current map inside its bounds, otherwise the
     /// neighbour covering the cell, otherwise the border (not walkable).
     let cellWalkable (map: GameMap) (coll: Collision) (neighbors: NeighborMap list) (cx: int) (cy: int) : bool =
@@ -96,3 +100,11 @@ module MapConnections =
             match resolve neighbors cx cy with
             | Some(n, lx, ly) -> Movement.collisionIdAtCell n.Map n.Collision lx ly
             | None -> 0uy
+
+    let tilePermission (map: GameMap) (coll: Collision) (neighbors: NeighborMap list) (cx: int) (cy: int) : byte =
+        if inBounds map cx cy then
+            tilePermissionAt map coll cx cy
+        else
+            match resolve neighbors cx cy with
+            | Some(n, lx, ly) -> tilePermissionAt n.Map n.Collision lx ly
+            | None -> coll.Wall

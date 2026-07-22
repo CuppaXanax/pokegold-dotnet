@@ -26,7 +26,7 @@ type PackMode =
 ///   content   — loaded content (font)
 ///   player    — initial PlayerState to display
 ///   onChange  — callback invoked with a new PlayerState whenever the bag changes
-type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> unit) =
+type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onFishingRod: string -> unit) =
 
     let pocketNames = [| "ITEM"; "BALL"; "KEY ITEM"; "TM/HM" |]
     let palette     = TextRenderer.palette
@@ -83,6 +83,7 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
     let mutable mode          = Browsing : PackMode
     let mutable yesNoResult   = 0
     let input = EdgeDetector()
+    let onFishingRod = defaultArg onFishingRod (fun _ -> ())
 
     // ── Pure helpers ──────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
             // USE: items/key-items with a field-menu action; TMs (teach).
             match pocket with
             | Pocket.Item | Pocket.KeyItem ->
-                if fieldMenu <> "" && fieldMenu <> "ITEMMENU_NOUSE" then yield "USE"
+                if PackUseGive.isFishingRod id || (fieldMenu <> "" && fieldMenu <> "ITEMMENU_NOUSE") then yield "USE"
             | Pocket.TmHm  -> yield "USE"
             | Pocket.Ball  -> ()
             // GIVE: item pocket only (key items and TMs/HMs cannot be held).
@@ -255,7 +256,10 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                         Stay
                     | "USE" ->
                         mode <- Browsing
-                        if PackUseGive.isRepel id then
+                        if PackUseGive.isFishingRod id then
+                            onFishingRod id
+                            Pop
+                        elif PackUseGive.isRepel id then
                             match PackUseGive.applyRepel id currentPlayer with
                             | Some newPlayer ->
                                 currentPlayer <- newPlayer
