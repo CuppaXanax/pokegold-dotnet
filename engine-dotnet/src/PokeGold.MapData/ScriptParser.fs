@@ -288,7 +288,6 @@ module ScriptParser =
         | "showemote" -> Some(Showemote(arg 0, arg 1, i 2))
         | "earthquake" -> Some(Earthquake(if args.Length > 0 then Some(i 0) else None))
         | "doorstate" -> Some(Doorstate((if args.Length > 0 then Some(i 0) else None), (if args.Length > 1 then Some(arg 1) else None)))
-        | "ugdoor" -> Some(Ugdoor args)
         | "dontrestartmapmusic" -> Some Dontrestartmapmusic
         | "playmapmusic" -> Some Playmapmusic
         | "musicfadeout" -> Some Musicfadeout

@@ -706,7 +706,6 @@ module Script =
             | TeleportFrom ->
                 run (world |> World.setBuffer "__teleport_from_map" vm.MapId |> World.setVar "__teleport_from_x" 0 |> World.setVar "__teleport_from_y" 0) next
             | TreeShake -> suspend next world (ScriptEffect.Pause 30)
-            | Ugdoor _ -> run world next
             | Variablesprite(sprite, replacement) -> run (World.setBuffer ("__sprite_" + sprite) replacement world) next
             | Warpcheck -> suspend next world WarpCheck
             | Writeobjectxy _ -> run world next

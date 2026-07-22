@@ -112,7 +112,7 @@ module ConformanceLedger =
           yield entry ScriptCommandCase "Describedecoration" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 NewBarkRuntimeTests proves the source default Player's House Town Map poster becomes interactive on map entry, shows LookTownMapText, and enters the Map tab through TownMapScript. Custom decoration selection, save state, and non-default poster/doll/console descriptions remain decoration UI work."
 
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Writeobjectxy"; "Ugdoor" ]
+            [ "Writeobjectxy" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
 

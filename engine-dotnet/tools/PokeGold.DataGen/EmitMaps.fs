@@ -114,7 +114,6 @@ module EmitMaps =
         | Refreshmap -> "Refreshmap"
         | Changeblock (x, y, blockId) -> sprintf "Changeblock(%d, %d, %d)" x y blockId
         | Doorstate(door, state) -> sprintf "Doorstate(%s, %s)" (intOpt door) (state |> strOpt)
-        | Ugdoor args -> sprintf "Ugdoor [%s]" (args |> List.map str |> String.concat "; ")
         | Dontrestartmapmusic -> "Dontrestartmapmusic"
         | Playmapmusic -> "Playmapmusic"
         | Musicfadeout -> "Musicfadeout"

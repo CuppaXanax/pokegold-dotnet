@@ -188,7 +188,6 @@ type ScriptCommand =
     /// `changeblock x, y, block` — replace a map block at `(x, y)`.
     | Changeblock of x: int * y: int * blockId: int
     | Doorstate of door: int option * state: string option
-    | Ugdoor of args: string list
     | Dontrestartmapmusic
     | Playmapmusic
     | Musicfadeout
