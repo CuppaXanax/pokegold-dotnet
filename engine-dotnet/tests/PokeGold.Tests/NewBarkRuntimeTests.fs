@@ -183,6 +183,35 @@ let ``Cyndaquil starter preview displays Pokepic until dismissal then resumes`` 
     assertTraceCore driver
 
 [<Fact>]
+let ``Players House Town Map poster describes itself and opens the map tab`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("PlayersHouse2F", 6, 1, Some Up))
+    driver.Tick() |> ignore
+
+    driver.Talk()
+
+    let described =
+        driver.RunUntil(
+            (fun snapshot ->
+                snapshot.TopScene = "TextBoxScene"
+                && snapshot.Overworld |> Option.exists (fun overworld -> overworld.LastTextLabel = Some "LookTownMapText")),
+            40)
+
+    Assert.Equal("TextBoxScene", described.TopScene)
+
+    let mutable frame = 0
+    while frame < 500 && driver.Snapshot.TopScene <> "PokegearScene" do
+        frame <- frame + 1
+        let buttons =
+            if driver.Snapshot.TopScene = "TextBoxScene" && frame % 2 = 0 then press "a"
+            else Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.Equal("PokegearScene", driver.Snapshot.TopScene)
+    assertTraceCore driver
+
+[<Fact>]
 let ``new game reaches PlayersHouse2F through title menu and naming input`` () =
     let driver = GameDriver()
 

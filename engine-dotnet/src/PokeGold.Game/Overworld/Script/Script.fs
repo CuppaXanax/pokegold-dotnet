@@ -501,6 +501,14 @@ module Script =
             | Special "YoungerHaircutBrother" -> suspend next world (Haircut "YOUNGER")
             | Special "DaisysGrooming" -> suspend next world (Haircut "DAISY")
             | Special "ProfOaksPCBoot" -> suspend next world ShowOakPokedexRating
+            | Special "ToggleDecorationsVisibility" ->
+                world
+                |> World.setEvent "EVENT_PLAYERS_ROOM_POSTER"
+                |> World.setEvent "EVENT_PLAYERS_HOUSE_2F_CONSOLE"
+                |> World.setEvent "EVENT_PLAYERS_HOUSE_2F_DOLL_1"
+                |> World.setEvent "EVENT_PLAYERS_HOUSE_2F_DOLL_2"
+                |> World.setEvent "EVENT_PLAYERS_HOUSE_2F_BIG_DOLL"
+                |> fun updatedWorld -> run updatedWorld next
             | Special "MagnetTrain" ->
                 let destination =
                     if vm.ScriptVar = 0 then "SaffronMagnetTrainStation"
@@ -591,6 +599,10 @@ module Script =
             | Givepokemail (template :: _) -> suspend next world (GivePartyMail template)
             | Givepokemail [] -> run world next
             | Addcellnum phone -> suspend next world (AddPhoneContact phone)
+            | Describedecoration ("DECODESC_POSTER" :: _) ->
+                match StdScriptsData.program.Labels.TryFind "TownMapScript" with
+                | Some target -> run world { vm with Program = StdScriptsData.program; Pc = target }
+                | None -> run world next
             | Describedecoration _
             | Stonetable _
             | Cmdqueue _

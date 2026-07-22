@@ -83,6 +83,10 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   payload, and save state; Route 31 validates and removes matching delivered
   mail through the Party picker with all source result-code branches covered.
   Player-authored mail and full mailbox composition remain UI/storage work.
+- The default Player's House Town Map poster now becomes interactive through its
+  source map-entry callback, shows `LookTownMapText`, and opens the Map tab via
+  the baked `TownMapScript`. Custom decoration selection, save state, and
+  alternate poster/doll/console descriptions remain decoration UI work.
 - `checkjustbattled` now returns the transient trainer-script state consumed by
   `endifjustbattled`, rather than a fixed false result; reload/catch/run fidelity
   remains tracked under SCR-001.

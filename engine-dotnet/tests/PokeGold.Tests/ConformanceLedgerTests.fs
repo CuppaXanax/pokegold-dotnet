@@ -109,8 +109,10 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 generates static givepokemail payloads, preserves attached party mail through save/load, and routes checkpokemail through the Party picker with source WRONG/CORRECT/REFUSED/NO_MAIL/LAST_MON outcomes. Route 35 to Route 31 runtime coverage proves Kenya delivery and TM50; player-authored mail and PC mailbox composition remain UI/storage work."
             [ "Givepokemail"; "Checkpokemail" ]
 
+          yield entry ScriptCommandCase "Describedecoration" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 NewBarkRuntimeTests proves the source default Player's House Town Map poster becomes interactive on map entry, shows LookTownMapText, and enters the Map tab through TownMapScript. Custom decoration selection, save state, and non-default poster/doll/console descriptions remain decoration UI work."
+
           yield! many ScriptCommandCase StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated command is typed, but current runtime behavior is a no-op, fixed dummy result, or intentionally ad-hoc fallback for side systems."
-            [ "Writeobjectxy"; "Ugdoor"; "Describedecoration" ]
+            [ "Writeobjectxy"; "Ugdoor" ]
 
           yield entry ScriptCommandCase "Cry" ImplementedApproximate [ Cosmetic; RequiredFor100Percent ] "D Pokémon cries route script `cry` through parsed data/pokemon/cries.asm metadata and audio/cries.asm base scripts; `Waitsfx` still does not block on active audio."
 
@@ -175,13 +177,15 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "ProfOaksPCBoot" FaithfulTested [ SideSystem; RequiredFor100Percent ] "SCR-009 Oak rating boundary coverage preserves all 19 source ceilings and the Oaks Lab staged runtime test proves live seen/owned counts, exact rating text, matching fanfare, and script resumption."
 
+          yield entry ScriptSpecial "ToggleDecorationsVisibility" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 NewBarkRuntimeTests proves the default InitDecorations Town Map poster is interactive on Player's House entry while unset default decorations remain hidden. Custom decoration state, map tiles, and alternate descriptions remain decoration UI work."
+
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
             [ "CheckForLuckyNumberWinners"
               "CheckLuckyNumberShowFlag"; "CheckMysteryGift"; "CheckPokerus"
               "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"
               "MrChrono"; "PhotoStudio"
               "PrintTodaysLuckyNumber"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"
-              "ToggleDecorationsVisibility"; "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
+              "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 
