@@ -24,6 +24,37 @@ module Grooming =
         elif friendship < 200 then mid
         else high
 
+module GameCorner =
+    let private slotPayout (lucky: bool) (rng: Random) =
+        // Slots_InitBias .Normal/.Lucky in engine/games/slot_machine.asm selects
+        // these bias tiers; Slots_GetPayout maps them to the listed payouts.
+        let tiers =
+            if lucky then
+                [| 1, 300; 1, 50; 2, 15; 3, 10; 5, 8; 19, 6; 69, 0 |]
+            else
+                [| 1, 300; 1, 50; 2, 15; 4, 10; 8, 8; 3, 6; 81, 0 |]
+
+        let roll = rng.Next(100)
+        let mutable upperBound = 0
+
+        tiers
+        |> Array.find (fun (weight, _) ->
+            upperBound <- upperBound + weight
+            roll < upperBound)
+        |> snd
+
+    let play (game: string) (lucky: bool) (rng: Random) (player: PlayerState) =
+        if Bag.count "COIN_CASE" player.Bag = 0 || player.Coins < 3 then
+            player
+        else
+            let payout =
+                match game with
+                | "SLOT_MACHINE" -> slotPayout lucky rng
+                | "CARD_FLIP" when rng.Next(2) = 0 -> 6
+                | _ -> 0
+
+            { player with Coins = min 9999 (max 0 (player.Coins - 3 + payout)) }
+
 type OakPokedexRating =
     { Number: int
       MaxOwned: int
@@ -1305,17 +1336,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         "ALPH RUINS STAMP<PARA>All UNOWN forms are<LINE>ready to print.<PROMPT>"
 
     member private _.PlayGameCornerGame (game: string) (lucky: bool) =
-        if Bag.count "COIN_CASE" player.Bag > 0 && player.Coins >= 3 then
-            let win =
-                if lucky then encounterRng.Next(4) <> 0
-                else encounterRng.Next(2) = 0
-
-            let payout =
-                if not win then 0
-                elif game = "SLOT_MACHINE" && lucky then 15
-                else 6
-
-            player <- { player with Coins = min 9999 (player.Coins - 3 + payout) }
+        player <- GameCorner.play game lucky encounterRng player
 
     member private _.RegisterPrizeDex (dex: int) =
         if dex > 0 && not (Set.contains dex player.DexOwn) then
