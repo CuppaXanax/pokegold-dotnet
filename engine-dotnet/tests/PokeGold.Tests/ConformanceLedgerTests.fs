@@ -62,15 +62,15 @@ module ConformanceLedger =
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime has a typed path, but behavior still needs command-level conformance proof."
             [ "Scall"; "Sjump"; "Jumpstd"; "Callstd"; "Iffalse"; "Iftrue"; "Ifequal"; "Ifnotequal"; "Ifgreater"; "Ifless"
               "Setval"; "Addval"; "Readvar"; "Writevar"; "Loadvar"; "Loadmem"; "Readmem"; "Writemem"; "Random"
-              "Checkevent"; "Clearevent"; "Setevent"; "Checkflag"; "Clearflag"; "Setflag"
+              "Checkevent"; "Checkflag"
               "Checkmapscene"; "Setmapscene"; "Checkscene"; "Setscene"
-              "Giveitem"; "Takeitem"; "Checkitem"; "Verbosegiveitem"
+              "Checkitem"
               "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
               "Opentext"; "Closetext"; "Writetext"; "Jumptext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton"; "Yesorno"
-              "Loadwildmon"; "Givepoke"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
+              "Loadwildmon"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
               "Playmusic"; "Playsound"
-              "Warp"; "Warpfacing"; "Reloadmap"; "Refreshmap"; "Changeblock"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
+              "Warpfacing"; "Reloadmap"; "Refreshmap"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
               "End"; "EndAll"; "Halloffame"; "Credits"; "Special"; "Pokemart"
               "Checktime"; "Endifjustbattled"; "Gettrainername"; "Getitemname"; "Getmonname"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
 
@@ -86,6 +86,9 @@ module ConformanceLedger =
           yield entry ScriptCommandCase "Catchtutorial" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "Route 29 preserves the source battle-type operand, stages the scripted wild Rattata, and runs an automated ordinary BattleScene with Dude's temporary level-5 Rattata and one Poke Ball without mutating the real player."
 
           yield entry ScriptCommandCase "Itemnotify" FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime test proves giveitem stages the current item, itemnotify renders the source item and pocket names, waits in a textbox, and resumes the script."
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "ScriptCommandConformanceTests runs source operands from generated map scripts through OverworldScene and proves live bag, party, warp, map-block, event, and engine-flag state changes."
+            [ "Giveitem"; "Verbosegiveitem"; "Takeitem"; "Givepoke"; "Warp"; "Changeblock"; "Setevent"; "Clearevent"; "Setflag"; "Clearflag" ]
 
           yield entry ScriptCommandCase "Checkjustbattled" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 ScriptTests prove the source-compatible transient trainer-script truth value, false branch, and one-shot endifjustbattled consumption through the port's __just_battled state seam."
 
