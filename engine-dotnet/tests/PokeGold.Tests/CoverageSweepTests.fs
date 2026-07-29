@@ -24,7 +24,7 @@ let ``the baked map scripts hold a stable command total`` () =
     let total =
         MapsData.all |> Seq.sumBy (fun kv -> kv.Value.Script.Commands.Length)
 
-    Assert.Equal(21227, total)
+    Assert.Equal(21241, total)
 
 [<Fact>]
 let ``generated script IR contains no generic Unsupported commands`` () =

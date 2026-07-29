@@ -27,6 +27,7 @@ type RuntimePlayerSnapshot =
       Name: string
       PartyCount: int
       PartySpecies: int list
+      Bag: Map<string, int>
       PhoneContacts: string list
       GameTimeWeekday: int
       GameTimeIsDst: bool

@@ -2450,6 +2450,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
               Name = player.Name
               PartyCount = player.Party.Length
               PartySpecies = player.Party |> List.map (fun mon -> mon.SpeciesId)
+              Bag = Bag.toFlat player.Bag
               PhoneContacts = player.PhoneContacts |> Set.toList
               GameTimeWeekday = player.GameTime.Weekday
               GameTimeIsDst = player.GameTime.IsDst
