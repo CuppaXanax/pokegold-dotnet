@@ -24,6 +24,26 @@ let private sourceCommand predicate =
     |> Option.defaultWith (fun () -> failwith "expected a generated map-script command under test")
 
 let private runGeneratedCommand content mapId command world player =
+    let scene =
+        let baseState = OverworldState.loadByIdAt content mapId 1 1 Down
+        let state =
+            { baseState with
+                Events =
+                    { baseState.Events with
+                        Scenes = [| "SCENE_COMMAND_CONFORMANCE" |]
+                        SceneLabels = [| "CommandConformance" |]
+                        Coords = [||]
+                        Callbacks = [||] }
+                Script =
+                        { Commands = [| command; End |]
+                          Labels = Map.ofList [ "CommandConformance", 0 ] } }
+        let scene = OverworldScene(content, SilentSound(), state)
+        scene.Restore(world, player)
+        scene
+    (scene :> Scene).Update Buttons.none |> ignore
+    scene
+
+let private generatedScene content mapId commands labels world player =
     let baseState = OverworldState.loadByIdAt content mapId 1 1 Down
     let state =
         { baseState with
@@ -34,11 +54,10 @@ let private runGeneratedCommand content mapId command world player =
                     Coords = [||]
                     Callbacks = [||] }
             Script =
-                    { Commands = [| command; End |]
-                      Labels = Map.ofList [ "CommandConformance", 0 ] } }
+                    { Commands = commands
+                      Labels = Map.ofList (("CommandConformance", 0) :: labels) } }
     let scene = OverworldScene(content, SilentSound(), state)
     scene.Restore(world, player)
-    (scene :> Scene).Update Buttons.none |> ignore
     scene
 
 let private runGeneratedCommands content mapId commands labels world player =
@@ -58,6 +77,24 @@ let private runGeneratedCommands content mapId commands labels world player =
     scene.Restore(world, player)
     (scene :> Scene).Update Buttons.none |> ignore
     scene
+
+let private sourceStdCommand predicate =
+    StdScriptsData.program.Commands
+    |> Array.tryFind predicate
+    |> Option.defaultWith (fun () -> failwith "expected a generated standard-script command under test")
+
+let private dismissTextBox (textBox: Scene) =
+    let mutable dismissed = false
+    let mutable frame = 0
+
+    while not dismissed && frame < 1000 do
+        frame <- frame + 1
+        let buttons =
+            if frame % 2 = 0 then { Buttons.none with A = true }
+            else Buttons.none
+        dismissed <- (textBox.Update buttons = Pop)
+
+    Assert.True(dismissed, "expected text box to complete")
 
 let private directionOf =
     function
@@ -348,3 +385,232 @@ let ``generated check and scene commands expose source state through the live wo
         | _ -> failwith "source command did not resolve to checkitem"
     let player = { PlayerStateOps.initial with Bag = Bag.add item 1 Bag.empty }
     Assert.Equal(1, World.getVar "__result" (result checkItem itemMap World.empty player).DebugWorld)
+
+[<Fact>]
+let ``generated text window commands preserve script continuation`` () =
+    let content = Content()
+
+    [ sourceCommand (function | Opentext -> true | _ -> false)
+      sourceCommand (function | Closetext -> true | _ -> false)
+      sourceCommand (function | Waitbutton -> true | _ -> false)
+      sourceCommand (function | Promptbutton -> true | _ -> false) ]
+    |> List.iteri (fun index (mapId, command) ->
+        let completed = $"EVENT_TEST_TEXT_WINDOW_{index}"
+        let scene =
+            generatedScene
+                content
+                mapId
+                [| command; Setevent completed; End |]
+                []
+                World.empty
+                PlayerStateOps.initial
+        (scene :> Scene).Update Buttons.none |> ignore
+        Assert.True(World.hasEvent completed scene.DebugWorld))
+
+[<Fact>]
+let ``generated text commands open live text boxes and preserve their source control flow`` () =
+    let content = Content()
+
+    let writetextMap, writetext =
+        sourceCommand (function | Writetext _ -> true | _ -> false)
+    let written =
+        generatedScene
+            content
+            writetextMap
+            [| writetext; Setevent "EVENT_TEST_WRITETEXT_RESUMED"; End |]
+            []
+            World.empty
+            PlayerStateOps.initial
+    let textBox =
+        match (written :> Scene).Update Buttons.none with
+        | Push (:? TextBoxScene as textBox) -> textBox :> Scene
+        | other -> failwithf "expected generated writetext to open a TextBoxScene, got %A" other
+    Assert.Equal(Some (match writetext with | Writetext label -> label | _ -> failwith "expected writetext"), written.RuntimeSnapshot.LastTextLabel)
+    dismissTextBox textBox
+    (written :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_WRITETEXT_RESUMED" written.DebugWorld)
+
+    [ sourceCommand (function | Jumptext _ -> true | _ -> false)
+      sourceCommand (function | Jumptextfaceplayer _ -> true | _ -> false) ]
+    |> List.iteri (fun index (mapId, command) ->
+        let completed = $"EVENT_TEST_JUMPTEXT_{index}"
+        let scene =
+            generatedScene
+                content
+                mapId
+                [| command; Setevent completed; End |]
+                []
+                World.empty
+                PlayerStateOps.initial
+        let textBox =
+            match (scene :> Scene).Update Buttons.none with
+            | Push (:? TextBoxScene as textBox) -> textBox :> Scene
+            | other -> failwithf "expected generated jumptext to open a TextBoxScene, got %A" other
+        dismissTextBox textBox
+        (scene :> Scene).Update Buttons.none |> ignore
+        Assert.False(World.hasEvent completed scene.DebugWorld))
+
+[<Fact>]
+let ``generated yesorno script routes a live menu choice into its source branch`` () =
+    let content = Content()
+    let mapId, yesorno = sourceCommand (function | Yesorno -> true | _ -> false)
+    let scene =
+        generatedScene
+            content
+            mapId
+            [| yesorno
+               Iftrue "Yes"
+               End
+               Setevent "EVENT_TEST_YESNO_SELECTED"
+               End |]
+            [ "Yes", 3 ]
+            World.empty
+            PlayerStateOps.initial
+    let menu =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? YesNoScene as menu) -> menu :> Scene
+        | other -> failwithf "expected generated yesorno to open YesNoScene, got %A" other
+    Assert.Equal(Pop, menu.Update { Buttons.none with A = true })
+    (scene :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_YESNO_SELECTED" scene.DebugWorld)
+
+[<Fact>]
+let ``generated phone commands mutate contacts and route their source results`` () =
+    let content = Content()
+
+    let addMap, add = sourceCommand (function | Addcellnum _ -> true | _ -> false)
+    let addPhone =
+        match add with
+        | Addcellnum phone -> phone
+        | _ -> failwith "expected addcellnum"
+    let added = runGeneratedCommand content addMap add World.empty PlayerStateOps.initial
+    Assert.Contains(addPhone, added.DebugPlayer.PhoneContacts)
+
+    let checkMap, check = sourceCommand (function | Checkcellnum _ -> true | _ -> false)
+    let checkPhone =
+        match check with
+        | Checkcellnum phone -> phone
+        | _ -> failwith "expected checkcellnum"
+    let checkedScene =
+        generatedScene
+            content
+            checkMap
+            [| check; Iftrue "Known"; End; Setevent "EVENT_TEST_PHONE_KNOWN"; End |]
+            [ "Known", 3 ]
+            World.empty
+            { PlayerStateOps.initial with PhoneContacts = Set.singleton checkPhone }
+    (checkedScene :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_PHONE_KNOWN" checkedScene.DebugWorld)
+
+    let askMap, ask = sourceCommand (function | Askforphonenumber _ -> true | _ -> false)
+    let askPhone =
+        match ask with
+        | Askforphonenumber phone -> phone
+        | _ -> failwith "expected askforphonenumber"
+    let asked =
+        generatedScene
+            content
+            askMap
+            [| ask; Ifequal(0, "Accepted"); End; Setevent "EVENT_TEST_PHONE_ACCEPTED"; End |]
+            [ "Accepted", 3 ]
+            World.empty
+            PlayerStateOps.initial
+    let menu =
+        match (asked :> Scene).Update Buttons.none with
+        | Push (:? YesNoScene as menu) -> menu :> Scene
+        | other -> failwithf "expected generated askforphonenumber to open YesNoScene, got %A" other
+    Assert.Equal(Pop, menu.Update { Buttons.none with A = true })
+    (asked :> Scene).Update Buttons.none |> ignore
+    Assert.Contains(askPhone, asked.DebugPlayer.PhoneContacts)
+    Assert.True(World.hasEvent "EVENT_TEST_PHONE_ACCEPTED" asked.DebugWorld)
+
+[<Fact>]
+let ``generated special phone commands expose their source call to standard call checks`` () =
+    let content = Content()
+    let mapId, special =
+        sourceCommand (function | Specialphonecall call when call <> "SPECIALCALL_NONE" -> true | _ -> false)
+    let call =
+        match special with
+        | Specialphonecall call -> call
+        | _ -> failwith "expected specialphonecall"
+    let specialScene = runGeneratedCommand content mapId special World.empty PlayerStateOps.initial
+    Assert.Equal(call, World.getBuffer "__special_phone_call" specialScene.DebugWorld)
+
+    let check = sourceStdCommand (function | Checkphonecall -> true | _ -> false)
+    let checkMap, _ = sourceCommand (fun _ -> true)
+    let checkedScene =
+        generatedScene
+            content
+            checkMap
+            [| check; Iftrue "CallPending"; End; Setevent "EVENT_TEST_PHONE_CALL_PENDING"; End |]
+            [ "CallPending", 3 ]
+            (World.setBuffer "__special_phone_call" call World.empty)
+            PlayerStateOps.initial
+    (checkedScene :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_PHONE_CALL_PENDING" checkedScene.DebugWorld)
+
+[<Fact>]
+let ``generated menu commands retain source data and route live selections`` () =
+    let content = Content()
+    let loadMap, load = sourceCommand (function | Loadmenu _ -> true | _ -> false)
+    let menuLabel =
+        match load with
+        | Loadmenu label -> label
+        | _ -> failwith "expected loadmenu"
+    let vertical = sourceCommand (function | Verticalmenu -> true | _ -> false) |> snd
+    let verticalScene =
+        generatedScene
+            content
+            loadMap
+            [| load; vertical; Ifequal(1, "Selected"); End; Setevent "EVENT_TEST_VERTICAL_MENU"; End |]
+            [ "Selected", 4 ]
+            World.empty
+            PlayerStateOps.initial
+    let verticalMenu =
+        match (verticalScene :> Scene).Update Buttons.none with
+        | Push (:? ScriptMenuScene as menu) -> menu :> Scene
+        | other -> failwithf "expected generated verticalmenu to open ScriptMenuScene, got %A" other
+    Assert.Equal(Pop, verticalMenu.Update { Buttons.none with A = true })
+    (verticalScene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(menuLabel, World.getBuffer "__loaded_menu" verticalScene.DebugWorld)
+    Assert.True(World.hasEvent "EVENT_TEST_VERTICAL_MENU" verticalScene.DebugWorld)
+
+    let twoD = sourceCommand (function | TwoDMenu -> true | _ -> false) |> snd
+    let twoDScene =
+        generatedScene
+            content
+            loadMap
+            [| load; twoD; Ifequal(1, "Selected"); End; Setevent "EVENT_TEST_2D_MENU"; End |]
+            [ "Selected", 4 ]
+            World.empty
+            PlayerStateOps.initial
+    let twoDMenu =
+        match (twoDScene :> Scene).Update Buttons.none with
+        | Push (:? ScriptMenuScene as menu) -> menu :> Scene
+        | other -> failwithf "expected generated 2dmenu to open ScriptMenuScene, got %A" other
+    Assert.Equal(Pop, twoDMenu.Update { Buttons.none with A = true })
+    (twoDScene :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_2D_MENU" twoDScene.DebugWorld)
+
+    let coordsMap, coords = sourceCommand (function | MenuCoords _ -> true | _ -> false)
+    let sourceCoords =
+        match coords with
+        | MenuCoords values -> String.concat "," values
+        | _ -> failwith "expected menu_coords"
+    let coordsScene = runGeneratedCommand content coordsMap coords World.empty PlayerStateOps.initial
+    Assert.Equal(sourceCoords, World.getBuffer "__menu_coords" coordsScene.DebugWorld)
+
+[<Fact>]
+let ``generated closewindow command resumes its source script`` () =
+    let content = Content()
+    let mapId, close = sourceCommand (function | Closewindow -> true | _ -> false)
+    let scene =
+        generatedScene
+            content
+            mapId
+            [| close; Setevent "EVENT_TEST_CLOSEWINDOW_RESUMED"; End |]
+            []
+            World.empty
+            PlayerStateOps.initial
+    (scene :> Scene).Update Buttons.none |> ignore
+    Assert.True(World.hasEvent "EVENT_TEST_CLOSEWINDOW_RESUMED" scene.DebugWorld)
