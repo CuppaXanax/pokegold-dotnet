@@ -60,12 +60,15 @@ module ConformanceLedger =
     let all: LedgerEntry list =
         [
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime has a typed path, but behavior still needs command-level conformance proof."
-            [ "Reloadmapafterbattle"
-              "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
-              "Playmusic"; "Playsound"
-              "Warpfacing"; "Reloadmap"; "Refreshmap"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
-              "End"; "EndAll"; "Halloffame"; "Credits"; "Special"
-              "Checktime"; "Endifjustbattled"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
+            [ "Reloadmapafterbattle" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-004 runs generated map commands through OverworldScene and proves source actor visibility, facing, placement, movement completion, timed script resumption, audio dispatch, reload continuation, VM buffers, time branches, and terminal control flow. It additionally exercises absent generated Faceobject, Warpfacing, Doorstate, TeleportFrom, and TreeShake through isolated live handlers."
+            [ "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
+              "Playmusic"; "Playsound"; "Warpfacing"; "Reloadmap"; "Refreshmap"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"
+              "End"; "Checktime"; "Endifjustbattled"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
+
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated scripts dispatch these paths, but the current runtime seam cannot observe follow-pair internals or camera anchoring. EndAll, Halloffame, Credits, and generic Special are terminal/end-game or heterogeneous UI paths whose full behavior cannot be honestly proven by a component handler test."
+            [ "Follow"; "Stopfollow"; "Reanchormap"; "EndAll"; "Halloffame"; "Credits"; "Special" ]
 
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "No generated map script invokes these commands; their standard-script or source-asset paths cannot be proven with the map-command conformance harness."
             [ "Callstd"; "Setval"; "Writevar"; "Loadmem"; "Checkmapscene" ]
