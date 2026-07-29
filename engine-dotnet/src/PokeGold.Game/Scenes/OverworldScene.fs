@@ -285,6 +285,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
     /// The outcome of the most recent battle (set by BattleScene callback).
     let mutable lastBattleResult: BattleScriptResult option = None
+    /// A wild capture could not enter the active PC box during the most recent battle.
+    let mutable lastBattleBoxFull = false
     /// Ordered level-up move decisions that must finish before StartBattle resumes.
     let mutable pendingMoveRequests: LearnMoveRequest list = []
     let mutable pendingEvolutionRequests: EvolutionRequest list = []
@@ -1470,6 +1472,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 let boxes = updatedPlayer.Pc.Boxes |> Array.mapi (fun i b -> if i = updatedPlayer.Pc.CurrentBox then newBox else b)
                 player <- { updatedPlayer with Pc = { updatedPlayer.Pc with Boxes = boxes } }
             else
+                lastBattleBoxFull <- true
                 player <- updatedPlayer
 
     member private this.BuildBattle() : BattleScene =
@@ -1679,6 +1682,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                         else
                                             Pop)) :> Scene))
                     | StartBattle ->
+                        lastBattleBoxFull <- false
                         pending <- Some(vm, effect)
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
                         stop (Push(this.BuildBattle() :> Scene))
@@ -2599,18 +2603,24 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             world <- World.setVar "VAR_BATTLETYPE" 0 world
                             None
                         | StartBattle ->
+                            let wasWild = stagedWild.IsSome
                             let scriptResult =
                                 match lastBattleResult with
                                 | Some BattleVictory -> 0
                                 | Some BattleEscape -> 2
                                 | Some BattleDefeat -> 1
                                 | None -> 1
+                            world <-
+                                world
+                                |> World.setVar "__last_battle_was_wild" (if wasWild then 1 else 0)
+                                |> World.setVar "__last_battle_box_full" (if lastBattleBoxFull then 1 else 0)
                             stagedWild <- None
                             stagedTrainer <- None
                             world <- World.setVar "VAR_BATTLETYPE" 0 world
                             stagedWinText <- ""
                             stagedLossText <- ""
                             lastBattleResult <- None
+                            lastBattleBoxFull <- false
                             // Source wBattleResult is WIN=0, LOSE=1, DRAW=2.
                             // Defeat is intercepted above and never resumes this
                             // script continuation.

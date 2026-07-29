@@ -89,7 +89,7 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "Checkjustbattled" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 ScriptTests prove the source-compatible transient trainer-script truth value, false branch, and one-shot endifjustbattled consumption through the port's __just_battled state seam."
 
-          yield entry ScriptCommandCase "Startbattle" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 runtime tests prove script-visible WIN=0 for capture, DRAW=2 for wild RUN, and existing BAT-016 through BAT-019 loss blackout/abort behavior. reloadmapafterbattle's Mom/Bill post-battle dispatch remains open."
+          yield entry ScriptCommandCase "Startbattle" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 runtime tests prove script-visible WIN=0 for capture, DRAW=2 for wild RUN, and existing BAT-016 through BAT-019 loss blackout/abort behavior. ScriptTests.reloadmapafterbattle queues Mom's eligible trainer call, Bill's full-box wild call, and keeps plain reload paths distinct."
 
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-003 VM and Elm's Lab runtime tests prove source operand-0 species resolution, visible front-pic rendering, A/B waitbutton dismissal, and close-to-text script resumption. Exact GBC tilemap/SGB restoration remains presentation work."
             [ "Pokepic"; "Closepokepic" ]

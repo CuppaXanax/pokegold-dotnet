@@ -796,6 +796,43 @@ let ``checkjustbattled exposes and endifjustbattled consumes trainer script stat
     Assert.Equal(0, World.getVar "__just_battled" endedWorld)
 
 [<Fact>]
+let ``reloadmapafterbattle queues Mom or Bill calls without affecting plain reloads`` () =
+    let afterBattle = parse "S:\n\treloadmapafterbattle\n\tend\n"
+    let reload = parse "S:\n\treloadmap\n\tend\n"
+    let refresh = parse "S:\n\trefreshmap\n\tend\n"
+
+    let trainerWorld =
+        World.empty
+        |> World.setVar "__last_battle_was_wild" 0
+        |> World.setFlag "ENGINE_MOM_SAVING_MONEY"
+
+    let trainerResult, trainerEffects = driveSilent trainerWorld "S" afterBattle
+    Assert.Equal<ScriptEffect list>([ ReloadMap ], trainerEffects)
+    Assert.Equal("SPECIALCALL_MOM", World.getBuffer "__special_phone_call" trainerResult)
+
+    let wildWorld =
+        World.empty
+        |> World.setVar "__last_battle_was_wild" 1
+        |> World.setBuffer "__special_phone_call" "SPECIALCALL_POKERUS"
+    let wildResult, wildEffects = driveSilent wildWorld "S" afterBattle
+    Assert.Equal<ScriptEffect list>([ ReloadMap ], wildEffects)
+    Assert.Equal("", World.getBuffer "__special_phone_call" wildResult)
+
+    let boxFullWorld =
+        World.empty
+        |> World.setVar "__last_battle_was_wild" 1
+        |> World.setVar "__last_battle_box_full" 1
+    let boxFullResult, boxFullEffects = driveSilent boxFullWorld "S" afterBattle
+    Assert.Equal<ScriptEffect list>([ ReloadMap ], boxFullEffects)
+    Assert.Equal("SPECIALCALL_BILL", World.getBuffer "__special_phone_call" boxFullResult)
+
+    for prog in [ reload; refresh ] do
+        let plainWorld = World.empty |> World.setBuffer "__special_phone_call" "SPECIALCALL_POKERUS"
+        let result, effects = driveSilent plainWorld "S" prog
+        Assert.Equal<ScriptEffect list>([ ReloadMap ], effects)
+        Assert.Equal("SPECIALCALL_POKERUS", World.getBuffer "__special_phone_call" result)
+
+[<Fact>]
 let ``map music specials emit host music effects`` () =
     let prog =
         parse
