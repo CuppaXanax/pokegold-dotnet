@@ -61,7 +61,6 @@ module ConformanceLedger =
         [
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime has a typed path, but behavior still needs command-level conformance proof."
             [ "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
-              "Opentext"; "Closetext"; "Writetext"; "Jumptext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton"; "Yesorno"
               "Loadwildmon"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
               "Playmusic"; "Playsound"
@@ -74,14 +73,20 @@ module ConformanceLedger =
 
           yield entry ScriptCommandCase "Jumpstd" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated map scripts invoke standard UI scripts through jumpstd, but their text/menu continuations do not expose a command-level live-state assertion in the current OverworldScene test seam."
 
-          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone contact commands mutate player state or route through a yes/no effect; broader phone system behavior still needs conformance proof."
-            [ "Addcellnum"; "Checkcellnum"; "Askforphonenumber" ]
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-004 generated-command tests prove these commands resume the source script, but the native text-window open/close, prompt cursor, wait timing, and face-player presentation are still represented by the port's simplified text UI."
+            [ "Opentext"; "Closetext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton" ]
 
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone-call and script window commands now update runtime world/UI state with targeted VM and scheduler coverage."
-            [ "Checkphonecall"; "Specialphonecall"; "Closewindow" ]
+            [ "Closewindow" ]
 
-          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Menu commands preserve loaded menu state and route vertical/2D menu choices through a generic runtime UI."
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "SCR-004 generated-command tests prove loaded menu labels, source coordinate operands, and selection routing. Exact menu headers, option text, geometry, and 2D cursor layout remain unparsed presentation data."
             [ "Loadmenu"; "Verticalmenu"; "TwoDMenu"; "MenuCoords" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-004 runs generated map commands through OverworldScene and proves source text labels open live text boxes, writetext resumes after dismissal, jumptext terminates the caller, and yesorno routes the selected result into the source branch."
+            [ "Writetext"; "Jumptext"; "Yesorno" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "SCR-004 runs generated map and standard-script phone commands through OverworldScene and proves contact mutation/checking, accepted phone-number prompts, stored special calls, and checkphonecall branching."
+            [ "Addcellnum"; "Checkcellnum"; "Askforphonenumber"; "Checkphonecall"; "Specialphonecall" ]
 
           yield entry ScriptCommandCase "Catchtutorial" FaithfulTested [ CriticalPathJohto; RequiredFor100Percent ] "Route 29 preserves the source battle-type operand, stages the scripted wild Rattata, and runs an automated ordinary BattleScene with Dude's temporary level-5 Rattata and one Poke Ball without mutating the real player."
 
