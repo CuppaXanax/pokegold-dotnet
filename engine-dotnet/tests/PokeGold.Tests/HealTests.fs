@@ -115,7 +115,7 @@ let ``interpreter suspends with HealParty effect`` () =
     | other -> Assert.Fail(sprintf "Expected Suspended HealParty, got %A" other)
 
 [<Fact>]
-let ``interpreter routes restart music special but skips heal animation`` () =
+let ``interpreter suspends for the heal machine animation before map music resumes`` () =
     let prog =
         ScriptParser.parseText
             "S:\n\
@@ -123,9 +123,74 @@ let ``interpreter routes restart music special but skips heal animation`` () =
              \tspecial RestartMapMusic\n\
              \tend\n"
 
+    let animation = Script.start "S" World.empty prog ""
+
+    match animation.Outcome with
+    | Suspended(vm, HealMachineAnimation 0) ->
+        match (Script.resume None animation.World vm).Outcome with
+        | Suspended(_, PlayMusic "__MAP_DEFAULT__") -> ()
+        | other -> Assert.Fail(sprintf "Expected map music after animation, got %A" other)
+    | other -> Assert.Fail(sprintf "Expected heal machine animation effect, got %A" other)
+
+[<Fact>]
+let ``Lucky Channel specials reset the Friday timer and render the generated ID`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tspecial ResetLuckyNumberShowFlag\n\
+             \tspecial PrintTodaysLuckyNumber\n\
+             \tend\n"
+
+    let world =
+        World.empty
+        |> World.setVar "VAR_WEEKDAY" 5
+        |> World.setVar "__day_count" 20
+        |> World.setVar "__lucky_number_seed" 123
+
+    let step = Script.start "S" world prog ""
+    Assert.Equal(27, World.getVar "__lucky_number_due_day" step.World)
+    Assert.Equal(5, (World.getBuffer "STRING_BUFFER_3" step.World).Length)
+
+[<Fact>]
+let ``side-system specials surface their real runtime effects`` () =
+    let prog =
+        ScriptParser.parseText
+            "S:\n\
+             \tspecial CheckForLuckyNumberWinners\n\
+             \tspecial GetFirstPokemonHappiness\n\
+             \tspecial GiveShuckle\n\
+             \tspecial ReturnShuckie\n\
+             \tend\n"
+
     match (Script.start "S" World.empty prog "").Outcome with
-    | Suspended(_, PlayMusic "__MAP_DEFAULT__") -> ()
-    | other -> Assert.Fail(sprintf "Expected map music effect, got %A" other)
+    | Suspended(_, CheckLuckyNumberWinners) -> ()
+    | other -> Assert.Fail(sprintf "Expected Lucky Channel effect, got %A" other)
+
+[<Fact>]
+let ``Lucky Channel selects the source prize tier from trailing OT-ID digits`` () =
+    let exact = { makeMon 10 10 "" [] with OtId = 12345 }
+    let near = { makeMon 10 10 "" [] with OtId = 99345 }
+    let noMatch = { makeMon 10 10 "" [] with OtId = 88880 }
+
+    let first, winner = LuckyNumber.bestMatch 12345 [ near; noMatch; exact ]
+    Assert.Equal(1, first)
+    Assert.Equal(Some exact.Id, winner |> Option.map _.Id)
+
+    let none, winner = LuckyNumber.bestMatch 12345 [ noMatch ]
+    Assert.Equal(0, none)
+    Assert.Equal(None, winner)
+
+[<Fact>]
+let ``Shuckie return removes only Mania's unhappy Shuckle`` () =
+    let party = Shuckie.give [] |> Option.defaultWith (fun () -> failwith "expected Shuckie")
+    let returned, afterReturn = Shuckie.returnToMania 0 party
+    Assert.Equal(2, returned)
+    Assert.Empty(afterReturn)
+
+    let happy = { party.Head with Friendship = 150 }
+    let kept, afterKeep = Shuckie.returnToMania 0 [ happy ]
+    Assert.Equal(3, kept)
+    Assert.Single(afterKeep) |> ignore
 
 [<Fact>]
 let ``script continues past HealParty on resume`` () =

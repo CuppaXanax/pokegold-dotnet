@@ -165,7 +165,7 @@ module ConformanceLedger =
           yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B12 tests cover UnownPuzzle returning solved truth so chamber completion scripts set the right events/flags, plus Research Center UnownPrinter UI dispatch; exact sliding-panel and Game Boy Printer UI fidelity remains future polish."
             [ "UnownPrinter"; "UnownPuzzle" ]
 
-          yield entry ScriptSpecial "HealMachineAnim" StubNoOp [ CriticalPathJohto; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback; StdScriptsTests cover that nurse scripts reach HealParty and HealTests cover continuing past the cosmetic animation seam."
+          yield entry ScriptSpecial "HealMachineAnim" ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "HealTests proves nurse scripts suspend for the machine animation before map music resumes; the host plays one Itemfinder chime per party member, MUSIC_HEAL, and records the source eight palette flashes, while OAM sprite composition remains renderer polish."
 
           yield! many ScriptSpecial ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Routes the setval-staged species through the CheckPoke party effect; the YourTrainerID OT check is unmodelled (all party mons are the player's)."
             [ "FindPartyMonThatSpecies"; "FindPartyMonThatSpeciesYourTrainerID" ]
@@ -176,13 +176,24 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "ToggleDecorationsVisibility" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-003 NewBarkRuntimeTests proves the default InitDecorations Town Map poster is interactive on Player's House entry while unset default decorations remain hidden. Custom decoration state, map tiles, and alternate descriptions remain decoration UI work."
 
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "HealTests covers Lucky Channel reset/ID rendering and dispatch; runtime compares five trailing OT-ID digits across party and PC, selects source prize tiers, and keeps the generated number save-stable, while native RTC/SRAM timer serialization remains future save work."
+            [ "CheckForLuckyNumberWinners"; "CheckLuckyNumberShowFlag"; "PrintTodaysLuckyNumber"; "ResetLuckyNumberShowFlag" ]
+
+          yield entry ScriptSpecial "GetFirstPokemonHappiness" FaithfulTested [ SideSystem; RequiredFor100Percent ] "The runtime skips egg entries, returns the first non-Egg party member's friendship through wScriptVar, and stages its species name in STRING_BUFFER_3, matching happiness_egg.asm."
+
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "The runtime creates Mania's level-15 BERRY-holding SHUCKIE with OT ID $0518 and validates species, OT, fainted, and 150-friendship return outcomes; party-picker cancellation uses the source refused result."
+            [ "GiveShuckle"; "ReturnShuckie" ]
+
+          yield entry ScriptSpecial "ToggleMaptileDecorations" ImplementedApproximate [ Cosmetic; SideSystem; RequiredFor100Percent ] "decorations.asm only writes the player's bedroom display blocks and poster visibility; bedroom decoration persistence and map-block rendering are presentation work, with no gameplay state or route gate affected."
+
+          yield entry ScriptSpecial "TrainerHouse" ImplementedApproximate [ LinkOnly; SideSystem; RequiredFor100Percent ] "specials.asm only reads sMysteryGiftTrainerHouseFlag to choose Mystery Gift-downloaded Trainer House data; the linked payload has no single-player equivalent."
+
+          yield entry ScriptSpecial "PhotoStudio" ImplementedApproximate [ Cosmetic; SideSystem; RequiredFor100Percent ] "print_photo.asm selects a non-Egg party member and sends it to the Game Boy Printer; physical-printer output is intentionally outside the native host."
+
+          yield entry ScriptSpecial "MrChrono" ImplementedApproximate [ Cosmetic; SideSystem; RequiredFor100Percent ] "rtc/timeset.asm labels this unreferenced routine 'Now on DEBUG' and only prints RTC/debug timing diagnostics, so it has no player-facing game behavior to port."
+
           yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
-            [ "CheckForLuckyNumberWinners"
-              "CheckLuckyNumberShowFlag"; "CheckMysteryGift"; "CheckPokerus"
-              "GetFirstPokemonHappiness"; "GetMysteryGiftItem"; "GiveShuckle"
-              "MrChrono"; "PhotoStudio"
-              "PrintTodaysLuckyNumber"; "ResetLuckyNumberShowFlag"; "ReturnShuckie"
-              "ToggleMaptileDecorations"; "TrainerHouse"; "UnlockMysteryGift" ]
+            [ "CheckMysteryGift"; "CheckPokerus"; "GetMysteryGiftItem"; "UnlockMysteryGift" ]
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 
@@ -565,7 +576,7 @@ let ``critical Johto debt is queryable`` () =
         |> Set.ofList
 
     Assert.DoesNotContain((ScriptCommandCase, "Catchtutorial"), debt)
-    Assert.Contains((ScriptSpecial, "HealMachineAnim"), debt)
+    Assert.DoesNotContain((ScriptSpecial, "HealMachineAnim"), debt)
     Assert.DoesNotContain((ScriptSpecial, "TryQuickSave"), debt)
 
 [<Fact>]

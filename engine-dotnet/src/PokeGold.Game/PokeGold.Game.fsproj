@@ -150,6 +150,7 @@
     <Compile Include="Player\Mart.fs" />
     <Compile Include="Player\Storage.fs" />
     <Compile Include="Player\Player.fs" />
+    <Compile Include="Player\SideSystems.fs" />
     <Compile Include="Player\Apricorns.fs" />
     <Compile Include="Overworld\WildEncounter.fs" />
     <Compile Include="Player\BoxOps.fs" />
