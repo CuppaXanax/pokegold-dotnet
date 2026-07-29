@@ -219,16 +219,17 @@ module ConformanceLedger =
               "Colosseum"; "DisplayLinkRecord"; "EnterTimeCapsule"; "FailedLinkToPast"; "GameboyCheck"; "SetBitsForBattleRequest"
               "SetBitsForLinkTradeRequest"; "SetBitsForTimeCapsuleRequest"; "TimeCapsule"; "TradeCenter"; "TryQuickSave"; "WaitForLinkedFriend"; "WaitForOtherPlayerToExit" ]
 
-          yield! many ObjectType ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "A-press dispatch exists, but type-specific GSC object dispatch still needs conformance work."
+          yield! many ObjectType FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "MapDispatchConformanceTests dispatches generated Azalea Mart script NPC, Azalea Gym trainer, and Dark Cave item ball objects, proving source script/text and item-grant outcomes."
             [ "OBJECTTYPE_SCRIPT"; "OBJECTTYPE_TRAINER"; "OBJECTTYPE_ITEMBALL" ]
 
-          yield! many BgEventKind ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated BG event kind is known; dispatch semantics need per-kind tests."
+          yield! many BgEventKind FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "MapDispatchConformanceTests exercises generated sign, conditional, vending-machine, and Game Corner BG records, proving dispatch, event polarity, text, and coin-game outcomes."
             [ "BGEVENT_READ"; "BGEVENT_IFSET"; "BGEVENT_IFNOTSET"; "BGEVENT_UP"; "BGEVENT_LEFT"; "BGEVENT_RIGHT" ]
 
           yield entry BgEventKind "BGEVENT_ITEM" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A17 Cerulean Gym hidden Machine Part runtime test covers A-press BG item dispatch, event gating, item grant, and return-to-manager consumption."
 
-          yield! many MapCallbackKind ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Map-entry callbacks run through the scheduler, but callback-kind ordering still needs conformance tests."
-            [ "MAPCALLBACK_NEWMAP"; "MAPCALLBACK_TILES"; "MAPCALLBACK_OBJECTS"; "MAPCALLBACK_CMDQUEUE" ]
+          yield! many MapCallbackKind FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "MapDispatchConformanceTests proves generated Azalea flypoint, Goldenrod B1F tile, and Day Care object callbacks apply their map-entry effects."
+            [ "MAPCALLBACK_NEWMAP"; "MAPCALLBACK_TILES"; "MAPCALLBACK_OBJECTS" ]
+          yield entry MapCallbackKind "MAPCALLBACK_CMDQUEUE" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Ice Path and Blackthorn Gym callbacks reach generated writecmdqueue records, but Writecmdqueue is intentionally a VM no-op; generic GBC command-queue scheduling remains unmodelled."
 
           yield! many SceneSurface ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Scene exists and can be driven, but full GUI e2e conformance is future UI-epic work."
             [ "MartScene"; "NamingScene"; "OptionsScene"; "OverworldScene"; "PackScene"; "PartyScene"
