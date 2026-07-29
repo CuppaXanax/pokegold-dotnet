@@ -131,6 +131,7 @@ type DayCareScene(content: Content, initialPlayer: PlayerState, mode: string, on
         | Some a, Some b ->
             let egg = Breeding.generateEgg a b
             let dayCare = { player.DayCare with HasEgg = false; EggSteps = 256 }
+            let egg = { egg with OtName = player.Name; OtId = 0 }
             player <- { player with Party = player.Party @ [ egg ]; DayCare = dayCare }
             show "Received the EGG!" (fun () -> show "Take good care of it." (fun () -> finish (Some 0)))
         | _ ->

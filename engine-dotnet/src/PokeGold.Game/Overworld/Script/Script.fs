@@ -77,6 +77,8 @@ type ScriptEffect =
     | CheckTime of time: string
     /// `givepoke` — add a Pokémon to the party. → resume value: 1 (success) / 0 (full).
     | GivePoke of species: string * level: int * item: string option * nickname: string option * otName: string option
+    /// `giveegg` — add an unhatched Pokémon egg to the party. → resume value: 1 (success) / 0 (full).
+    | GiveEgg of species: string * level: int
     /// `checkpoke` — check if species is in party. → resume value: 1 / 0.
     | CheckPoke of species: string
     /// `givepokemail` — attach a source mail payload to the newest party Pokémon.
@@ -593,7 +595,7 @@ module Script =
             | Checkpokemail (expectedText :: _) -> suspend next world (CheckPartyMail expectedText)
             | Checkpokemail []
             | ConditionalEvent _ -> run world next
-            | Giveegg(species, level) -> suspend next world (GivePoke(species, level, None, None, None))
+            | Giveegg(species, level) -> suspend next world (GiveEgg(species, level))
             | Catchtutorial battleType -> suspend next world (StartCatchTutorial battleType)
             | Trade tradeId -> suspend next world (OpenNpcTrade tradeId)
             | Givepokemail (template :: _) -> suspend next world (GivePartyMail template)

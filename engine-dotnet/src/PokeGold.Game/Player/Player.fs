@@ -99,3 +99,47 @@ module Repel =
         match player.Party with
         | lead :: _ -> lead.Level >= wildLevel
         | [] -> false
+
+module EggHatching =
+
+    let private speciesName speciesId =
+        PokeGold.Game.Data.Species.all
+        |> Map.tryPick (fun name species -> if species.Dex = speciesId then Some name else None)
+        |> Option.defaultValue (string speciesId)
+
+    let private hatch (player: PlayerState) (egg: PartyMon) =
+        let maxHp = PartyMon.deriveMaxHpWith egg.SpeciesId egg.Level egg.Dvs egg.StatExp
+
+        { egg with
+            Nickname = speciesName egg.SpeciesId
+            Hp = maxHp
+            MaxHp = maxHp
+            Status = ""
+            OtName = player.Name
+            OtId = 0
+            HatchSteps = None }
+
+    /// Advance every egg by one overworld walking step and hatch eggs at zero.
+    let step (player: PlayerState) : PlayerState =
+        let mutable hatchedSpecies = Set.empty
+
+        let party =
+            player.Party
+            |> List.map (fun mon ->
+                if not (Breeding.isEgg mon) then
+                    mon
+                else
+                    match mon.HatchSteps with
+                    | Some remaining when remaining > 1 ->
+                        { mon with HatchSteps = Some(remaining - 1) }
+                    | Some _ ->
+                        let hatched = hatch player mon
+                        hatchedSpecies <- Set.add hatched.SpeciesId hatchedSpecies
+                        hatched
+                    | None ->
+                        mon)
+
+        { player with
+            Party = party
+            DexSeen = Set.union player.DexSeen hatchedSpecies
+            DexOwn = Set.union player.DexOwn hatchedSpecies }

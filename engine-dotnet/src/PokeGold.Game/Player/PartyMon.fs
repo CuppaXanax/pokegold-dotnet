@@ -9,7 +9,7 @@ type PartyMail = { Item: string; Message: string; SenderName: string; SenderId: 
 
 /// A Pokémon in the persistent party (on the player's team).
 /// All fields preserve the GSC save-file struct plus native identity and mail metadata.
-type PartyMon = { Id: Guid; SpeciesId: int; Nickname: string; Level: int; Exp: int; Hp: int; MaxHp: int; Status: string; Moves: (int * int) list; Dvs: int; StatExp: StatExperience; Pokerus: int; HeldItem: string option; Mail: PartyMail option; OtName: string; OtId: int; Friendship: int }
+type PartyMon = { Id: Guid; SpeciesId: int; Nickname: string; Level: int; Exp: int; Hp: int; MaxHp: int; Status: string; Moves: (int * int) list; Dvs: int; StatExp: StatExperience; Pokerus: int; HeldItem: string option; Mail: PartyMail option; OtName: string; OtId: int; Friendship: int; HatchSteps: int option }
 
 /// A player's party — up to 6 PartyMon in order.
 type Party = PartyMon list
@@ -100,7 +100,8 @@ module PartyMon =
           Mail = None
           OtName = "PLAYER"
           OtId = 0
-          Friendship = 70 }
+          Friendship = 70
+          HatchSteps = None }
 
     let create (speciesId: int) (level: int) : PartyMon =
         createWithDvs speciesId level 0

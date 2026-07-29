@@ -194,7 +194,8 @@ let ``Azalea nurse heal restores a fainted party`` () =
             Mail = None
             OtName = "P"
             OtId = 0
-            Friendship = 70 } ]
+            Friendship = 70
+            HatchSteps = None } ]
 
     let healed = Heal.healParty party
     Assert.Equal(45, healed.[0].Hp)

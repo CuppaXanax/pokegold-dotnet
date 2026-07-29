@@ -2012,6 +2012,23 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                 resume (Some 0) vm
                         | None ->
                             resume (Some 0) vm
+                    | GiveEgg(species, level) ->
+                        match Map.tryFind species PokeGold.Game.Data.Species.all with
+                        | Some stats when player.Party.Length < 6 ->
+                            let egg =
+                                PokeGold.Game.Player.PartyMon.create stats.Dex level
+                                |> PokeGold.Game.Player.MoveLearn.seedStartingMoves
+                                |> fun mon ->
+                                    { mon with
+                                        Nickname = "EGG"
+                                        Friendship = 0
+                                        OtName = player.Name
+                                        OtId = 0
+                                        HatchSteps = Some(Breeding.hatchStepsFor stats.Dex) }
+                            player <- { player with Party = player.Party @ [ egg ] }
+                            resume (Some 1) vm
+                        | _ ->
+                            resume (Some 0) vm
                     | CheckPoke species ->
                         match Map.tryFind species PokeGold.Game.Data.Species.all with
                         | Some stats ->
@@ -2772,6 +2789,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | None, None ->
                         if player.RepelSteps > 0 then
                             player <- { player with RepelSteps = player.RepelSteps - 1 }
+
+                        player <- EggHatching.step player
 
                         let mutable encounterTransition = Stay
                         let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors (fst after) (snd after)
