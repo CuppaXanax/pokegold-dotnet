@@ -20,13 +20,12 @@ type PackMode =
 /// selector (Up/Down = ±1, Left/Right = ±10) and a YES/NO confirmation via
 /// YesNoScene. GIVE pushes PartyScene in picker mode — on selection the item is
 /// transferred to the target mon's held slot (and any prior held item is returned).
-/// USE is implemented for HP-restore items (pushes PartyScene picker); all other
-/// item-use effects route to a gated "Can't use that here yet." message (M17+).
+/// USE supports party-targeting field items plus world-aware key-item callbacks.
 ///
 ///   content   — loaded content (font)
 ///   player    — initial PlayerState to display
 ///   onChange  — callback invoked with a new PlayerState whenever the bag changes
-type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onFishingRod: string -> unit) =
+type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onFishingRod: string -> unit, ?onEscapeRope: unit -> unit) =
 
     let pocketNames = [| "ITEM"; "BALL"; "KEY ITEM"; "TM/HM" |]
     let palette     = TextRenderer.palette
@@ -84,6 +83,7 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
     let mutable yesNoResult   = 0
     let input = EdgeDetector()
     let onFishingRod = defaultArg onFishingRod (fun _ -> ())
+    let onEscapeRope = defaultArg onEscapeRope (fun () -> ())
 
     // ── Pure helpers ──────────────────────────────────────────────────────────
 
@@ -120,6 +120,28 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
     let itemDesc (id: string) =
         ItemsData.byId |> Map.tryFind id |> Option.map (fun d -> d.Description) |> Option.defaultValue ""
 
+    let commit (newPlayer: PlayerState) =
+        currentPlayer <- newPlayer
+        rebuildMenus newPlayer.Bag
+        onChange newPlayer
+
+    let continueRareCandyEvolution slotIdx =
+        let mon = currentPlayer.Party.[slotIdx]
+        match Evolution.tryFind (LevelUp Day) mon with
+        | None -> Pop
+        | Some candidate ->
+            Replace(
+                EvolutionScene(
+                    content.Font,
+                    mon.Nickname,
+                    candidate.Target,
+                    fun decision ->
+                        match decision with
+                        | CancelEvolution -> ()
+                        | AcceptEvolution ->
+                            PackUseGive.applyEvolution "RARE_CANDY" slotIdx candidate currentPlayer
+                            |> commit) :> Scene)
+
     /// Build the action list for an item. Returns at least ["TOSS"; "CANCEL"].
     let buildActions (id: string) (pocket: Pocket) : string array =
         let data      = ItemsData.byId |> Map.tryFind id
@@ -128,7 +150,7 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
             // USE: items/key-items with a field-menu action; TMs (teach).
             match pocket with
             | Pocket.Item | Pocket.KeyItem ->
-                if PackUseGive.isFishingRod id || (fieldMenu <> "" && fieldMenu <> "ITEMMENU_NOUSE") then yield "USE"
+                if id = "ESCAPE_ROPE" || PackUseGive.isFishingRod id || (fieldMenu <> "" && fieldMenu <> "ITEMMENU_NOUSE") then yield "USE"
             | Pocket.TmHm  -> yield "USE"
             | Pocket.Ball  -> ()
             // GIVE: item pocket only (key items and TMs/HMs cannot be held).
@@ -259,6 +281,9 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                         if PackUseGive.isFishingRod id then
                             onFishingRod id
                             Pop
+                        elif id = "ESCAPE_ROPE" then
+                            onEscapeRope ()
+                            Pop
                         elif PackUseGive.isRepel id then
                             match PackUseGive.applyRepel id currentPlayer with
                             | Some newPlayer ->
@@ -304,6 +329,75 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                         | None ->
                                             // Mon already at full HP — don't consume. Pop back to Pack.
                                             Pop) :> Scene)
+                        elif PackUseGive.isRareCandy id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyRareCandy slotIdx currentPlayer with
+                                        | None -> Pop
+                                        | Some(newPlayer, requests) ->
+                                            commit newPlayer
+                                            match requests with
+                                            | [] -> continueRareCandyEvolution slotIdx
+                                            | request :: _ ->
+                                                // Field Rare Candy resolves one replacement prompt; subsequent
+                                                // same-level requests are intentionally not queued in this UI flow.
+                                                match Moves.tryByIndex request.MoveId with
+                                                | None -> continueRareCandyEvolution slotIdx
+                                                | Some move ->
+                                                    let mon = currentPlayer.Party.[slotIdx]
+                                                    Replace(
+                                                        LearnMoveScene(
+                                                            content.Font,
+                                                            mon.Nickname,
+                                                            move.Name,
+                                                            mon.Moves,
+                                                            (fun _ -> ()),
+                                                            onDecisionTransition = fun decision ->
+                                                                match decision with
+                                                                | DeclineMove -> ()
+                                                                | ReplaceMove moveIndex ->
+                                                                    let current = currentPlayer.Party.[slotIdx]
+                                                                    let moves =
+                                                                        current.Moves
+                                                                        |> List.mapi (fun i existing ->
+                                                                            if i = moveIndex then request.MoveId, move.Pp else existing)
+                                                                    commit { currentPlayer with Party = currentPlayer.Party |> List.mapi (fun i existing -> if i = slotIdx then { current with Moves = moves } else existing) }
+                                                                continueRareCandyEvolution slotIdx) :> Scene)) :> Scene)
+                        elif PackUseGive.isVitamin id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyVitamin id slotIdx currentPlayer with
+                                        | Some newPlayer -> commit newPlayer; Pop
+                                        | None -> Pop) :> Scene)
+                        elif PackUseGive.isEther id || PackUseGive.isPpUp id then
+                            Push(
+                                PartyScene(
+                                    content,
+                                    currentPlayer,
+                                    onChange,
+                                    onMoveSelect = fun slotIdx moveIdx ->
+                                        let result =
+                                            if PackUseGive.isEther id then PackUseGive.applyEther id slotIdx moveIdx currentPlayer
+                                            else PackUseGive.applyPpUp id slotIdx moveIdx currentPlayer
+                                        match result with
+                                        | Some newPlayer -> commit newPlayer; Pop
+                                        | None -> Pop) :> Scene)
+                        elif PackUseGive.isElixer id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyElixer id slotIdx currentPlayer with
+                                        | Some newPlayer -> commit newPlayer; Pop
+                                        | None -> Pop) :> Scene)
+                        elif PackUseGive.isRevive id then
+                            Push(
+                                PartyScene(content, currentPlayer, onChange,
+                                    fun slotIdx ->
+                                        match PackUseGive.applyRevive id slotIdx currentPlayer with
+                                        | Some newPlayer -> commit newPlayer; Pop
+                                        | None -> Pop) :> Scene)
                         elif PackUseGive.isEvolutionStone id then
                             Push(
                                 PartyScene(content, currentPlayer, onChange,
@@ -362,8 +456,7 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                         | AlreadyKnows ->
                                             Pop) :> Scene)
                         else
-                            // Deferred: status cures, revives, vitamins, evo stones,
-                            // elixirs/PP restores, TMs/HMs, key-item field effects, etc.
+                            // Deferred field-use category.
                             Push(TextBoxScene.Of(content, "Can't use that here yet.<DONE>") :> Scene)
                     | "GIVE" ->
                         mode <- Browsing

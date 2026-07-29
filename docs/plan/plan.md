@@ -446,9 +446,10 @@ The menu framework is broad, but several actions are missing or simplified.
   - Generated map fish groups plus source byte bite/slot thresholds and day/night time groups choose the battle opponent. Union Cave Old Rod coverage proves a real Pack-to-Magikarp flow, no-bite text, dry-tile rejection, and surfing rejection.
   - Fishing cast/bite animation and SFX, the fishing battle catch-rate modifier, and phone-driven swarm group switching remain approximations or open swarm work.
 
-- ⬜ **UI-002 — Complete item field-use behavior.**
+- 🟡 **UI-002 — Complete item field-use behavior.**
   - ✅ ANTIDOTE, Burn Heal, Ice Heal, Awakening, Parlyz Heal, Full Heal, and Full Restore use the Party picker, honor their source status gates, consume only on success, and leave fainted/healthy targets unchanged when applicable.
-  - Stones, Rare Candy, vitamins, PP items, Escape Rope, revives, remaining status/bitter items, and other key-item workflows still need runtime outcomes.
+  - ✅ Stones, Rare Candy, vitamins, PP items, Escape Rope, and revives have field-use runtime outcomes. ZINC shares the engine's single Special stat-exp value with CALCIUM; PP Up/PP Max approximate separate boosted maximum PP by raising the one stored PP value.
+  - Remaining status/bitter items and other key-item workflows still need runtime outcomes.
 
 - 🟡 **UI-003 — Complete party, storage, mail, and PC workflows.**
   - Deposit, withdraw, move, release, held items, mail, full boxes, and last-usable-party constraints work through menus and save/load.

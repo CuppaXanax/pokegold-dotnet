@@ -136,6 +136,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     /// runs its close-window, delay, sound, and quake commands.
     let mutable pendingElevatorDestination: ElevatorFloor option = None
     let mutable pendingFishingRod: string option = None
+    let mutable pendingEscapeRope = false
     /// A child scene transition produced while restoring/loading the overworld.
     let mutable restoreTransition: Transition option = None
     /// Script resumes waiting behind higher-priority map-entry scripts.
@@ -855,6 +856,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             Replace(battle)) :> Scene)
             | None -> noBite ()
 
+    member private this.UseEscapeRope() : Transition =
+        let canEscape =
+            Maps.byName state.MapId
+            |> Option.exists (fun map -> map.Meta.Environment = "CAVE" || map.Meta.Environment = "DUNGEON")
+
+        if not canEscape then
+            Push(TextBoxScene.Of(content, "Can't use that here.<DONE>") :> Scene)
+        else
+            player <- { player with Bag = Bag.remove "ESCAPE_ROPE" 1 player.Bag }
+            let home = MapsData.spawnPoints.["PLAYERS_HOUSE_2F"]
+            let configured = World.getBuffer "__blackout_map" world
+            let mapId, x, y = Map.tryFind configured MapsData.spawnPoints |> Option.defaultValue home
+            let next = OverworldState.loadByIdAt content mapId x y Down
+            this.EnterMap(next, true) |> ignore
+            Push(TextBoxScene.Of(content, "Used Escape Rope!<DONE>") :> Scene)
+
     /// The Pokégear with the radio dial the player can currently receive. The
     /// Poké Flute channel needs the EXPN CARD (it only broadcasts in Kanto,
     /// where the card is obtained); tuning persists to `__radio_station`,
@@ -921,6 +938,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         pokePicSpecies <- None
         pendingElevatorDestination <- None
         pendingFishingRod <- None
+        pendingEscapeRope <- false
         mailCheckResult <- None
         followPair <- None
         lastTalkedActor <- None
@@ -2467,6 +2485,9 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 else
                     runningMove <- Some(vm, actor, run')
                     Stay
+            | None, None when pendingEscapeRope ->
+                pendingEscapeRope <- false
+                this.UseEscapeRope()
             | None, None when pendingFishingRod.IsSome ->
                 let rod = pendingFishingRod.Value
                 pendingFishingRod <- None
@@ -2638,11 +2659,12 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     content,
                                     player,
                                     (fun p -> player <- p),
-                                    onFishingRod = fun rod -> pendingFishingRod <- Some rod) :> Scene)
+                                    onFishingRod = (fun rod -> pendingFishingRod <- Some rod),
+                                    onEscapeRope = (fun () -> pendingEscapeRope <- true)) :> Scene)
                         | Pokegear -> Push(this.MakePokegear(PhoneTab, state.MapId, None))
                         | Save    -> Push(SaveMenuScene(content, player.Name, fun () -> SaveFile.write (this.Capture())) :> Scene)
                         | Option  -> Push(OptionsScene(content, player, fun p -> player <- p) :> Scene)
-                        | Exit    -> Pop), heldAtOpen = buttons, closeWhen = fun () -> pendingFishingRod.IsSome) :> Scene)
+                        | Exit    -> Pop), heldAtOpen = buttons, closeWhen = fun () -> pendingFishingRod.IsSome || pendingEscapeRope) :> Scene)
                 elif aPressed && not state.Player.Moving then
                     let fx, fy = Triggers.facedCell state.Player.CellX state.Player.CellY state.Player.Facing
                     let collId = MapConnections.collisionId state.Map state.Collision state.Neighbors fx fy
