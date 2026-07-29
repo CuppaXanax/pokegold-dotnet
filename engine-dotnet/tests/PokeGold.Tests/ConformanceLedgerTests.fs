@@ -60,12 +60,7 @@ module ConformanceLedger =
     let all: LedgerEntry list =
         [
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime has a typed path, but behavior still needs command-level conformance proof."
-            [ "Scall"; "Sjump"; "Jumpstd"; "Callstd"; "Iffalse"; "Iftrue"; "Ifequal"; "Ifnotequal"; "Ifgreater"; "Ifless"
-              "Setval"; "Addval"; "Readvar"; "Writevar"; "Loadvar"; "Loadmem"; "Readmem"; "Writemem"; "Random"
-              "Checkevent"; "Checkflag"
-              "Checkmapscene"; "Setmapscene"; "Checkscene"; "Setscene"
-              "Checkitem"
-              "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
+            [ "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
               "Opentext"; "Closetext"; "Writetext"; "Jumptext"; "Jumptextfaceplayer"; "Waitbutton"; "Promptbutton"; "Yesorno"
               "Loadwildmon"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
@@ -73,6 +68,11 @@ module ConformanceLedger =
               "Warpfacing"; "Reloadmap"; "Refreshmap"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
               "End"; "EndAll"; "Halloffame"; "Credits"; "Special"; "Pokemart"
               "Checktime"; "Endifjustbattled"; "Gettrainername"; "Getitemname"; "Getmonname"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
+
+          yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "No generated map script invokes these commands; their standard-script or source-asset paths cannot be proven with the map-command conformance harness."
+            [ "Callstd"; "Setval"; "Writevar"; "Loadmem"; "Checkmapscene" ]
+
+          yield entry ScriptCommandCase "Jumpstd" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Generated map scripts invoke standard UI scripts through jumpstd, but their text/menu continuations do not expose a command-level live-state assertion in the current OverworldScene test seam."
 
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; RequiredFor100Percent ] "Phone contact commands mutate player state or route through a yes/no effect; broader phone system behavior still needs conformance proof."
             [ "Addcellnum"; "Checkcellnum"; "Askforphonenumber" ]
@@ -89,6 +89,11 @@ module ConformanceLedger =
 
           yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "ScriptCommandConformanceTests runs source operands from generated map scripts through OverworldScene and proves live bag, party, warp, map-block, event, and engine-flag state changes."
             [ "Giveitem"; "Verbosegiveitem"; "Takeitem"; "Givepoke"; "Warp"; "Changeblock"; "Setevent"; "Clearevent"; "Setflag"; "Clearflag" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "ScriptCommandConformanceTests executes generated map operands through OverworldScene and proves source-label branch/call behavior, script-variable and memory values, event/engine checks, map-scene updates, and bag item checks."
+            [ "Scall"; "Sjump"; "Iffalse"; "Iftrue"; "Ifequal"; "Ifnotequal"; "Ifgreater"; "Ifless"
+              "Addval"; "Readvar"; "Loadvar"; "Readmem"; "Writemem"; "Random"
+              "Checkevent"; "Checkflag"; "Setmapscene"; "Checkscene"; "Setscene"; "Checkitem" ]
 
           yield entry ScriptCommandCase "Checkjustbattled" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 ScriptTests prove the source-compatible transient trainer-script truth value, false branch, and one-shot endifjustbattled consumption through the port's __just_battled state seam."
 
