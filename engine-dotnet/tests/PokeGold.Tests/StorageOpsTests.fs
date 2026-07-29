@@ -173,6 +173,68 @@ let ``renameBox with invalid index is a no-op`` () =
 // ── move across boxes ────────────────────────────────────────────────────────
 
 [<Fact>]
+let ``moveToBox moves a mon to the end of another box`` () =
+    let sourceMon = PartyMon.create 4 15
+    let destinationMon = PartyMon.create 7 12
+    let p =
+        { makePlayer 1 with
+            Pc =
+                { Storage.empty with
+                    Boxes =
+                        Storage.empty.Boxes
+                        |> Array.mapi (fun i box ->
+                            if i = 0 then { box with Mons = [ sourceMon ] }
+                            elif i = 1 then { box with Mons = [ destinationMon ] }
+                            else box) } }
+    match BoxOps.moveToBox 0 0 1 p with
+    | Ok p2 ->
+        Assert.Empty(p2.Pc.Boxes.[0].Mons)
+        Assert.Equal<PartyMon list>([ destinationMon; sourceMon ], p2.Pc.Boxes.[1].Mons)
+    | Error e -> Assert.Fail(e)
+
+[<Fact>]
+let ``moveToBox rejects a full destination box`` () =
+    let sourceMon = PartyMon.create 4 15
+    let p =
+        { makePlayer 1 with
+            Pc =
+                { Storage.empty with
+                    Boxes =
+                        Storage.empty.Boxes
+                        |> Array.mapi (fun i box ->
+                            if i = 0 then { box with Mons = [ sourceMon ] }
+                            elif i = 1 then { box with Mons = List.init Storage.monsPerBox (fun n -> PartyMon.create (100 + n) 5) }
+                            else box) } }
+    match BoxOps.moveToBox 0 0 1 p with
+    | Error msg -> Assert.Equal("BOX is full!", msg)
+    | Ok _ -> Assert.Fail("Should have rejected moving into a full box")
+
+[<Fact>]
+let ``moveToBox rejects invalid box and mon indices`` () =
+    let p = makePlayer 1
+    match BoxOps.moveToBox -1 0 1 p with
+    | Error msg -> Assert.Equal("Invalid box.", msg)
+    | Ok _ -> Assert.Fail("Should have rejected an invalid source box")
+    match BoxOps.moveToBox 0 0 Storage.numBoxes p with
+    | Error msg -> Assert.Equal("Invalid box.", msg)
+    | Ok _ -> Assert.Fail("Should have rejected an invalid destination box")
+    match BoxOps.moveToBox 0 0 1 p with
+    | Error msg -> Assert.Equal("No POKeMON there.", msg)
+    | Ok _ -> Assert.Fail("Should have rejected an invalid mon index")
+
+[<Fact>]
+let ``moveToBox within the same box is a successful no-op`` () =
+    let mon = PartyMon.create 4 15
+    let p =
+        { makePlayer 1 with
+            Pc =
+                { Storage.empty with
+                    Boxes = Storage.empty.Boxes |> Array.mapi (fun i box -> if i = 0 then { box with Mons = [ mon ] } else box) } }
+    match BoxOps.moveToBox 0 0 0 p with
+    | Ok p2 -> Assert.Equal(p, p2)
+    | Error e -> Assert.Fail(e)
+
+[<Fact>]
 let ``deposit into box 3 then withdraw from box 3`` () =
     let mon = PartyMon.create 4 15   // Charmander lv 15
     let p   = { makePlayer 1 with Party = [PartyMon.create 1 5; mon] }

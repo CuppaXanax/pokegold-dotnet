@@ -12,13 +12,14 @@ type PCBoxMode =
     | ActionMenu of actions: string array * menu: MenuList * monIndex: int
     | DepositWait
     | ReleaseWait  of monIndex: int
+    | MoveBoxSelect of sourceBoxIndex: int * monIndex: int * destinationBoxIndex: int
     | ShowMsg      of msg: string
 
 /// Bill's PC box-storage scene. Shows the contents of the current box
 /// (≤20 Pokémon) as a scrollable list with a cursor. Actions available:
 ///   • Up/Down   — navigate entries
 ///   • Left/Right — cycle among the 14 boxes (wrapping)
-///   • A on a mon — action submenu: WITHDRAW / STATS / RELEASE / CANCEL
+///   • A on a mon — action submenu: WITHDRAW / MOVE / STATS / RELEASE / CANCEL
 ///   • A on DEPOSIT — pick a party mon to store in this box (via PartyScene picker)
 ///   • A on CHANGE BOX — same as pressing Right
 ///   • A on CANCEL / B — exit back to the caller
@@ -190,7 +191,7 @@ type PCBoxScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                         let box  = currentBox ()
                         let mon  = List.item cur box.Mons
                         let actions =
-                            [| "WITHDRAW"; "STATS"; "RELEASE"; "CANCEL" |]
+                            [| "WITHDRAW"; "MOVE"; "STATS"; "RELEASE"; "CANCEL" |]
                         let am = MenuList.create actions.Length actions.Length true
                         mode <- ActionMenu(actions, am, cur)
                         Stay
@@ -199,7 +200,7 @@ type PCBoxScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                 else
                     Stay
 
-            // ── ActionMenu: WITHDRAW / STATS / RELEASE / CANCEL ──────────
+            // ── ActionMenu: WITHDRAW / MOVE / STATS / RELEASE / CANCEL ───
             | ActionMenu(actions, am, monIdx) ->
                 let am' =
                     if   edges.Up   then MenuList.moveUp   am
@@ -227,6 +228,10 @@ type PCBoxScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                             mode <- ShowMsg e
                         Stay
 
+                    | "MOVE" ->
+                        mode <- MoveBoxSelect(currentPlayer.Pc.CurrentBox, monIdx, currentPlayer.Pc.CurrentBox)
+                        Stay
+
                     | "STATS" ->
                         mode <- Browsing
                         let mon = List.item monIdx (currentBox ()).Mons
@@ -240,6 +245,29 @@ type PCBoxScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                         mode <- Browsing
                         Stay
 
+                elif edges.B then
+                    mode <- Browsing
+                    Stay
+                else
+                    Stay
+
+            // ── MoveBoxSelect: choose target box with Left/Right ─────────
+            | MoveBoxSelect(sourceBoxIdx, monIdx, destinationBoxIdx) ->
+                if edges.Left || edges.Right then
+                    let delta = if edges.Left then -1 else 1
+                    let destination = (destinationBoxIdx + delta + Storage.numBoxes) % Storage.numBoxes
+                    mode <- MoveBoxSelect(sourceBoxIdx, monIdx, destination)
+                    Stay
+                elif edges.A then
+                    match BoxOps.moveToBox sourceBoxIdx monIdx destinationBoxIdx currentPlayer with
+                    | Ok p ->
+                        currentPlayer <- p
+                        onChange p
+                        menu <- makeMenu (min menu.Cursor (cancelIdx () - 1))
+                        mode <- ShowMsg "Moved POKeMON!"
+                    | Error e ->
+                        mode <- ShowMsg e
+                    Stay
                 elif edges.B then
                     mode <- Browsing
                     Stay
@@ -306,6 +334,11 @@ type PCBoxScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                     "L/R:Change Box"
                 WindowRenderer.drawString fb content.Font palette (ListLeft + 1) InfoRow2
                     "A:Select  B:Exit"
+            | MoveBoxSelect(_, _, destinationBoxIdx) ->
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 1) InfoRow1
+                    (sprintf "MOVE TO BOX %d" (destinationBoxIdx + 1))
+                WindowRenderer.drawString fb content.Font palette (ListLeft + 1) InfoRow2
+                    "L/R:Pick A:OK B:No"
             | _ -> ()
 
             // Action submenu overlay.
