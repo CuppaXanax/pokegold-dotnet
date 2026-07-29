@@ -20,7 +20,7 @@ type private LearnMoveMode =
     | HmRejected
 
 /// Source-shaped four-move decision flow from engine/pokemon/learn.asm.
-type LearnMoveScene(font: Font, nickname: string, newMoveName: string, currentMoves: (int * int) list, onDecision: LearnMoveDecision -> unit) =
+type LearnMoveScene(font: Font, nickname: string, newMoveName: string, currentMoves: (int * int) list, onDecision: LearnMoveDecision -> unit, ?onDecisionTransition: LearnMoveDecision -> Transition) =
     let input = EdgeDetector()
     let palette = TextRenderer.palette
     let moves = currentMoves |> List.truncate 4
@@ -40,8 +40,12 @@ type LearnMoveScene(font: Font, nickname: string, newMoveName: string, currentMo
     let complete decision =
         if not finished then
             finished <- true
-            onDecision decision
-        Pop
+            match onDecisionTransition with
+            | Some transition -> transition decision
+            | None ->
+                onDecision decision
+                Pop
+        else Pop
 
     let beginYesNo nextMode =
         mode <- nextMode

@@ -247,6 +247,117 @@ let ``BAT-015 accepted evolution retains prior dex entry and registers target`` 
     Assert.Equal<Set<int>>(Set.ofList [ gloom.SpeciesId; target ], evolved.DexSeen)
     Assert.Equal<Set<int>>(Set.ofList [ gloom.SpeciesId; target ], evolved.DexOwn)
 
+// ── Deferred field-item helpers ──────────────────────────────────────────────
+
+let private tackleId = MovesData.byIndex |> Array.findIndex (fun move -> move.Name = "TACKLE")
+let private tacklePp = MovesData.byIndex.[tackleId].Pp
+
+[<Fact>]
+let ``applyRareCandy levels, learns, and consumes only below level 100`` () =
+    let mon = PartyMon.create 4 10
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "RARE_CANDY" 1 Bag.empty }
+
+    match PackUseGive.applyRareCandy 0 player with
+    | Some(updated, _) ->
+        Assert.Equal(11, updated.Party.[0].Level)
+        Assert.Equal(0, Bag.count "RARE_CANDY" updated.Bag)
+    | None -> Assert.Fail("Rare Candy should level a level-10 mon")
+
+    let capped = { player with Party = [ PartyMon.create 4 100 ] }
+    Assert.True(PackUseGive.applyRareCandy 0 capped |> Option.isNone)
+    Assert.Equal(1, Bag.count "RARE_CANDY" capped.Bag)
+
+[<Fact>]
+let ``applyVitamin HP_UP raises stat experience and rejects the source cap`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 10 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "HP_UP" 1 Bag.empty }
+
+    match PackUseGive.applyVitamin "HP_UP" 0 player with
+    | Some updated ->
+        Assert.Equal(10, updated.Party.[0].StatExp.Hp)
+        Assert.Equal(0, Bag.count "HP_UP" updated.Bag)
+    | None -> Assert.Fail("HP UP should apply below 100 stat experience")
+
+    let capped = { player with Party = [ { mon with StatExp = { mon.StatExp with Hp = 100 } } ] }
+    Assert.True(PackUseGive.applyVitamin "HP_UP" 0 capped |> Option.isNone)
+    Assert.Equal(1, Bag.count "HP_UP" capped.Bag)
+
+[<Fact>]
+let ``applyEther restores selected PP and rejects a full move`` () =
+    let mon = { PartyMon.create 4 10 with Moves = [ tackleId, 1 ] }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ETHER" 1 Bag.empty }
+
+    match PackUseGive.applyEther "ETHER" 0 0 player with
+    | Some updated ->
+        Assert.Equal(min tacklePp 11, snd updated.Party.[0].Moves.Head)
+        Assert.Equal(0, Bag.count "ETHER" updated.Bag)
+    | None -> Assert.Fail("Ether should restore missing PP")
+
+    let full = { player with Party = [ { mon with Moves = [ tackleId, tacklePp ] } ] }
+    Assert.True(PackUseGive.applyEther "ETHER" 0 0 full |> Option.isNone)
+    Assert.Equal(1, Bag.count "ETHER" full.Bag)
+
+[<Fact>]
+let ``applyElixer restores all PP and rejects a full moveset`` () =
+    let mon = { PartyMon.create 4 10 with Moves = [ tackleId, 1 ] }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ELIXER" 1 Bag.empty }
+
+    match PackUseGive.applyElixer "ELIXER" 0 player with
+    | Some updated ->
+        Assert.Equal(min tacklePp 11, snd updated.Party.[0].Moves.Head)
+        Assert.Equal(0, Bag.count "ELIXER" updated.Bag)
+    | None -> Assert.Fail("Elixer should restore missing PP")
+
+    let full = { player with Party = [ { mon with Moves = [ tackleId, tacklePp ] } ] }
+    Assert.True(PackUseGive.applyElixer "ELIXER" 0 full |> Option.isNone)
+    Assert.Equal(1, Bag.count "ELIXER" full.Bag)
+
+[<Fact>]
+let ``applyPpUp raises stored PP ceiling approximation and rejects its cap`` () =
+    let mon = { PartyMon.create 4 10 with Moves = [ tackleId, tacklePp ] }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "PP_UP" 1 Bag.empty }
+    let ceiling = tacklePp + tacklePp * 3 / 5
+
+    match PackUseGive.applyPpUp "PP_UP" 0 0 player with
+    | Some updated ->
+        Assert.Equal(tacklePp + tacklePp / 5, snd updated.Party.[0].Moves.Head)
+        Assert.Equal(0, Bag.count "PP_UP" updated.Bag)
+    | None -> Assert.Fail("PP UP should raise a move below its PP Up ceiling")
+
+    let capped = { player with Party = [ { mon with Moves = [ tackleId, ceiling ] } ] }
+    Assert.True(PackUseGive.applyPpUp "PP_UP" 0 0 capped |> Option.isNone)
+    Assert.Equal(1, Bag.count "PP_UP" capped.Bag)
+
+[<Fact>]
+let ``applyRevive restores a fainted mon and rejects a conscious target`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 0 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "REVIVE" 1 Bag.empty }
+
+    match PackUseGive.applyRevive "REVIVE" 0 player with
+    | Some updated ->
+        Assert.Equal(max 1 (mon.MaxHp / 2), updated.Party.[0].Hp)
+        Assert.Equal(0, Bag.count "REVIVE" updated.Bag)
+    | None -> Assert.Fail("Revive should restore a fainted mon")
+
+    let conscious = { player with Party = [ PartyMon.create 4 10 ] }
+    Assert.True(PackUseGive.applyRevive "REVIVE" 0 conscious |> Option.isNone)
+    Assert.Equal(1, Bag.count "REVIVE" conscious.Bag)
+
+[<Fact>]
+let ``applyMaxRevive fully restores a fainted mon and rejects a conscious target`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 0 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "MAX_REVIVE" 1 Bag.empty }
+
+    match PackUseGive.applyRevive "MAX_REVIVE" 0 player with
+    | Some updated ->
+        Assert.Equal(mon.MaxHp, updated.Party.[0].Hp)
+        Assert.Equal(0, Bag.count "MAX_REVIVE" updated.Bag)
+    | None -> Assert.Fail("Max Revive should restore a fainted mon")
+
+    let conscious = { player with Party = [ PartyMon.create 4 10 ] }
+    Assert.True(PackUseGive.applyRevive "MAX_REVIVE" 0 conscious |> Option.isNone)
+    Assert.Equal(1, Bag.count "MAX_REVIVE" conscious.Bag)
+
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
 [<Fact>]
@@ -371,6 +482,42 @@ let ``PackScene USE POTION on full-HP mon pops without consuming item`` () =
     // onChange must NOT be called; bag unchanged.
     Assert.True(getCaptured().IsNone, "onChange must not fire when mon is at full HP")
     Assert.Equal(5, Bag.count "POTION" scene.CurrentPlayer.Bag)
+
+[<Fact>]
+let ``PackScene USE ETHER reaches the move picker and restores selected PP`` () =
+    let mon = { PartyMon.create 4 10 with Moves = [ tackleId, 1 ] }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ETHER" 1 Bag.empty }
+    let mutable captured: PlayerState option = None
+    let scene = PackScene(Content(), player, fun updated -> captured <- Some updated)
+
+    update scene { Buttons.none with A = true } |> ignore
+    update scene Buttons.none |> ignore
+    let transition = update scene { Buttons.none with A = true }
+    update scene Buttons.none |> ignore
+
+    match transition with
+    | Push (:? PartyScene as party) ->
+        match (party :> Scene).Update({ Buttons.none with A = true }) with
+        | Stay ->
+            (party :> Scene).Update(Buttons.none) |> ignore
+            Assert.Equal(Pop, (party :> Scene).Update({ Buttons.none with A = true }))
+        | result -> Assert.Fail(sprintf "Expected move-picker state, got %A" result)
+    | result -> Assert.Fail(sprintf "Expected PartyScene Push, got %A" result)
+
+    Assert.True(captured.IsSome)
+    Assert.Equal(min tacklePp 11, snd scene.CurrentPlayer.Party.[0].Moves.Head)
+    Assert.Equal(0, Bag.count "ETHER" scene.CurrentPlayer.Bag)
+
+[<Fact>]
+let ``PackScene USE ESCAPE_ROPE dispatches its overworld callback`` () =
+    let player = { PlayerStateOps.initial with Bag = Bag.empty |> Bag.add "ESCAPE_ROPE" 1 }
+    let mutable used = false
+    let scene = PackScene(Content(), player, ignore, onEscapeRope = fun () -> used <- true)
+
+    update scene { Buttons.none with A = true } |> ignore
+    update scene Buttons.none |> ignore
+    Assert.Equal(Pop, update scene { Buttons.none with A = true })
+    Assert.True(used)
 
 // ── Scene integration: status-heal USE ───────────────────────────────────────
 
