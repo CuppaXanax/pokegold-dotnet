@@ -1306,6 +1306,32 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     DexSeen = Set.add dex player.DexSeen
                     DexOwn = Set.add dex player.DexOwn }
 
+    member private _.LuckyNumberResult() =
+        let lucky = World.getVar "__lucky_number" world
+        let candidates =
+            player.Party
+            @ (player.Pc.Boxes |> Array.toList |> List.collect _.Mons)
+
+        let result, mon = LuckyNumber.bestMatch lucky candidates
+        match mon with
+        | Some mon ->
+            world <- World.setBuffer "STRING_BUFFER_3" mon.Nickname world
+        | None -> ()
+        result
+
+    member private _.GiveShuckie() =
+        match Shuckie.give player.Party with
+        | Some party ->
+            player <- { player with Party = party }
+            1
+        | None -> 0
+
+    member private _.ReturnShuckie(partyIndex: int) =
+        let result, party = Shuckie.returnToMania partyIndex player.Party
+        if result = 2 then
+            player <- { player with Party = party }
+        result
+
     member private _.CanNameRate (mon: PartyMon) =
         not (Breeding.isEgg mon)
         && (mon.OtName = player.Name || mon.OtName = "PLAYER")
@@ -1899,6 +1925,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         interpretHostEffect (HostEffect.PlaySfx rating.Sfx)
                         let speed = Options.textSpeedDelay player.Options.TextSpeed
                         stop (Push(TextBoxScene.Of(content, rendered, speed) :> Scene))
+                    | ReturnShuckie ->
+                        pending <- Some(vm, effect)
+                        // SelectMonFromParty returns carry on B; source maps that
+                        // cancellation to SHUCKIE_REFUSED (1).
+                        world <- World.setVar "__return_shuckie_result" 1 world
+                        stop (
+                            Push(
+                                PartyScene(
+                                    content,
+                                    player,
+                                    (fun p -> player <- p),
+                                    onSelect = (fun idx ->
+                                        world <- World.setVar "__return_shuckie_result" (this.ReturnShuckie idx) world
+                                        Pop)) :> Scene))
 
                     // ----- immediate effects: enact, continue this frame -----
                     | ShowPokePic species ->
@@ -1925,6 +1965,33 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                             |> List.tryHead
                             |> Option.exists Breeding.isEgg
                         resume (Some(if isEgg then 1 else 0)) vm
+                    | GetFirstPokemonHappiness ->
+                        let firstNonEgg =
+                            player.Party
+                            |> List.tryFind (Breeding.isEgg >> not)
+                        let happiness = firstNonEgg |> Option.map _.Friendship |> Option.defaultValue 0
+                        firstNonEgg
+                        |> Option.bind (fun mon -> speciesNameByDex mon.SpeciesId)
+                        |> Option.iter (fun species -> world <- World.setBuffer "STRING_BUFFER_3" species world)
+                        resume (Some happiness) vm
+                    | CheckLuckyNumberWinners ->
+                        resume (Some(this.LuckyNumberResult())) vm
+                    | GiveShuckle ->
+                        resume (Some(this.GiveShuckie())) vm
+                    | HealMachineAnimation machineType ->
+                        // HealMachineAnim loads two OAM tiles, plays one Itemfinder
+                        // chime per party member, then plays MUSIC_HEAL and flashes.
+                        for _ in player.Party do
+                            interpretHostEffect (HostEffect.PlaySfx "Sfx_SecondPartOfItemfinder")
+                        match Map.tryFind "MUSIC_HEAL" MusicData.byId with
+                        | Some path -> interpretHostEffect (HostEffect.PlayJingle path)
+                        | None -> ()
+                        world <-
+                            world
+                            |> World.setVar "__heal_machine_type" machineType
+                            |> World.setVar "__heal_machine_balls" player.Party.Length
+                            |> World.setVar "__heal_machine_palette_flashes" 8
+                        resume None vm
                     | InitRoamMons ->
                         world <- Roaming.init world
                         resume None vm
@@ -2607,6 +2674,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | UnownPuzzle _ -> Some unownPuzzleResult
                         | UnownPrinter -> None
                         | ShowOakPokedexRating -> None
+                        | ReturnShuckie -> Some(World.getVar "__return_shuckie_result" world)
                         | AskPhoneNumber phone ->
                             if askPhoneResult = 0 then
                                 Some 2

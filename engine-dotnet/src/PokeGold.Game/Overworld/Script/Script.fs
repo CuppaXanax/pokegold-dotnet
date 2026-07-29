@@ -143,6 +143,9 @@ type ScriptEffect =
     /// `special HealParty` — restore all party Pokémon to full HP, cleared
     /// status, and full PP. Enacted inline by the integration layer.
     | HealParty
+    /// `special HealMachineAnim` — draw one ball per party member, play the
+    /// healing jingle, and flash the machine palettes before resuming.
+    | HealMachineAnimation of machineType: int
     /// `pokemart` — open the Poké Mart with the given mart's inventory.
     /// Resume with None after the player closes the mart.
     | OpenMart of martType: string * items: string list
@@ -202,6 +205,13 @@ type ScriptEffect =
     /// `special ProfOaksPCBoot` — count the runtime Pokédex, display Oak's
     /// source rating, play its fanfare, and resume after dismissal.
     | ShowOakPokedexRating
+    /// Lucky Channel daily state and ID matching helpers.
+    | CheckLuckyNumberWinners
+    | GetFirstPokemonHappiness
+    /// `special GiveShuckle` / `ReturnShuckie` retain Mania's OT identity and
+    /// source return-result values.
+    | GiveShuckle
+    | ReturnShuckie
     /// The Hall of Fame sequence: set the champion flag and show the congratulation
     /// text sequence before the script ends.
     | HallOfFame
@@ -471,6 +481,7 @@ module Script =
 
             // ---- Special functions -----------------------------------------
             | Special "HealParty" -> suspend next world HealParty
+            | Special "HealMachineAnim" -> suspend next world (HealMachineAnimation vm.ScriptVar)
             | Special "PokemonCenterPC" -> suspend next world OpenPc
             | Special "NameRival" -> suspend next world NameRival
             | Special "NameRater" -> suspend next world NameRater
@@ -513,6 +524,34 @@ module Script =
             | Special "YoungerHaircutBrother" -> suspend next world (Haircut "YOUNGER")
             | Special "DaisysGrooming" -> suspend next world (Haircut "DAISY")
             | Special "ProfOaksPCBoot" -> suspend next world ShowOakPokedexRating
+            | Special "CheckForLuckyNumberWinners" -> suspend next world CheckLuckyNumberWinners
+            | Special "CheckLuckyNumberShowFlag" ->
+                let dueDay = World.getVar "__lucky_number_due_day" world
+                let today = World.getVar "__day_count" world
+                run world { next with ScriptVar = if dueDay > 0 && today >= dueDay then 1 else 0 }
+            | Special "ResetLuckyNumberShowFlag" ->
+                let weekday = World.getVar "VAR_WEEKDAY" world
+                let daysUntilFriday =
+                    let delta = 5 - weekday
+                    if delta <= 0 then delta + 7 else delta
+                let today = World.getVar "__day_count" world
+                let seed = World.getVar "__lucky_number_seed" world
+                // The ROM regenerates this in LoadOrRegenerateLuckyIDNumber after
+                // the Friday timer expires. Keep an explicit seed for save-stable,
+                // deterministic native generation.
+                let number = (seed * 0x41c64e6d + 0x3039 + today) &&& 0xffff
+                let updated =
+                    world
+                    |> World.setVar "__lucky_number" number
+                    |> World.setVar "__lucky_number_due_day" (today + daysUntilFriday)
+                    |> World.clearFlag "ENGINE_LUCKY_NUMBER_SHOW"
+                run updated next
+            | Special "PrintTodaysLuckyNumber" ->
+                let number = World.getVar "__lucky_number" world
+                run (World.setBuffer "STRING_BUFFER_3" (sprintf "%05d" number) world) next
+            | Special "GetFirstPokemonHappiness" -> suspend next world GetFirstPokemonHappiness
+            | Special "GiveShuckle" -> suspend next world GiveShuckle
+            | Special "ReturnShuckie" -> suspend next world ReturnShuckie
             | Special "ToggleDecorationsVisibility" ->
                 world
                 |> World.setEvent "EVENT_PLAYERS_ROOM_POSTER"
