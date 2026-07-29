@@ -284,6 +284,8 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                         elif id = "ESCAPE_ROPE" then
                             onEscapeRope ()
                             Pop
+                        elif id = "COIN_CASE" then
+                            Push(TextBoxScene.Of(content, sprintf "You have %d COINS.<DONE>" currentPlayer.Coins) :> Scene)
                         elif PackUseGive.isRepel id then
                             match PackUseGive.applyRepel id currentPlayer with
                             | Some newPlayer ->
@@ -398,6 +400,10 @@ type PackScene(content: Content, player: PlayerState, onChange: PlayerState -> u
                                         match PackUseGive.applyRevive id slotIdx currentPlayer with
                                         | Some newPlayer -> commit newPlayer; Pop
                                         | None -> Pop) :> Scene)
+                        elif PackUseGive.isSacredAsh id then
+                            match PackUseGive.applySacredAsh currentPlayer with
+                            | Some newPlayer -> commit newPlayer; Pop
+                            | None -> Pop
                         elif PackUseGive.isEvolutionStone id then
                             Push(
                                 PartyScene(content, currentPlayer, onChange,

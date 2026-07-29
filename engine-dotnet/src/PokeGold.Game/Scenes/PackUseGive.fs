@@ -17,7 +17,7 @@ let private hpRestoreIds =
     Set.ofList
         [ "POTION"; "SUPER_POTION"; "HYPER_POTION"; "MAX_POTION"
           "FRESH_WATER"; "SODA_POP"; "LEMONADE"; "MOOMOO_MILK"; "BERRY_JUICE"
-          "RAGECANDYBAR"; "BERRY"; "GOLD_BERRY" ]
+          "RAGECANDYBAR"; "BERRY"; "GOLD_BERRY"; "ENERGYPOWDER"; "ENERGY_ROOT" ]
 
 let private repelItems =
     Map.ofList [ "REPEL", 100; "SUPER_REPEL", 200; "MAX_REPEL", 250 ]
@@ -25,10 +25,10 @@ let private repelItems =
 let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
 let private evolutionStones = Set.ofList [ "MOON_STONE"; "FIRE_STONE"; "THUNDERSTONE"; "WATER_STONE"; "LEAF_STONE"; "SUN_STONE" ]
 let private vitaminItems = Set.ofList [ "HP_UP"; "PROTEIN"; "IRON"; "CALCIUM"; "ZINC"; "CARBOS" ]
-let private etherItems = Set.ofList [ "ETHER"; "MAX_ETHER" ]
+let private etherItems = Set.ofList [ "ETHER"; "MAX_ETHER"; "MYSTERYBERRY" ]
 let private elixerItems = Set.ofList [ "ELIXER"; "MAX_ELIXER" ]
 let private ppUpItems = Set.ofList [ "PP_UP"; "PP_MAX" ]
-let private reviveItems = Set.ofList [ "REVIVE"; "MAX_REVIVE" ]
+let private reviveItems = Set.ofList [ "REVIVE"; "MAX_REVIVE"; "REVIVAL_HERB" ]
 let private statusCures =
     Map.ofList
         [ "ANTIDOTE", (fun status -> status = "PSN")
@@ -36,7 +36,13 @@ let private statusCures =
           "ICE_HEAL", (fun status -> status = "FRZ")
           "AWAKENING", (fun status -> status.StartsWith("SLP", System.StringComparison.Ordinal))
           "PARLYZ_HEAL", (fun status -> status = "PAR")
-          "FULL_HEAL", (fun status -> status <> "") ]
+          "FULL_HEAL", (fun status -> status <> "")
+          "PSNCUREBERRY", (fun status -> status = "PSN")
+          "BURNT_BERRY", (fun status -> status = "FRZ")
+          "ICE_BERRY", (fun status -> status = "BRN")
+          "MINT_BERRY", (fun status -> status.StartsWith("SLP", System.StringComparison.Ordinal))
+          "MIRACLEBERRY", (fun status -> status <> "")
+          "HEAL_POWDER", (fun status -> status <> "") ]
 
 /// True when this item's field-USE is handled as an HP heal.
 let isHpHeal (itemId: string) : bool = Set.contains itemId hpRestoreIds
@@ -63,6 +69,7 @@ let isElixer itemName = Set.contains itemName elixerItems
 let isPpUp itemName = Set.contains itemName ppUpItems
 let isRevive itemName = Set.contains itemName reviveItems
 let isRareCandy itemName = itemName = "RARE_CANDY"
+let isSacredAsh itemName = itemName = "SACRED_ASH"
 
 // ── Pure mutation helpers (unit-testable without the scene stack) ──────────────
 
@@ -95,7 +102,11 @@ let applyHpHeal (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerSt
             |> Map.tryFind itemId
             |> Option.map (fun d -> d.Param)
             |> Option.defaultValue 0
-        let healAmt = if param < 0 then mon.MaxHp else param
+        let healAmt =
+            match itemId with
+            | "ENERGYPOWDER" -> 50
+            | "ENERGY_ROOT" -> 200
+            | _ -> if param < 0 then mon.MaxHp else param
         let newHp   = min mon.MaxHp (mon.Hp + healAmt)
         let newMon  = { mon with Hp = newHp }
         let newParty = player.Party |> List.mapi (fun i m -> if i = slotIdx then newMon else m)
@@ -236,7 +247,9 @@ let applyEther (itemId: string) (slotIdx: int) (moveIdx: int) (player: PlayerSta
             else
                 moveAt moveIdx mon
                 |> Option.bind (fun (moveId, currentPp, maxPp) ->
-                    let restored = if itemId = "MAX_ETHER" then maxPp else min maxPp (currentPp + 10)
+                    let restored =
+                        if itemId = "MAX_ETHER" || itemId = "MYSTERYBERRY" then maxPp
+                        else min maxPp (currentPp + 10)
                     if restored = currentPp then None
                     else Some { mon with Moves = mon.Moves |> List.mapi (fun i move -> if i = moveIdx then moveId, restored else move) }))
         player
@@ -282,7 +295,20 @@ let applyRevive (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerSt
         (fun mon ->
             if not (isRevive itemId) || mon.Hp > 0 then None
             else
-                let hp = if itemId = "MAX_REVIVE" then mon.MaxHp else max 1 (mon.MaxHp / 2)
+                let hp =
+                    if itemId = "MAX_REVIVE" || itemId = "REVIVAL_HERB" then mon.MaxHp
+                    else max 1 (mon.MaxHp / 2)
                 Some { mon with Hp = hp })
         player
     |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })
+
+/// Fully revive every fainted party member and consume one SACRED_ASH.
+/// Returns None when every party member is already conscious.
+let applySacredAsh (player: PlayerState) : PlayerState option =
+    if player.Party |> List.exists (fun mon -> mon.Hp <= 0) then
+        let party =
+            player.Party
+            |> List.map (fun mon -> if mon.Hp <= 0 then { mon with Hp = mon.MaxHp } else mon)
+        Some { player with Party = party; Bag = Bag.remove "SACRED_ASH" 1 player.Bag }
+    else
+        None
