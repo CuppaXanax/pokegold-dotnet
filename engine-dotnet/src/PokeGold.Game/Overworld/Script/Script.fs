@@ -313,6 +313,45 @@ module Script =
           "EVENT_BUG_CATCHING_CONTESTANT_9A"
           "EVENT_BUG_CATCHING_CONTESTANT_10A" ]
 
+    let private mysteryGiftDecorationEvents =
+        [ "EVENT_DECO_JIGGLYPUFF_DOLL"
+          "EVENT_DECO_POLIWAG_DOLL"
+          "EVENT_DECO_DIGLETT_DOLL"
+          "EVENT_DECO_STARYU_DOLL"
+          "EVENT_DECO_MAGIKARP_DOLL"
+          "EVENT_DECO_ODDISH_DOLL"
+          "EVENT_DECO_GENGAR_DOLL"
+          "EVENT_DECO_SHELLDER_DOLL"
+          "EVENT_DECO_GRIMER_DOLL"
+          "EVENT_DECO_VOLTORB_DOLL"
+          "EVENT_DECO_CLEFAIRY_POSTER"
+          "EVENT_DECO_JIGGLYPUFF_POSTER"
+          "EVENT_DECO_SNES"
+          "EVENT_DECO_WEEDLE_DOLL"
+          "EVENT_DECO_GEODUDE_DOLL"
+          "EVENT_DECO_MACHOP_DOLL"
+          "EVENT_DECO_PLANT_1"
+          "EVENT_DECO_PLANT_2"
+          "EVENT_DECO_FAMICOM"
+          "EVENT_DECO_N64"
+          "EVENT_DECO_BULBASAUR_DOLL"
+          "EVENT_DECO_SQUIRTLE_DOLL"
+          "EVENT_DECO_BED_2"
+          "EVENT_DECO_BED_3"
+          "EVENT_DECO_CARPET_1"
+          "EVENT_DECO_CARPET_2"
+          "EVENT_DECO_CARPET_3"
+          "EVENT_DECO_CARPET_4"
+          "EVENT_DECO_PLANT_3"
+          "EVENT_DECO_VIRTUAL_BOY"
+          "EVENT_DECO_BIG_ONIX_DOLL"
+          "EVENT_DECO_POSTER_2"
+          "EVENT_DECO_BIG_LAPRAS_DOLL"
+          "EVENT_DECO_SURFING_PIKACHU_DOLL"
+          "EVENT_DECO_BED_4"
+          "EVENT_DECO_UNOWN_DOLL"
+          "EVENT_DECO_TENTACOOL_DOLL" ]
+
     let private readVar (name: string) (world: World) =
         match name with
         | "VAR_BADGES" ->
@@ -552,6 +591,18 @@ module Script =
             | Special "GetFirstPokemonHappiness" -> suspend next world GetFirstPokemonHappiness
             | Special "GiveShuckle" -> suspend next world GiveShuckle
             | Special "ReturnShuckie" -> suspend next world ReturnShuckie
+            // The original link transfer can never queue a remote delivery here.
+            // Carrie on Goldenrod 5F invokes the two granting specials instead.
+            | Special "CheckMysteryGift" -> run world { next with ScriptVar = 0 }
+            | Special "GetMysteryGiftItem" ->
+                // The offline package is scripted as regular giveitem commands so
+                // it retains ordinary bag semantics; this preserves the source
+                // special's success result for its caller.
+                run world { next with ScriptVar = 1 }
+            | Special "UnlockMysteryGift" ->
+                mysteryGiftDecorationEvents
+                |> List.fold (fun w event -> World.setEvent event w) world
+                |> fun updatedWorld -> run updatedWorld next
             | Special "ToggleDecorationsVisibility" ->
                 world
                 |> World.setEvent "EVENT_PLAYERS_ROOM_POSTER"

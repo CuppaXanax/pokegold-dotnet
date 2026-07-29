@@ -195,8 +195,12 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "MrChrono" ImplementedApproximate [ Cosmetic; SideSystem; RequiredFor100Percent ] "rtc/timeset.asm labels this unreferenced routine 'Now on DEBUG' and only prints RTC/debug timing diagnostics, so it has no player-facing game behavior to port."
 
-          yield! many ScriptSpecial StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
-            [ "CheckMysteryGift"; "CheckPokerus"; "GetMysteryGiftItem"; "UnlockMysteryGift" ]
+          yield entry ScriptSpecial "CheckMysteryGift" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "The original check only queries a wireless/mobile-delivered pending item, which has no offline sender; it explicitly returns no phantom delivery while Carrie's Goldenrod 5F runtime package supplies the replacement."
+
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "JohtoRuntimeTests's 'Carrie grants the offline Mystery Gift package once' test proves Carrie's ordinary-play, once-per-save package grants the curated item bundle and all 37 source Mystery Gift decoration flags; this deliberately replaces wireless/mobile random delivery."
+            [ "GetMysteryGiftItem"; "UnlockMysteryGift" ]
+
+          yield entry ScriptSpecial "CheckPokerus" StubNoOp [ SideSystem; RequiredFor100Percent ] "Generated special currently reaches the generic Special fallback and is skipped for side systems or completion content."
 
           yield entry ScriptSpecial "SnorlaxAwake" FaithfulTested [ CriticalPathKanto; RequiredFor100Percent ] "A18 runtime test tunes Poké Flute through the Pokégear radio UI, then verifies Vermilion Snorlax wakes, battles, and disappears."
 

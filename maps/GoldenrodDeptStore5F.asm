@@ -104,16 +104,30 @@ GoldenrodDeptStore5FReceptionistScript:
 Carrie:
 	faceplayer
 	opentext
-	special GameboyCheck
-	ifnotequal GBCHECK_CGB, .NotGBC
+	checkevent EVENT_GOT_OFFLINE_MYSTERY_GIFT
+	iftrue .AlreadyClaimed
 	writetext GoldenrodDeptStore5FCarrieMysteryGiftExplanationText
+	promptbutton
+	special GetMysteryGiftItem
+	giveitem BERRY
+	giveitem PRZCUREBERRY
+	giveitem MIRACLEBERRY
+	giveitem GOLD_BERRY
+	giveitem GREAT_BALL
+	giveitem REVIVE
+	giveitem WATER_STONE
+	giveitem FIRE_STONE
+	giveitem LEAF_STONE
+	giveitem THUNDERSTONE
+	special UnlockMysteryGift
+	setevent EVENT_GOT_OFFLINE_MYSTERY_GIFT
+	writetext GoldenrodDeptStore5FCarrieMysteryGiftReceivedText
 	waitbutton
 	closetext
-	special UnlockMysteryGift
 	end
 
-.NotGBC:
-	writetext GoldenrodDeptStore5FCarrieMysteryGiftRequiresGBCText
+.AlreadyClaimed:
+	writetext GoldenrodDeptStore5FCarrieMysteryGiftAlreadyClaimedText
 	waitbutton
 	closetext
 	end
@@ -174,17 +188,26 @@ GoldenrodDeptStore5FReceptionistThereAreTMsPerfectForMonText:
 	done
 
 GoldenrodDeptStore5FCarrieMysteryGiftExplanationText:
-	text "MYSTERY GIFT."
+	text "MYSTERY GIFT is"
+	line "now available here."
 
-	para "With just a"
-	line "little beep, you"
-	cont "get a gift."
+	para "I saved a selection"
+	line "of useful items and"
+	cont "room decorations."
 	done
 
-GoldenrodDeptStore5FCarrieMysteryGiftRequiresGBCText:
+GoldenrodDeptStore5FCarrieMysteryGiftReceivedText:
 	text "The MYSTERY GIFT"
-	line "option requires a"
-	cont "Game Boy Color."
+	line "package is yours!"
+
+	para "Try the decorations"
+	line "at your room's PC."
+	done
+
+GoldenrodDeptStore5FCarrieMysteryGiftAlreadyClaimedText:
+	text "I hope your new"
+	line "decorations make"
+	cont "your room shine!"
 	done
 
 GoldenrodDeptStore5FLassText:

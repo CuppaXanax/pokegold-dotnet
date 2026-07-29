@@ -430,9 +430,9 @@ Many specials have useful seams, but some are simplified or skipped.
   - Triage and implement the remaining required behavior for Lucky Number, happiness checks, Shuckle ownership/return, Trainer House, Mystery Gift replacement policy, decorations, Diploma, and related normal-play specials.
   - Link-only cable-club behavior remains excluded.
 
-- ⬜ **SCR-010 — Define deliberate replacements for unavailable external services.**
-  - Mystery Gift, Mobile/event distribution, and version trading need documented offline equivalents where required for completion.
-  - The replacement must be accessible through gameplay and must not silently grant completion state.
+- ✅ **SCR-010 — Define deliberate replacements for unavailable external services.**
+  - Mystery Gift/Mobile Adapter distribution is replaced by Carrie's one-time, ordinary-play package on Goldenrod Department Store 5F. It grants every original Mystery Gift decoration flag plus a curated, non-trivializing utility bundle (four berries, a Great Ball, Revive, and one of each evolution stone), rather than attempting unavailable wireless/mobile delivery or granting all event items.
+  - The original `CheckMysteryGift` suppresses phantom remote deliveries, while `GetMysteryGiftItem` authorizes Carrie's scripted item package and `UnlockMysteryGift` sets the decoration ownership flags; `EVENT_GOT_OFFLINE_MYSTERY_GIFT` prevents repeat claims. Version trading remains deliberately covered by DEX-017 through DEX-020, not this replacement.
 
 ## Story 2.5 — Menus and inventory expose all required player actions
 
