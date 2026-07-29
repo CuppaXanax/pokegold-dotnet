@@ -15,6 +15,19 @@ type private SilentSound() =
         member _.PlayJingle _ = ()
         member _.StopMusic() = ()
 
+type private RecordingSound() =
+    let music = ResizeArray<string>()
+    let sfx = ResizeArray<string>()
+
+    member _.Music = music |> Seq.toList
+    member _.Sfx = sfx |> Seq.toList
+
+    interface PokeGold.Game.Audio.ISoundBoard with
+        member _.PlayMusic path = music.Add path
+        member _.PlaySfx name = sfx.Add name
+        member _.PlayJingle _ = ()
+        member _.StopMusic() = music.Add "__STOP__"
+
 let private sourceCommand predicate =
     MapsData.all
     |> Seq.tryPick (fun (KeyValue(mapId, map)) ->
@@ -22,6 +35,14 @@ let private sourceCommand predicate =
         |> Array.tryPick (fun command ->
             if predicate command then Some(mapId, command) else None))
     |> Option.defaultWith (fun () -> failwith "expected a generated map-script command under test")
+
+let private sourceMapCommand predicate =
+    MapsData.all
+    |> Seq.tryPick (fun (KeyValue(mapId, map)) ->
+        map.Script.Commands
+        |> Array.tryPick (fun command ->
+            if predicate mapId command then Some(mapId, command) else None))
+    |> Option.defaultWith (fun () -> failwith "expected a resolvable generated map-script command under test")
 
 let private runGeneratedCommand content mapId command world player =
     let scene =
@@ -43,7 +64,7 @@ let private runGeneratedCommand content mapId command world player =
     (scene :> Scene).Update Buttons.none |> ignore
     scene
 
-let private generatedScene content mapId commands labels world player =
+let private generatedSceneWithSound sound content mapId commands labels world player =
     let baseState = OverworldState.loadByIdAt content mapId 1 1 Down
     let state =
         { baseState with
@@ -56,9 +77,12 @@ let private generatedScene content mapId commands labels world player =
             Script =
                     { Commands = commands
                       Labels = Map.ofList (("CommandConformance", 0) :: labels) } }
-    let scene = OverworldScene(content, SilentSound(), state)
+    let scene = OverworldScene(content, sound, state)
     scene.Restore(world, player)
     scene
+
+let private generatedScene content mapId commands labels world player =
+    generatedSceneWithSound (SilentSound()) content mapId commands labels world player
 
 let private runGeneratedCommands content mapId commands labels world player =
     let baseState = OverworldState.loadByIdAt content mapId 1 1 Down
@@ -115,6 +139,10 @@ let private sourceAmount (args: string list) =
 let private battleReadyPlayer species =
     { PlayerStateOps.initial with
         Party = [ PartyMon.create (Species.byName species).Dex 5 ] }
+
+let private advance scene frames =
+    for _ in 1 .. frames do
+        (scene :> Scene).Update Buttons.none |> ignore
 
 [<Fact>]
 let ``generated giveitem and takeitem scripts mutate the live bag by their source operands`` () =
@@ -822,3 +850,265 @@ let ``direct runtime handlers resolve absent generated checkpoke and name-buffer
         |> Option.map (fun trainer -> trainer.Name)
         |> Option.defaultWith (fun () -> failwith "expected generated trainer")
     Assert.Equal(trainerName, World.getBuffer "STRING_BUFFER_3" names.DebugWorld)
+
+[<Fact>]
+let ``generated actor commands update their source objects and complete movement`` () =
+    let content = Content()
+    let mapId = sourceCommand (fun _ -> true) |> fst
+
+    let disappearMap, disappear = sourceCommand (function | Disappear _ -> true | _ -> false)
+    let disappeared =
+        runGeneratedCommand content disappearMap disappear World.empty PlayerStateOps.initial
+    let disappearingObject =
+        match disappear with
+        | Disappear obj -> obj
+        | _ -> failwith "expected disappear"
+    let disappearedIndex =
+        OverworldState.objectIndexOf disappearMap disappearingObject
+        |> Option.defaultWith (fun () -> failwith "expected generated disappear object")
+    Assert.False(disappeared.RuntimeSnapshot.Actors.[disappearedIndex].Visible)
+
+    let appearMap, appear = sourceCommand (function | Appear _ -> true | _ -> false)
+    let appeared = runGeneratedCommand content appearMap appear World.empty PlayerStateOps.initial
+    let appearingObject =
+        match appear with
+        | Appear obj -> obj
+        | _ -> failwith "expected appear"
+    let appearedIndex =
+        OverworldState.objectIndexOf appearMap appearingObject
+        |> Option.defaultWith (fun () -> failwith "expected generated appear object")
+    Assert.True(appeared.RuntimeSnapshot.Actors.[appearedIndex].Visible)
+
+    let turnMap, turn =
+        sourceMapCommand (fun mapId ->
+            function
+            | Turnobject(obj, _) -> OverworldState.objectIndexOf mapId obj |> Option.isSome
+            | _ -> false)
+    let turned = runGeneratedCommand content turnMap turn World.empty PlayerStateOps.initial
+    let turnObject, turnFacing =
+        match turn with
+        | Turnobject(obj, facing) -> obj, directionOf facing
+        | _ -> failwith "expected turnobject"
+    let turnIndex =
+        OverworldState.objectIndexOf turnMap turnObject
+        |> Option.defaultWith (fun () -> failwith "expected generated turnobject object")
+    Assert.Equal(turnFacing, turned.RuntimeSnapshot.Actors.[turnIndex].Facing)
+
+    let moveMap, move = sourceCommand (function | Moveobject _ -> true | _ -> false)
+    let moved = runGeneratedCommand content moveMap move World.empty PlayerStateOps.initial
+    let moveObject, x, y =
+        match move with
+        | Moveobject(obj, x, y) -> obj, x, y
+        | _ -> failwith "expected moveobject"
+    let moveIndex =
+        OverworldState.objectIndexOf moveMap moveObject
+        |> Option.defaultWith (fun () -> failwith "expected generated moveobject object")
+    Assert.Equal((x, y), (moved.RuntimeSnapshot.Actors.[moveIndex].CellX, moved.RuntimeSnapshot.Actors.[moveIndex].CellY))
+
+    let movementMap, movement = sourceCommand (function | Applymovement _ -> true | _ -> false)
+    let movedActor, movementLabel =
+        match movement with
+        | Applymovement(obj, label) -> obj, label
+        | _ -> failwith "expected applymovement"
+    let movementIndex =
+        OverworldState.objectIndexOf movementMap movedActor
+        |> Option.defaultWith (fun () -> failwith "expected generated movement object")
+    let moving =
+        generatedScene content movementMap [| movement; Setevent "EVENT_TEST_MOVEMENT_DONE"; End |] [] World.empty PlayerStateOps.initial
+    let before = moving.RuntimeSnapshot.Actors.[movementIndex]
+    advance moving 500
+    let after = moving.RuntimeSnapshot.Actors.[movementIndex]
+    Assert.True(World.hasEvent "EVENT_TEST_MOVEMENT_DONE" moving.DebugWorld)
+    Assert.NotEqual((before.CellX, before.CellY, before.Facing), (after.CellX, after.CellY, after.Facing))
+    Assert.True(not (System.String.IsNullOrEmpty movementLabel))
+
+    let faceMap, lastTalked = sourceCommand (function | Setlasttalked _ -> true | _ -> false)
+    let faceObject =
+        match lastTalked with
+        | Setlasttalked obj -> obj
+        | _ -> failwith "expected setlasttalked"
+    let faced =
+        generatedScene content faceMap [| lastTalked; Faceplayer; End |] [] World.empty PlayerStateOps.initial
+    (faced :> Scene).Update Buttons.none |> ignore
+    let faceIndex =
+        OverworldState.objectIndexOf faceMap faceObject
+        |> Option.defaultWith (fun () -> failwith "expected generated faceplayer object")
+    let npc = faced.RuntimeSnapshot.Actors.[faceIndex]
+    let expectedFace =
+        if abs (faced.DebugState.Player.CellX - npc.CellX) >= abs (faced.DebugState.Player.CellY - npc.CellY) then
+            if faced.DebugState.Player.CellX >= npc.CellX then Right else Left
+        elif faced.DebugState.Player.CellY >= npc.CellY then Down
+        else Up
+    Assert.Equal(expectedFace, npc.Facing)
+
+    let faceObjectScene =
+        generatedScene content faceMap [| Faceobject("PLAYER", faceObject); End |] [] World.empty PlayerStateOps.initial
+    (faceObjectScene :> Scene).Update Buttons.none |> ignore
+    let target = faceObjectScene.RuntimeSnapshot.Actors.[faceIndex]
+    Assert.Equal(
+        (if target.CellX >= faceObjectScene.DebugState.Player.CellX then Right else Left),
+        faceObjectScene.DebugState.Player.Facing)
+
+[<Fact>]
+let ``generated timing and state commands delay continuation or preserve source values`` () =
+    let content = Content()
+    let delayed predicate eventName =
+        let mapId, command = sourceCommand predicate
+        let frames =
+            match command with
+            | Pause frames -> frames
+            | Showemote(_, _, frames) -> frames
+            | Earthquake(Some frames) -> frames
+            | Earthquake None
+            | TreeShake -> 30
+            | _ -> failwith "expected delayed command"
+        let scene =
+            generatedScene content mapId [| command; Setevent eventName; End |] [] World.empty PlayerStateOps.initial
+        (scene :> Scene).Update Buttons.none |> ignore
+        Assert.False(World.hasEvent eventName scene.DebugWorld)
+        advance scene (max 0 (frames - 2))
+        Assert.False(World.hasEvent eventName scene.DebugWorld)
+        advance scene 1
+        Assert.True(World.hasEvent eventName scene.DebugWorld)
+
+    delayed (function | Pause frames when frames > 0 -> true | _ -> false) "EVENT_TEST_PAUSE"
+    delayed (function | Showemote(_, _, frames) when frames > 0 -> true | _ -> false) "EVENT_TEST_EMOTE"
+    delayed (function | Earthquake _ -> true | _ -> false) "EVENT_TEST_EARTHQUAKE"
+    let treeMap = sourceCommand (fun _ -> true) |> fst
+    let tree =
+        generatedScene content treeMap [| TreeShake; Setevent "EVENT_TEST_TREE_SHAKE"; End |] [] World.empty PlayerStateOps.initial
+    (tree :> Scene).Update Buttons.none |> ignore
+    Assert.False(World.hasEvent "EVENT_TEST_TREE_SHAKE" tree.DebugWorld)
+    advance tree 30
+    Assert.True(World.hasEvent "EVENT_TEST_TREE_SHAKE" tree.DebugWorld)
+
+    let variableMap, variable = sourceCommand (function | Variablesprite _ -> true | _ -> false)
+    let sprite, replacement =
+        match variable with
+        | Variablesprite(sprite, replacement) -> sprite, replacement
+        | _ -> failwith "expected variablesprite"
+    let variableScene = runGeneratedCommand content variableMap variable World.empty PlayerStateOps.initial
+    Assert.Equal(replacement, World.getBuffer ("__sprite_" + sprite) variableScene.DebugWorld)
+
+    let blackoutMap, blackout = sourceCommand (function | Blackoutmod _ -> true | _ -> false)
+    let blackoutName =
+        match blackout with
+        | Blackoutmod name -> name
+        | _ -> failwith "expected blackoutmod"
+    let blackoutScene = runGeneratedCommand content blackoutMap blackout World.empty PlayerStateOps.initial
+    Assert.Equal(blackoutName, World.getBuffer "__blackout_map" blackoutScene.DebugWorld)
+    Assert.Equal(1, World.getVar "wLastSpawnMap" blackoutScene.DebugWorld)
+
+    let dontRestartMap, dontRestart = sourceCommand (function | Dontrestartmapmusic -> true | _ -> false)
+    let dontRestartScene = runGeneratedCommand content dontRestartMap dontRestart World.empty PlayerStateOps.initial
+    Assert.Equal(1, World.getVar "__dont_restart_map_music" dontRestartScene.DebugWorld)
+
+    let teleportScene =
+        generatedScene content treeMap [| TeleportFrom; End |] [] World.empty PlayerStateOps.initial
+    (teleportScene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(treeMap, World.getBuffer "__teleport_from_map" teleportScene.DebugWorld)
+
+[<Fact>]
+let ``generated audio and reload commands dispatch their source runtime effects`` () =
+    let content = Content()
+    let sound = RecordingSound()
+    let run predicate =
+        let mapId, command = sourceCommand predicate
+        let scene =
+            generatedSceneWithSound sound content mapId [| command; Setevent "EVENT_TEST_EFFECT"; End |] [] World.empty PlayerStateOps.initial
+        (scene :> Scene).Update Buttons.none |> ignore
+        Assert.True(World.hasEvent "EVENT_TEST_EFFECT" scene.DebugWorld)
+        command
+
+    let music = run (function | Playmusic _ -> true | _ -> false)
+    match music with
+    | Playmusic song -> Assert.NotEmpty(sound.Music)
+    | _ -> failwith "expected playmusic"
+    let sfx = run (function | Playsound _ -> true | _ -> false)
+    match sfx with
+    | Playsound _ -> Assert.NotEmpty(sound.Sfx)
+    | _ -> failwith "expected playsound"
+    run (function | Playmapmusic -> true | _ -> false) |> ignore
+    run (function | Musicfadeout -> true | _ -> false) |> ignore
+    Assert.Contains("__STOP__", sound.Music)
+    [ (function | Reloadmap -> true | _ -> false)
+      (function | Refreshmap -> true | _ -> false)
+      (function | Newloadmap -> true | _ -> false) ]
+    |> List.iter (fun predicate -> run predicate |> ignore)
+
+[<Fact>]
+let ``generated check and buffer commands expose source values and end control flow`` () =
+    let content = Content()
+    let mapId = sourceCommand (fun _ -> true) |> fst
+    let checkMap, check = sourceCommand (function | Checktime _ -> true | _ -> false)
+    let time =
+        match check with
+        | Checktime time -> time
+        | _ -> failwith "expected checktime"
+    let player =
+        { PlayerStateOps.initial with
+            GameTime =
+                match time with
+                | "MORN" -> GameTimeState.create 6 0 0 false
+                | "DAY" -> GameTimeState.create 12 0 0 false
+                | "NITE" -> GameTimeState.create 22 0 0 false
+                | _ -> GameTimeState.create 12 0 0 false }
+    let timeChecked =
+        runGeneratedCommands content checkMap [| check; Writemem "__checktime"; End |]
+            (Map.ofList [ "CommandConformance", 0 ]) World.empty player
+    Assert.Equal(1, World.getVar "__checktime" timeChecked.DebugWorld)
+
+    let getStringMap, getString = sourceCommand (function | Getstring _ -> true | _ -> false)
+    let getNumMap, getNum = sourceCommand (function | Getnum _ -> true | _ -> false)
+    let landmark = sourceStdCommand (function | Getcurlandmarkname _ -> true | _ -> false)
+    let stringBuffer, stringValue =
+        match getString with
+        | Getstring(buffer, value) -> buffer, value
+        | _ -> failwith "expected getstring"
+    let numBuffer, numVar =
+        match getNum with
+        | Getnum(buffer, variable) -> buffer, variable
+        | _ -> failwith "expected getnum"
+    let landmarkBuffer =
+        match landmark with
+        | Getcurlandmarkname buffer -> buffer
+        | _ -> failwith "expected getcurlandmarkname"
+    let buffered =
+        generatedScene content getStringMap [| getString; Getnum(numBuffer, numVar); End |] []
+            (World.setVar numVar 42 World.empty) PlayerStateOps.initial
+    (buffered :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(stringValue.Replace("_", " "), World.getBuffer stringBuffer buffered.DebugWorld)
+    Assert.Equal("42", World.getBuffer numBuffer buffered.DebugWorld)
+    let landmarkScene =
+        generatedScene content getStringMap [| landmark; End |] [] World.empty PlayerStateOps.initial
+    (landmarkScene :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(getStringMap.Replace("_", " "), World.getBuffer landmarkBuffer landmarkScene.DebugWorld)
+    Assert.True(not (System.String.IsNullOrEmpty getNumMap))
+
+    let ended =
+        generatedScene content mapId [| End; Setevent "EVENT_TEST_END_FELL_THROUGH"; End |] [] World.empty PlayerStateOps.initial
+    (ended :> Scene).Update Buttons.none |> ignore
+    Assert.False(World.hasEvent "EVENT_TEST_END_FELL_THROUGH" ended.DebugWorld)
+
+    let endifMap, endif = sourceCommand (function | Endifjustbattled -> true | _ -> false)
+    let endedBattle =
+        generatedScene content endifMap [| endif; Setevent "EVENT_TEST_BATTLE_FELL_THROUGH"; End |] []
+            (World.setVar "__just_battled" 1 World.empty) PlayerStateOps.initial
+    (endedBattle :> Scene).Update Buttons.none |> ignore
+    Assert.False(World.hasEvent "EVENT_TEST_BATTLE_FELL_THROUGH" endedBattle.DebugWorld)
+    Assert.Equal(0, World.getVar "__just_battled" endedBattle.DebugWorld)
+
+[<Fact>]
+let ``direct runtime handlers prove warpfacing and doorstate source semantics`` () =
+    let content = Content()
+    let mapId = sourceCommand (fun _ -> true) |> fst
+    let warp =
+        generatedScene content mapId [| Warpfacing("UP", "NewBarkTown", 6, 6); End |] [] World.empty PlayerStateOps.initial
+    (warp :> Scene).Update Buttons.none |> ignore
+    Assert.Equal("NewBarkTown", warp.DebugState.MapId)
+    Assert.Equal(Up, warp.DebugState.Player.Facing)
+
+    let door =
+        generatedScene content "GoldenrodGym" [| Doorstate(Some 1, Some "OPEN1"); End |] [] World.empty PlayerStateOps.initial
+    (door :> Scene).Update Buttons.none |> ignore
+    Assert.Equal(0x2duy, Map.blockAt door.DebugState.Map 8 3)
