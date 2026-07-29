@@ -41,6 +41,24 @@ let private runGeneratedCommand content mapId command world player =
     (scene :> Scene).Update Buttons.none |> ignore
     scene
 
+let private runGeneratedCommands content mapId commands labels world player =
+    let baseState = OverworldState.loadByIdAt content mapId 1 1 Down
+    let state =
+        { baseState with
+            Events =
+                { baseState.Events with
+                    Scenes = [| "SCENE_COMMAND_CONFORMANCE" |]
+                    SceneLabels = [| "CommandConformance" |]
+                    Coords = [||]
+                    Callbacks = [||] }
+            Script =
+                    { Commands = commands
+                      Labels = labels } }
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(world, player)
+    (scene :> Scene).Update Buttons.none |> ignore
+    scene
+
 let private directionOf =
     function
     | "DOWN" -> Down
@@ -162,3 +180,171 @@ let ``generated event and flag scripts persist and clear their source world stat
     let clearedFlag =
         runGeneratedCommand content clearFlagMap clearFlagCommand (World.setFlag clearFlagName World.empty) PlayerStateOps.initial
     Assert.False(World.hasFlag clearFlagName clearedFlag.DebugWorld)
+
+[<Fact>]
+let ``generated conditional branches take their source targets`` () =
+    let content = Content()
+    let branch predicate input =
+        let mapId, command = sourceCommand predicate
+        let target =
+            match command with
+            | Iffalse target
+            | Iftrue target -> target
+            | Ifequal(_, target)
+            | Ifnotequal(_, target)
+            | Ifgreater(_, target)
+            | Ifless(_, target) -> target
+            | _ -> failwith "source command did not resolve to a conditional branch"
+        let scene =
+            runGeneratedCommands content mapId
+                [| Setval input; command; Loadmem("__branch", 0); End; Loadmem("__branch", 1); End |]
+                (Map.ofList [ "CommandConformance", 0; target, 4 ])
+                World.empty PlayerStateOps.initial
+        Assert.Equal(1, World.getVar "__branch" scene.DebugWorld)
+
+    branch (function | Iffalse _ -> true | _ -> false) 0
+    branch (function | Iftrue _ -> true | _ -> false) 1
+    let comparison predicate valueOf input =
+        let _, command = sourceCommand predicate
+        branch predicate (input (valueOf command))
+    comparison (function | Ifequal _ -> true | _ -> false)
+        (function | Ifequal(value, _) -> value | _ -> failwith "expected ifequal") id
+    comparison (function | Ifnotequal _ -> true | _ -> false)
+        (function | Ifnotequal(value, _) -> value | _ -> failwith "expected ifnotequal") ((+) 1)
+    comparison (function | Ifgreater _ -> true | _ -> false)
+        (function | Ifgreater(value, _) -> value | _ -> failwith "expected ifgreater") ((+) 1)
+    comparison (function | Ifless _ -> true | _ -> false)
+        (function | Ifless(value, _) -> value | _ -> failwith "expected ifless") (fun value -> value - 1)
+
+[<Fact>]
+let ``generated scall and sjump commands preserve their source control flow`` () =
+    let content = Content()
+    let scallMap, scall = sourceCommand (function | Scall _ -> true | _ -> false)
+    let scallTarget =
+        match scall with
+        | Scall target -> target
+        | _ -> failwith "source command did not resolve to scall"
+    let called =
+        runGeneratedCommands content scallMap
+            [| scall; Loadmem("__returned", 1); End; Loadmem("__called", 1); End |]
+            (Map.ofList [ "CommandConformance", 0; scallTarget, 3 ])
+            World.empty PlayerStateOps.initial
+    Assert.Equal(1, World.getVar "__called" called.DebugWorld)
+    Assert.Equal(1, World.getVar "__returned" called.DebugWorld)
+
+    let jumpMap, jump = sourceCommand (function | Sjump _ -> true | _ -> false)
+    let jumpTarget =
+        match jump with
+        | Sjump target -> target
+        | _ -> failwith "source command did not resolve to sjump"
+    let jumped =
+        runGeneratedCommands content jumpMap
+            [| jump; Loadmem("__fell_through", 1); End; Loadmem("__jumped", 1); End |]
+            (Map.ofList [ "CommandConformance", 0; jumpTarget, 3 ])
+            World.empty PlayerStateOps.initial
+    Assert.Equal(0, World.getVar "__fell_through" jumped.DebugWorld)
+    Assert.Equal(1, World.getVar "__jumped" jumped.DebugWorld)
+
+[<Fact>]
+let ``generated variable and memory commands mutate the live world by their source operands`` () =
+    let content = Content()
+    let run command mapId world prefix =
+        runGeneratedCommands content mapId (Array.concat [ prefix; [| command; Writemem "__result"; End |] ])
+            (Map.ofList [ "CommandConformance", 0 ]) world PlayerStateOps.initial
+
+    let addMap, add = sourceCommand (function | Addval _ -> true | _ -> false)
+    let addValue =
+        match add with
+        | Addval value -> value
+        | _ -> failwith "source command did not resolve to addval"
+    Assert.Equal(11 + addValue, World.getVar "__result" (run add addMap World.empty [| Setval 11 |]).DebugWorld)
+
+    let readVarMap, readVar = sourceCommand (function | Readvar _ -> true | _ -> false)
+    let varName =
+        match readVar with
+        | Readvar name -> name
+        | _ -> failwith "source command did not resolve to readvar"
+    Assert.Equal(37, World.getVar "__result" (run readVar readVarMap (World.setVar varName 37 World.empty) [||]).DebugWorld)
+
+    let loadVarMap, loadVar = sourceCommand (function | Loadvar _ -> true | _ -> false)
+    let loadedVar, loadedValue =
+        match loadVar with
+        | Loadvar(name, value) -> name, value
+        | _ -> failwith "source command did not resolve to loadvar"
+    let loaded = run loadVar loadVarMap World.empty [||]
+    Assert.Equal(loadedValue, World.getVar loadedVar loaded.DebugWorld)
+    Assert.Equal(loadedValue, World.getVar "__result" loaded.DebugWorld)
+
+    let readMemMap, readMem = sourceCommand (function | Readmem _ -> true | _ -> false)
+    let readAddress =
+        match readMem with
+        | Readmem address -> address
+        | _ -> failwith "source command did not resolve to readmem"
+    Assert.Equal(53, World.getVar "__result" (run readMem readMemMap (World.setVar readAddress 53 World.empty) [||]).DebugWorld)
+
+    let writeMemMap, writeMem = sourceCommand (function | Writemem _ -> true | _ -> false)
+    let writeAddress =
+        match writeMem with
+        | Writemem address -> address
+        | _ -> failwith "source command did not resolve to writemem"
+    Assert.Equal(71, World.getVar writeAddress (run writeMem writeMemMap World.empty [| Setval 71 |]).DebugWorld)
+
+    let randomMap, random = sourceCommand (function | Random _ -> true | _ -> false)
+    let limit =
+        match random with
+        | Random value -> value
+        | _ -> failwith "source command did not resolve to random"
+    Assert.InRange(World.getVar "__result" (run random randomMap World.empty [| Setval 0 |]).DebugWorld, 0, limit - 1)
+
+[<Fact>]
+let ``generated check and scene commands expose source state through the live world`` () =
+    let content = Content()
+    let result command mapId world player =
+        runGeneratedCommands content mapId [| command; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ]) world player
+
+    let eventMap, checkEvent = sourceCommand (function | Checkevent _ -> true | _ -> false)
+    let eventName =
+        match checkEvent with
+        | Checkevent name -> name
+        | _ -> failwith "source command did not resolve to checkevent"
+    Assert.Equal(1, World.getVar "__result"
+        (result checkEvent eventMap (World.setEvent eventName World.empty) PlayerStateOps.initial).DebugWorld)
+
+    let flagMap, checkFlag = sourceCommand (function | Checkflag _ -> true | _ -> false)
+    let flagName =
+        match checkFlag with
+        | Checkflag name -> name
+        | _ -> failwith "source command did not resolve to checkflag"
+    Assert.Equal(1, World.getVar "__result"
+        (result checkFlag flagMap (World.setFlag flagName World.empty) PlayerStateOps.initial).DebugWorld)
+
+    let mapSceneMap, setMapScene = sourceCommand (function | Setmapscene _ -> true | _ -> false)
+    let destinationMap, scene =
+        match setMapScene with
+        | Setmapscene(map, scene) -> map, scene
+        | _ -> failwith "source command did not resolve to setmapscene"
+    let mapScene = runGeneratedCommand content mapSceneMap setMapScene World.empty PlayerStateOps.initial
+    Assert.Equal(scene, World.getScene destinationMap mapScene.DebugWorld)
+
+    let sceneMap, checkScene = sourceCommand (function | Checkscene -> true | _ -> false)
+    let checkedScene =
+        runGeneratedCommands content sceneMap [| Setscene 6; checkScene; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ]) World.empty PlayerStateOps.initial
+    Assert.Equal(6, World.getVar "__result" checkedScene.DebugWorld)
+
+    let setSceneMap, setScene = sourceCommand (function | Setscene _ -> true | _ -> false)
+    let scene =
+        match setScene with
+        | Setscene value -> value
+        | _ -> failwith "source command did not resolve to setscene"
+    let setCurrentScene = runGeneratedCommand content setSceneMap setScene World.empty PlayerStateOps.initial
+    Assert.Equal(scene, World.getScene setSceneMap setCurrentScene.DebugWorld)
+
+    let itemMap, checkItem = sourceCommand (function | Checkitem _ -> true | _ -> false)
+    let item =
+        match checkItem with
+        | Checkitem item -> item
+        | _ -> failwith "source command did not resolve to checkitem"
+    let player = { PlayerStateOps.initial with Bag = Bag.add item 1 Bag.empty }
+    Assert.Equal(1, World.getVar "__result" (result checkItem itemMap World.empty player).DebugWorld)
