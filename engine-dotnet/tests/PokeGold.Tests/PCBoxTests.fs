@@ -182,6 +182,25 @@ let ``withdraw from box via action menu updates party and box`` () =
 // ── RELEASE path ─────────────────────────────────────────────────────────────
 
 [<Fact>]
+let ``move via action menu transfers mon to selected box`` () =
+    let p = makePlayer 3
+    let p2 = match BoxOps.deposit 0 p with Ok pp -> pp | Error e -> failwith e
+    let scene, getUpdated = makeScene p2
+    pressA scene |> ignore
+    pressDown scene |> ignore // MOVE
+    pressA scene |> ignore
+    match scene.Mode with
+    | PCBoxMode.MoveBoxSelect _ ->
+        pressRight scene |> ignore
+        pressA scene |> ignore
+        match getUpdated () with
+        | Some p3 ->
+            Assert.Empty(p3.Pc.Boxes.[0].Mons)
+            Assert.Equal(1, p3.Pc.Boxes.[1].Mons.Length)
+        | None -> Assert.Fail("onChange not called")
+    | other -> Assert.Fail(sprintf "Expected MoveBoxSelect, got %A" other)
+
+[<Fact>]
 let ``release via action menu removes mon from box`` () =
     let p = makePlayer 3
     let p2 = match BoxOps.deposit 0 p with Ok pp -> pp | Error e -> failwith e
@@ -192,7 +211,8 @@ let ``release via action menu removes mon from box`` () =
     | Stay ->
         match scene.Mode with
         | PCBoxMode.ActionMenu _ ->
-            // Navigate to RELEASE (index 2: WITHDRAW=0, STATS=1, RELEASE=2).
+            // Navigate to RELEASE (index 3: WITHDRAW=0, MOVE=1, STATS=2, RELEASE=3).
+            pressDown scene |> ignore
             pressDown scene |> ignore
             pressDown scene |> ignore
             // A on RELEASE → push YesNoScene.

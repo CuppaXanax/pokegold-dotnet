@@ -47,6 +47,36 @@ module BoxOps =
                 let newBoxes  = player.Pc.Boxes |> Array.mapi (fun i b -> if i = boxIndex then newBox else b)
                 Ok { player with Party = player.Party @ [mon]; Pc = { player.Pc with Boxes = newBoxes } }
 
+    /// Move box[fromBoxIndex][monIndex] to the end of box[toBoxIndex].
+    /// Moving within the same box is a successful no-op.
+    let moveToBox (fromBoxIndex: int) (monIndex: int) (toBoxIndex: int) (player: PlayerState) : Result<PlayerState, string> =
+        if fromBoxIndex < 0 || fromBoxIndex >= player.Pc.Boxes.Length
+            || toBoxIndex < 0 || toBoxIndex >= player.Pc.Boxes.Length then
+            Error "Invalid box."
+        else
+            let sourceBox = player.Pc.Boxes.[fromBoxIndex]
+            if monIndex < 0 || monIndex >= sourceBox.Mons.Length then
+                Error "No POKeMON there."
+            elif fromBoxIndex = toBoxIndex then
+                Ok player
+            else
+                let destinationBox = player.Pc.Boxes.[toBoxIndex]
+                if destinationBox.Mons.Length >= Storage.monsPerBox then
+                    Error "BOX is full!"
+                else
+                    let mon = List.item monIndex sourceBox.Mons
+                    let newSourceBox =
+                        { sourceBox with
+                            Mons = sourceBox.Mons |> List.indexed |> List.filter (fun (i, _) -> i <> monIndex) |> List.map snd }
+                    let newDestinationBox = { destinationBox with Mons = destinationBox.Mons @ [mon] }
+                    let newBoxes =
+                        player.Pc.Boxes
+                        |> Array.mapi (fun i box ->
+                            if i = fromBoxIndex then newSourceBox
+                            elif i = toBoxIndex then newDestinationBox
+                            else box)
+                    Ok { player with Pc = { player.Pc with Boxes = newBoxes } }
+
     /// Remove box[boxIndex][monIndex] from the box (release / set free).
     /// Out-of-range indices are silently ignored.
     let release (boxIndex: int) (monIndex: int) (player: PlayerState) : PlayerState =

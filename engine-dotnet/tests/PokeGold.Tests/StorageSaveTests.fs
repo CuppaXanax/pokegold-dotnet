@@ -74,6 +74,38 @@ let ``save round-trip preserves party-held mail metadata`` () =
     Assert.Equal(21, mail.Species)
 
 [<Fact>]
+let ``save round-trip preserves mail attached to a boxed Pokemon`` () =
+    let content = PokeGold.Game.Data.Content()
+    let overworld = PokeGold.Game.Overworld.OverworldState.loadByIdAt content "AzaleaTown" 9 12 PokeGold.Game.Core.Down
+    let kenya =
+        { PartyMon.create (PokeGold.Game.Data.Species.byName "SPEAROW").Dex 10 with
+            HeldItem = Some "FLOWER_MAIL"
+            Mail = Some { Item = "FLOWER_MAIL"; Message = "DARK CAVE leads\nto another road"; SenderName = "RANDY"; SenderId = 1001; Species = 21 } }
+    let player =
+        { PlayerStateOps.initial with
+            Pc =
+                { Storage.empty with
+                    Boxes =
+                        Storage.empty.Boxes
+                        |> Array.mapi (fun i box -> if i = 3 then { box with Mons = [ kenya ] } else box) } }
+
+    let restored =
+        SaveData.captureWith overworld PokeGold.Game.Overworld.Script.World.empty player
+        |> SaveFile.serialize
+        |> SaveFile.deserialize
+        |> Option.defaultWith (fun () -> failwith "expected readable save")
+        |> SaveData.playerOf
+
+    let boxedMon = restored.Pc.Boxes.[3].Mons.Head
+    let mail = boxedMon.Mail |> Option.defaultWith (fun () -> failwith "expected attached mail")
+    Assert.Equal(Some "FLOWER_MAIL", boxedMon.HeldItem)
+    Assert.Equal("FLOWER_MAIL", mail.Item)
+    Assert.Equal("DARK CAVE leads\nto another road", mail.Message)
+    Assert.Equal("RANDY", mail.SenderName)
+    Assert.Equal(1001, mail.SenderId)
+    Assert.Equal(21, mail.Species)
+
+[<Fact>]
 let ``party mail check returns source result codes and removes only deliverable mail`` () =
     let kenya =
         { PartyMon.create (PokeGold.Game.Data.Species.byName "SPEAROW").Dex 10 with
