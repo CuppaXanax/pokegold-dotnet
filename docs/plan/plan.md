@@ -504,12 +504,12 @@ A no-shortcuts runtime test reaches Elm’s starter; the remaining route uses st
 
 ### Story 3.2 — A1: New Bark to Cherrygrove is continuously playable
 
-**Status: 🟡 PARTIAL**
+**Status: ✅ DONE**
 
 - ✅ Staged movement, home warp, New Bark triggers, and connections have coverage.
 - ✅ The continuous prefix reaches the starter.
-- ⬜ Walk from the earned starter state through Route 29 into Cherrygrove without debug setup.
-- ⬜ Assert map transitions, collisions, encounters, party state, and save/reload.
+- ✅ Walk from the earned starter state through Route 29 into Cherrygrove without debug setup.
+- ✅ Assert map transitions, collisions, encounters, party state, and save/reload.
 
 ### Story 3.3 — A2: Cherrygrove to Violet is continuously playable
 

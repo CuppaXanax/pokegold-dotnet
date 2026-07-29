@@ -10,6 +10,7 @@ open PokeGold.Game.Player
 open PokeGold.Game.Save
 open PokeGold.Game.Scenes
 open PokeGold.Tests.GameDriver
+open PokeGold.Tests.RouteCheckpoint
 open PokeGold.Tests.RuntimeInvariants
 
 module ScriptWorld = PokeGold.Game.Overworld.Script.World
@@ -402,11 +403,7 @@ let private assertFreshSaveRouteReached (driver: GameDriver) (predicate: Runtime
     driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
     Assert.True(predicate driver.Snapshot, message)
 
-[<Fact>]
-let ``Fresh-save no-shortcuts route reaches Elm starter acquisition`` () =
-    let driver = GameDriver()
-    driver.Apply(StartNewGame "A")
-
+let private earnElmStarterFromFreshSave (driver: GameDriver) =
     // PlayersHouse2F -> PlayersHouse1F via the bedroom stair warp.
     [ Right; Right; Right; Up; Up; Up; Up ]
     |> List.iter (fun direction -> driver.Step direction)
@@ -464,6 +461,276 @@ let ``Fresh-save no-shortcuts route reaches Elm starter acquisition`` () =
         driver
         completed
         "Fresh-save no-shortcuts route should reach Elm starter acquisition using only StartNewGame and real inputs."
+
+    cyndaquilDex
+
+[<Fact>]
+let ``Fresh-save no-shortcuts route reaches Elm starter acquisition`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    earnElmStarterFromFreshSave driver |> ignore
+
+[<Fact>]
+let ``Fresh-save no-shortcuts route continues from Elm through Route29 to saved Cherrygrove`` () =
+    let checkpointRoot =
+        System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "pokegold-a1-route-" + System.Guid.NewGuid().ToString("N"))
+
+    try
+        let store = CheckpointStore(checkpointRoot)
+        use route = store.StartNewGame("A")
+        let driver = route.Driver
+        let cyndaquilDex = earnElmStarterFromFreshSave driver
+        let starterParty = (owOf driver.Snapshot).Player.PartySpecies
+        let starterCheckpoint = route.Capture("elm-starter")
+
+        Assert.Equal<int list>([ cyndaquilDex ], starterParty)
+        Assert.True(System.IO.File.Exists(starterCheckpoint.SavePath))
+
+        // The lab's north wall blocks a real movement attempt.
+        let beforeBlockedStep = owOf driver.Snapshot
+        driver.Step Up
+        let afterBlockedStep = owOf driver.Snapshot
+        Assert.Equal((beforeBlockedStep.Player.CellX, beforeBlockedStep.Player.CellY), (afterBlockedStep.Player.CellX, afterBlockedStep.Player.CellY))
+
+        // Leave through the aide's potion trigger and the real lab door.
+        [ Down; Down; Left; Down; Down; Down ]
+        |> List.iter (fun direction -> driver.Step direction)
+
+        advanceFreshSaveRouteUntil
+            driver
+            3000
+            (fun snapshot ->
+                match snapshot.Overworld with
+                | Some ow -> ow.CanCapture && ow.LastTextLabel = Some "ElmsAidePotionText"
+                | None -> false)
+
+        [ Down; Down; Down ]
+        |> List.iter (fun direction -> driver.Step direction)
+
+        advanceFreshSaveRouteUntil
+            driver
+            1000
+            (fun snapshot ->
+                match snapshot.Overworld with
+                | Some ow -> ow.MapId = "NewBarkTown" && ow.CanCapture
+                | None -> false)
+        Assert.Equal("NewBarkTown", owMap driver.Snapshot)
+
+        // Pass south of the teacher at (6,8), then use the west connection.
+        let newBarkPath =
+            [ Down; Down; Down; Down; Right; Right; Right; Down; Down; Down
+              Left; Left; Left; Left; Left; Left; Left; Left; Left; Left; Left; Left ]
+
+        let newBarkTrace =
+            newBarkPath
+            |> List.map (fun direction ->
+                driver.Step direction
+                let ow = owOf driver.Snapshot
+                $"{direction}=({ow.Player.CellX},{ow.Player.CellY})")
+
+        advanceFreshSaveRouteUntil
+            driver
+            1000
+            (fun snapshot ->
+                match snapshot.Overworld with
+                | Some ow -> ow.MapId = "Route29" && ow.CanCapture
+                | None -> false)
+        let route29Entry = owOf driver.Snapshot
+        let newBarkTraceText = System.String.Join(" ", newBarkTrace)
+        Assert.True(
+            route29Entry.MapId = "Route29",
+            $"Expected Route29 entry, got {route29Entry.MapId} at ({route29Entry.Player.CellX},{route29Entry.Player.CellY}). {newBarkTraceText}")
+        Assert.Equal<int list>(starterParty, (owOf driver.Snapshot).Player.PartySpecies)
+
+        let mutable wildEncounter = None
+
+        let fleeWildEncounter () =
+            advanceRuntimeUntil
+                driver
+                3000
+                (fun snapshot ->
+                    match snapshot.Battle with
+                    | Some battle -> battle.Mode = "CommandMenu" && not battle.MessageActive
+                    | None -> false)
+
+            let battle = driver.Snapshot.Battle |> Option.defaultWith (fun () -> failwith "expected wild battle")
+            Assert.Equal("Wild", battle.Kind)
+            wildEncounter <- wildEncounter |> Option.orElse (Some battle.EnemySpecies)
+            driver.Press(directionButton Down)
+            driver.Press(directionButton Right)
+            driver.Press(press "a")
+            advanceRuntimeUntil driver 3000 (fun snapshot -> snapshot.Battle.IsNone && (owOf snapshot).CanCapture)
+
+        let tryBuildRoute29Path
+            (ow: RuntimeOverworldSnapshot)
+            (isGoal: (int -> int -> byte) -> (int * int) -> bool) =
+            let state = OverworldState.loadByIdAt (Content()) ow.MapId ow.Player.CellX ow.Player.CellY ow.Player.Facing
+            let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+            let collisionId = MapConnections.collisionId state.Map state.Collision state.Neighbors
+            let start = (ow.Player.CellX, ow.Player.CellY)
+            let blocked =
+                ow.Actors
+                |> List.filter _.Visible
+                |> List.map (fun actor -> actor.CellX, actor.CellY)
+                |> Set.ofList
+                |> Set.remove start
+
+            let frontier = System.Collections.Generic.Queue<int * int>()
+            let parents = System.Collections.Generic.Dictionary<int * int, ((int * int) * Direction) option>()
+            let directions =
+                [ Left, -1, 0
+                  Up, 0, -1
+                  Down, 0, 1
+                  Right, 1, 0 ]
+            let mutable goal = None
+
+            frontier.Enqueue(start)
+            parents.Add(start, None)
+
+            while frontier.Count > 0 && goal.IsNone do
+                let x, y = frontier.Dequeue()
+                let current = (x, y)
+
+                if current <> start && isGoal collisionId current then
+                    goal <- Some current
+                else
+                    for direction, dx, dy in directions do
+                        let nx, ny = x + dx, y + dy
+                        let next = (nx, ny)
+
+                        if
+                            not (parents.ContainsKey next)
+                            && walkable nx ny
+                            && not (Set.contains next blocked)
+                        then
+                            parents.Add(next, Some((x, y), direction))
+                            frontier.Enqueue(next)
+
+            match goal with
+            | None -> None
+            | Some target ->
+                let rec rebuild node acc =
+                    match parents.[node] with
+                    | None -> acc
+                    | Some(previous, direction) -> rebuild previous (direction :: acc)
+
+                Some(rebuild target [])
+
+        let mutable grassDirection = None
+
+        while grassDirection.IsNone && owMap driver.Snapshot = "Route29" do
+            let current = owOf driver.Snapshot
+            let path =
+                current
+                |> fun ow -> tryBuildRoute29Path ow (fun collisionId (x, y) -> WildEncounter.isEncounterTile (collisionId x y))
+                |> Option.defaultWith (fun () -> failwith "Could not find a reachable Route29 encounter tile from the live route state.")
+
+            match path with
+            | [ direction ] -> grassDirection <- Some direction
+            | nextStep :: _ -> driver.Step nextStep
+            | [] -> failwith "Expected a movement path to a Route29 encounter tile."
+
+        let grassDirection =
+            grassDirection
+            |> Option.defaultWith (fun () -> failwith "Left Route29 before reaching a grass edge.")
+        let grassEdge = owOf driver.Snapshot
+        let edgeCell = grassEdge.Player.CellX, grassEdge.Player.CellY
+        let dx, dy =
+            match grassDirection with
+            | Left -> -1, 0
+            | Up -> 0, -1
+            | Down -> 0, 1
+            | Right -> 1, 0
+        let grassCell = fst edgeCell + dx, snd edgeCell + dy
+        let backToEdge =
+            match grassDirection with
+            | Left -> Right
+            | Up -> Down
+            | Down -> Up
+            | Right -> Left
+        let mutable encounterEntries = 0
+        let mutable patrolSteps = 0
+
+        while wildEncounter.IsNone && owMap driver.Snapshot = "Route29" && encounterEntries < 1000 && patrolSteps < 4000 do
+            let current = owOf driver.Snapshot
+            let currentCell = current.Player.CellX, current.Player.CellY
+            let direction =
+                if currentCell = edgeCell then
+                    grassDirection
+                elif currentCell = grassCell then
+                    backToEdge
+                else
+                    failwith $"Route29 grass patrol left its edge at ({current.Player.CellX},{current.Player.CellY})."
+
+            driver.Step direction
+            patrolSteps <- patrolSteps + 1
+
+            if driver.Snapshot.Battle.IsSome then
+                fleeWildEncounter ()
+            elif currentCell = edgeCell then
+                let afterStep = owOf driver.Snapshot
+
+                if (afterStep.Player.CellX, afterStep.Player.CellY) = grassCell then
+                    encounterEntries <- encounterEntries + 1
+
+        let mutable route29Steps = 0
+
+        while owMap driver.Snapshot = "Route29" && route29Steps < 200 do
+            let current = owOf driver.Snapshot
+
+            if current.Player.CellY = 6 && current.Player.CellX <= 3 then
+                driver.Step Left
+            else
+                let nextStep =
+                    current
+                    |> fun ow -> tryBuildRoute29Path ow (fun _ cell -> cell = (3, 6))
+                    |> Option.bind List.tryHead
+                    |> Option.defaultWith (fun () ->
+                        let visibleActors =
+                            current.Actors
+                            |> List.filter _.Visible
+                            |> List.map (fun actor -> sprintf "%s@(%d,%d)" actor.Script actor.CellX actor.CellY)
+                            |> String.concat "; "
+
+                        failwith
+                            $"Could not build a live Route29 path from ({current.Player.CellX},{current.Player.CellY}) with actors [{visibleActors}].")
+
+                driver.Step nextStep
+
+            route29Steps <- route29Steps + 1
+
+            if driver.Snapshot.Battle.IsSome then
+                fleeWildEncounter ()
+
+        advanceFreshSaveRouteUntil
+            driver
+            1000
+            (fun snapshot ->
+                match snapshot.Overworld with
+                | Some ow -> ow.MapId = "CherrygroveCity" && ow.CanCapture
+                | None -> false)
+
+        let cherrygrove = owOf driver.Snapshot
+        Assert.True(
+            cherrygrove.MapId = "CherrygroveCity",
+            $"Expected Cherrygrove entry, got {cherrygrove.MapId} at ({cherrygrove.Player.CellX},{cherrygrove.Player.CellY}).")
+        Assert.True(wildEncounter.IsSome, "The Route 29 traversal should trigger a real wild encounter.")
+        Assert.Equal<int list>(starterParty, cherrygrove.Player.PartySpecies)
+
+        let cityCheckpoint = route.Capture("cherrygrove")
+        store.VerifyChain([ "elm-starter"; "cherrygrove" ]) |> ignore
+
+        use reloaded = store.Resume(cityCheckpoint.Name)
+        let reloadedOw = owOf reloaded.Driver.Snapshot
+        Assert.Equal("CherrygroveCity", reloadedOw.MapId)
+        Assert.Equal<int list>(starterParty, reloadedOw.Player.PartySpecies)
+        reloaded.Driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+        driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+    finally
+        if System.IO.Directory.Exists(checkpointRoot) then
+            System.IO.Directory.Delete(checkpointRoot, true)
 
 [<Fact>]
 let ``A1 bedroom stairs warp loads PlayersHouse1F`` () =
