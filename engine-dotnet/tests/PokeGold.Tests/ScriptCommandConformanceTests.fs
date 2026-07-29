@@ -104,6 +104,18 @@ let private directionOf =
     | "RIGHT" -> Right
     | value -> failwithf "unexpected source facing %s" value
 
+let private sourceAmount (args: string list) =
+    args
+    |> List.tryPick (fun arg ->
+        match System.Int32.TryParse arg with
+        | true, value -> Some value
+        | _ -> None)
+    |> Option.defaultWith (fun () -> failwithf "expected numeric source amount in %A" args)
+
+let private battleReadyPlayer species =
+    { PlayerStateOps.initial with
+        Party = [ PartyMon.create (Species.byName species).Dex 5 ] }
+
 [<Fact>]
 let ``generated giveitem and takeitem scripts mutate the live bag by their source operands`` () =
     let content = Content()
@@ -614,3 +626,199 @@ let ``generated closewindow command resumes its source script`` () =
             PlayerStateOps.initial
     (scene :> Scene).Update Buttons.none |> ignore
     Assert.True(World.hasEvent "EVENT_TEST_CLOSEWINDOW_RESUMED" scene.DebugWorld)
+
+[<Fact>]
+let ``generated loadwildmon stages its source opponent for battle`` () =
+    let content = Content()
+    let mapId, command = sourceCommand (function | Loadwildmon _ -> true | _ -> false)
+    let species, level =
+        match command with
+        | Loadwildmon(species, level) -> species, level
+        | _ -> failwith "expected loadwildmon"
+    let scene =
+        generatedScene content mapId [| command; Startbattle |] [] World.empty (battleReadyPlayer "CYNDAQUIL")
+    let battle =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? BattleScene as battle) -> battle
+        | other -> failwithf "expected source loadwildmon to start a BattleScene, got %A" other
+    Assert.Equal((Species.byName species).Name, battle.CurrentState.Enemy.Species.Name)
+    Assert.Equal(level, battle.CurrentState.Enemy.Level)
+
+[<Fact>]
+let ``generated trainer battle commands stage source trainer text and last talked actor`` () =
+    let content = Content()
+    let trainerMap, trainer = sourceCommand (function | Loadtrainer _ -> true | _ -> false)
+    let group, id =
+        match trainer with
+        | Loadtrainer(group, id) -> group, id
+        | _ -> failwith "expected loadtrainer"
+    let _, winLoss = sourceCommand (function | Winlosstext _ -> true | _ -> false)
+    let winText, lossText =
+        match winLoss with
+        | Winlosstext(winText, lossText) -> winText, lossText
+        | _ -> failwith "expected winlosstext"
+    let battleScene =
+        generatedScene content trainerMap [| winLoss; trainer; Startbattle |] [] World.empty (battleReadyPlayer "CYNDAQUIL")
+    let battle =
+        match (battleScene :> Scene).Update Buttons.none with
+        | Push (:? BattleScene as battle) -> battle
+        | other -> failwithf "expected source trainer commands to start a BattleScene, got %A" other
+    match battle.CurrentState.Kind with
+    | PokeGold.Game.Battle.TrainerBattle context ->
+        Assert.Equal(group, context.Group)
+        Assert.Equal(id, context.Id)
+        Assert.Equal(Some winText, context.WinText)
+        Assert.Equal(Some lossText, context.LossText)
+    | kind -> failwithf "expected trainer battle, got %A" kind
+
+    let lastTalkedMap, lastTalked = sourceCommand (function | Setlasttalked _ -> true | _ -> false)
+    let actor =
+        match lastTalked with
+        | Setlasttalked actor -> actor
+        | _ -> failwith "expected setlasttalked"
+    let faced =
+        generatedScene content lastTalkedMap [| lastTalked; Faceplayer; End |] [] World.empty PlayerStateOps.initial
+    (faced :> Scene).Update Buttons.none |> ignore
+    let index =
+        OverworldState.objectIndexOf lastTalkedMap actor
+        |> Option.defaultWith (fun () -> failwithf "source actor %s was not found on %s" actor lastTalkedMap)
+    let npc = faced.DebugState.Npcs.[index]
+    let expected =
+        if abs (faced.DebugState.Player.CellX - npc.CellX) >= abs (faced.DebugState.Player.CellY - npc.CellY) then
+            if faced.DebugState.Player.CellX >= npc.CellX then Right else Left
+        elif faced.DebugState.Player.CellY >= npc.CellY then Down
+        else Up
+    Assert.Equal(expected, npc.Facing)
+
+[<Fact>]
+let ``generated giveegg script adds its source egg and rejects a full party`` () =
+    let content = Content()
+    let mapId, command = sourceCommand (function | Giveegg _ -> true | _ -> false)
+    let species, level =
+        match command with
+        | Giveegg(species, level) -> species, level
+        | _ -> failwith "expected giveegg"
+    let received = runGeneratedCommand content mapId command World.empty PlayerStateOps.initial
+    let egg = Assert.Single(received.DebugPlayer.Party)
+    Assert.Equal((Species.byName species).Dex, egg.SpeciesId)
+    Assert.Equal(level, egg.Level)
+    Assert.Equal("EGG", egg.Nickname)
+    Assert.True(egg.HatchSteps.IsSome)
+
+    let fullParty =
+        { PlayerStateOps.initial with
+            Party = List.replicate 6 (PartyMon.create (Species.byName species).Dex level) }
+    let refused = runGeneratedCommand content mapId command World.empty fullParty
+    Assert.Equal(6, refused.DebugPlayer.Party.Length)
+
+[<Fact>]
+let ``generated money and coin commands use their source amounts and affordability`` () =
+    let content = Content()
+    let checkMoneyMap, checkMoney = sourceCommand (function | Checkmoney _ -> true | _ -> false)
+    let moneyAmount =
+        match checkMoney with
+        | Checkmoney args -> sourceAmount args
+        | _ -> failwith "expected checkmoney"
+    let moneyResult money =
+        runGeneratedCommands content checkMoneyMap [| checkMoney; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ]) World.empty { PlayerStateOps.initial with Money = money }
+    Assert.Equal(1, World.getVar "__result" (moneyResult moneyAmount).DebugWorld)
+    Assert.Equal(2, World.getVar "__result" (moneyResult (moneyAmount - 1)).DebugWorld)
+
+    let takeMoneyMap, takeMoney = sourceCommand (function | Takemoney _ -> true | _ -> false)
+    let takeMoneyAmount =
+        match takeMoney with
+        | Takemoney args -> sourceAmount args
+        | _ -> failwith "expected takemoney"
+    let taken =
+        runGeneratedCommand content takeMoneyMap takeMoney World.empty { PlayerStateOps.initial with Money = takeMoneyAmount }
+    Assert.Equal(0, taken.DebugPlayer.Money)
+    let unaffordable =
+        runGeneratedCommand content takeMoneyMap takeMoney World.empty { PlayerStateOps.initial with Money = takeMoneyAmount - 1 }
+    Assert.Equal(takeMoneyAmount - 1, unaffordable.DebugPlayer.Money)
+
+    let giveMoney = Givemoney [ "YOUR_MONEY"; string takeMoneyAmount ]
+    let given = runGeneratedCommand content takeMoneyMap giveMoney World.empty { PlayerStateOps.initial with Money = 0 }
+    Assert.Equal(takeMoneyAmount, given.DebugPlayer.Money)
+
+    let coinAmount command =
+        match command with
+        | Checkcoins(Some amount)
+        | Takecoins(Some amount)
+        | Givecoins(Some amount) -> amount
+        | _ -> failwithf "expected concrete source coin amount, got %A" command
+    let checkCoinsMap, checkCoins = sourceCommand (function | Checkcoins _ -> true | _ -> false)
+    let checkedCoins =
+        runGeneratedCommands content checkCoinsMap [| checkCoins; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ]) World.empty { PlayerStateOps.initial with Coins = coinAmount checkCoins }
+    Assert.Equal(1, World.getVar "__result" checkedCoins.DebugWorld)
+    let takeCoinsMap, takeCoins = sourceCommand (function | Takecoins _ -> true | _ -> false)
+    let takenCoins =
+        runGeneratedCommand content takeCoinsMap takeCoins World.empty { PlayerStateOps.initial with Coins = coinAmount takeCoins }
+    Assert.Equal(0, takenCoins.DebugPlayer.Coins)
+    let giveCoinsMap, giveCoins = sourceCommand (function | Givecoins _ -> true | _ -> false)
+    let givenCoins =
+        runGeneratedCommand content giveCoinsMap giveCoins World.empty { PlayerStateOps.initial with Coins = 0 }
+    Assert.Equal(coinAmount giveCoins, givenCoins.DebugPlayer.Coins)
+
+[<Fact>]
+let ``generated pokemart opens a mart scene with its resolved source inventory`` () =
+    let content = Content()
+    let mapId, command = sourceCommand (function | Pokemart _ -> true | _ -> false)
+    let mart =
+        match command with
+        | Pokemart(_, mart) -> mart
+        | _ -> failwith "expected pokemart"
+    let scene = generatedScene content mapId [| command; End |] [] World.empty { PlayerStateOps.initial with Money = 999_999 }
+    let martScene =
+        match (scene :> Scene).Update Buttons.none with
+        | Push (:? MartScene as martScene) -> martScene
+        | other -> failwithf "expected source pokemart to open a MartScene, got %A" other
+    (martScene :> Scene).Update { Buttons.none with A = true } |> ignore
+    (martScene :> Scene).Update Buttons.none |> ignore
+    (martScene :> Scene).Update { Buttons.none with A = true } |> ignore
+    match martScene.Mode with
+    | BuyQty(item, _, _) -> Assert.Equal(MartsData.byConstant.[mart] |> List.head, item)
+    | mode -> failwithf "expected resolved mart inventory selection, got %A" mode
+
+[<Fact>]
+let ``direct runtime handlers resolve absent generated checkpoke and name-buffer commands`` () =
+    let content = Content()
+    let mapId = sourceCommand (fun _ -> true) |> fst
+    let eggSpecies =
+        sourceCommand (function | Giveegg _ -> true | _ -> false)
+        |> snd
+        |> function
+            | Giveegg(species, _) -> species
+            | _ -> failwith "expected giveegg"
+    let hasSpecies =
+        runGeneratedCommands content mapId [| Checkpoke eggSpecies; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ])
+            World.empty
+            (battleReadyPlayer eggSpecies)
+    Assert.Equal(1, World.getVar "__result" hasSpecies.DebugWorld)
+    let lacksSpecies =
+        runGeneratedCommands content mapId [| Checkpoke eggSpecies; Writemem "__result"; End |]
+            (Map.ofList [ "CommandConformance", 0 ])
+            World.empty
+            PlayerStateOps.initial
+    Assert.Equal(0, World.getVar "__result" lacksSpecies.DebugWorld)
+
+    let item = "POTION"
+    let trainerGroup, trainerId = "YOUNGSTER", "JOEY1"
+    let names =
+        runGeneratedCommands content mapId
+            [| Getmonname("STRING_BUFFER_1", eggSpecies)
+               Getitemname("STRING_BUFFER_2", item)
+               Gettrainername("STRING_BUFFER_3", trainerGroup, trainerId)
+               End |]
+            (Map.ofList [ "CommandConformance", 0 ])
+            World.empty
+            PlayerStateOps.initial
+    Assert.Equal((Species.byName eggSpecies).Name, World.getBuffer "STRING_BUFFER_1" names.DebugWorld)
+    Assert.Equal(Items.byId.[item].Name, World.getBuffer "STRING_BUFFER_2" names.DebugWorld)
+    let trainerName =
+        Trainers.lookupByName trainerGroup trainerId
+        |> Option.map (fun trainer -> trainer.Name)
+        |> Option.defaultWith (fun () -> failwith "expected generated trainer")
+    Assert.Equal(trainerName, World.getBuffer "STRING_BUFFER_3" names.DebugWorld)
