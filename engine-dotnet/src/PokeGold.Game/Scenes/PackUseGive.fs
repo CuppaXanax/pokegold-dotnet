@@ -24,6 +24,11 @@ let private repelItems =
 
 let private fishingRods = Set.ofList [ "OLD_ROD"; "GOOD_ROD"; "SUPER_ROD" ]
 let private evolutionStones = Set.ofList [ "MOON_STONE"; "FIRE_STONE"; "THUNDERSTONE"; "WATER_STONE"; "LEAF_STONE"; "SUN_STONE" ]
+let private vitaminItems = Set.ofList [ "HP_UP"; "PROTEIN"; "IRON"; "CALCIUM"; "ZINC"; "CARBOS" ]
+let private etherItems = Set.ofList [ "ETHER"; "MAX_ETHER" ]
+let private elixerItems = Set.ofList [ "ELIXER"; "MAX_ELIXER" ]
+let private ppUpItems = Set.ofList [ "PP_UP"; "PP_MAX" ]
+let private reviveItems = Set.ofList [ "REVIVE"; "MAX_REVIVE" ]
 let private statusCures =
     Map.ofList
         [ "ANTIDOTE", (fun status -> status = "PSN")
@@ -52,6 +57,12 @@ let isRepel (itemName: string) : bool = repelItems.ContainsKey itemName
 let isFishingRod (itemName: string) : bool = Set.contains itemName fishingRods
 
 let isEvolutionStone itemName = Set.contains itemName evolutionStones
+let isVitamin itemName = Set.contains itemName vitaminItems
+let isEther itemName = Set.contains itemName etherItems
+let isElixer itemName = Set.contains itemName elixerItems
+let isPpUp itemName = Set.contains itemName ppUpItems
+let isRevive itemName = Set.contains itemName reviveItems
+let isRareCandy itemName = itemName = "RARE_CANDY"
 
 // ── Pure mutation helpers (unit-testable without the scene stack) ──────────────
 
@@ -153,3 +164,125 @@ let applyEvolution _itemId slotIdx candidate (player: PlayerState) =
         Party = player.Party |> List.mapi (fun i mon -> if i = slotIdx then evolved else mon)
         DexSeen = Set.add evolved.SpeciesId player.DexSeen
         DexOwn = Set.add evolved.SpeciesId player.DexOwn }
+
+let private tryUpdateParty slotIdx (update: PartyMon -> PartyMon option) (player: PlayerState) =
+    if slotIdx < 0 || slotIdx >= player.Party.Length then
+        None
+    else
+        update player.Party.[slotIdx]
+        |> Option.map (fun updated ->
+            { player with
+                Party = player.Party |> List.mapi (fun i mon -> if i = slotIdx then updated else mon) })
+
+/// Apply a Rare Candy level-up and return any full-moveset learning requests.
+let applyRareCandy (slotIdx: int) (player: PlayerState) : (PlayerState * LearnMoveRequest list) option =
+    if slotIdx < 0 || slotIdx >= player.Party.Length then None
+    else
+        let mon = player.Party.[slotIdx]
+        if mon.Level >= 100 then None
+        else
+            let leveled, requests =
+                PartyMon.withLevel (mon.Level + 1) mon
+                |> MoveLearn.learnMovesForLevelWithRequests
+            Some(
+                { player with
+                    Party = player.Party |> List.mapi (fun i current -> if i = slotIdx then leveled else current)
+                    Bag = Bag.remove "RARE_CANDY" 1 player.Bag },
+                requests)
+
+/// Apply a vitamin. ZINC shares the engine's single Special stat-exp field with
+/// CALCIUM because Gen 2 persistent data does not track separate special defenses.
+let applyVitamin (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerState option =
+    let updateStat (statExp: PokeGold.Game.Battle.StatExperience) =
+        match itemId with
+        | "HP_UP" -> Some { statExp with Hp = statExp.Hp + 10 }
+        | "PROTEIN" -> Some { statExp with Attack = statExp.Attack + 10 }
+        | "IRON" -> Some { statExp with Defense = statExp.Defense + 10 }
+        | "CARBOS" -> Some { statExp with Speed = statExp.Speed + 10 }
+        | "CALCIUM" | "ZINC" -> Some { statExp with Special = statExp.Special + 10 }
+        | _ -> None
+
+    tryUpdateParty slotIdx
+        (fun mon ->
+            updateStat mon.StatExp
+            |> Option.bind (fun statExp ->
+                let current =
+                    match itemId with
+                    | "HP_UP" -> mon.StatExp.Hp
+                    | "PROTEIN" -> mon.StatExp.Attack
+                    | "IRON" -> mon.StatExp.Defense
+                    | "CARBOS" -> mon.StatExp.Speed
+                    | "CALCIUM" | "ZINC" -> mon.StatExp.Special
+                    | _ -> 100
+                if current >= 100 then None
+                else
+                    let maxHp =
+                        if itemId = "HP_UP" then PartyMon.deriveMaxHpWith mon.SpeciesId mon.Level mon.Dvs statExp
+                        else mon.MaxHp
+                    Some { mon with StatExp = statExp; MaxHp = maxHp }))
+        player
+    |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })
+
+let private moveAt moveIdx (mon: PartyMon) =
+    if moveIdx < 0 || moveIdx >= mon.Moves.Length then None
+    else
+        let moveId, currentPp = mon.Moves.[moveIdx]
+        Moves.tryByIndex moveId |> Option.map (fun data -> moveId, currentPp, data.Pp)
+
+let applyEther (itemId: string) (slotIdx: int) (moveIdx: int) (player: PlayerState) : PlayerState option =
+    tryUpdateParty slotIdx
+        (fun mon ->
+            if not (isEther itemId) then None
+            else
+                moveAt moveIdx mon
+                |> Option.bind (fun (moveId, currentPp, maxPp) ->
+                    let restored = if itemId = "MAX_ETHER" then maxPp else min maxPp (currentPp + 10)
+                    if restored = currentPp then None
+                    else Some { mon with Moves = mon.Moves |> List.mapi (fun i move -> if i = moveIdx then moveId, restored else move) }))
+        player
+    |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })
+
+let applyElixer (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerState option =
+    tryUpdateParty slotIdx
+        (fun mon ->
+            if not (isElixer itemId) then None
+            else
+                let moves =
+                    mon.Moves
+                    |> List.map (fun (moveId, currentPp) ->
+                        match Moves.tryByIndex moveId with
+                        | None -> moveId, currentPp
+                        | Some data ->
+                            let restored = if itemId = "MAX_ELIXER" then data.Pp else min data.Pp (currentPp + 10)
+                            moveId, restored)
+                if moves = mon.Moves then None else Some { mon with Moves = moves })
+        player
+    |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })
+
+/// PP Ups are approximated in the single stored PP value: the engine model has no
+/// separate boosted-max-PP byte, so this raises current PP and its effective maximum together.
+let applyPpUp (itemId: string) (slotIdx: int) (moveIdx: int) (player: PlayerState) : PlayerState option =
+    tryUpdateParty slotIdx
+        (fun mon ->
+            if not (isPpUp itemId) then None
+            else
+                moveAt moveIdx mon
+                |> Option.bind (fun (moveId, currentPp, basePp) ->
+                    let ceiling = basePp + basePp * 3 / 5
+                    let raised =
+                        if itemId = "PP_MAX" then ceiling
+                        else min ceiling (currentPp + basePp / 5)
+                    if raised = currentPp then None
+                    else Some { mon with Moves = mon.Moves |> List.mapi (fun i move -> if i = moveIdx then moveId, raised else move) }))
+        player
+    |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })
+
+let applyRevive (itemId: string) (slotIdx: int) (player: PlayerState) : PlayerState option =
+    tryUpdateParty slotIdx
+        (fun mon ->
+            if not (isRevive itemId) || mon.Hp > 0 then None
+            else
+                let hp = if itemId = "MAX_REVIVE" then mon.MaxHp else max 1 (mon.MaxHp / 2)
+                Some { mon with Hp = hp })
+        player
+    |> Option.map (fun updated -> { updated with Bag = Bag.remove itemId 1 updated.Bag })

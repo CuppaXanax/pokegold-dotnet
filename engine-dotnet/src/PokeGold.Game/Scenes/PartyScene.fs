@@ -11,6 +11,7 @@ type PartyMode =
     | Browsing
     | ActionMenu of menu: MenuList * actions: string array * slotIdx: int
     | SwitchPick of firstSlot: int
+    | MovePick of slotIdx: int * menu: MenuList
     | ItemMsg    of msg: string
 
 /// The party Pokémon menu — lists up to 6 party mons, each showing nickname,
@@ -37,7 +38,7 @@ type PartyMode =
 ///   onChange  — callback invoked with the updated PlayerState on any mutation
 ///   onSelect     — optional picker-mode seam (M11.3+): replaces action submenu
 ///   onFieldMove  — optional field-move dispatcher supplied by the overworld.
-type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onSelect: int -> Transition, ?onFieldMove: string -> Transition) =
+type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> unit, ?onSelect: int -> Transition, ?onMoveSelect: int -> int -> Transition, ?onFieldMove: string -> Transition) =
 
     let mutable currentPlayer = player
     let mutable mode          = Browsing : PartyMode
@@ -189,13 +190,17 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                     if cursor >= party.Length then
                         Pop   // CANCEL row selected
                     else
-                        match onSelect with
-                        | Some picker ->
+                        match onMoveSelect, onSelect with
+                        | Some _, _ ->
+                            let mon = List.item cursor party
+                            mode <- MovePick(cursor, MenuList.create (max 1 (mon.Moves.Length + 1)) (max 1 (mon.Moves.Length + 1)) true)
+                            Stay
+                        | None, Some picker ->
                             // Picker mode: A selects the slot directly and returns
                             // the Transition from the picker callback.
                             // M11.3 Pack use/give can push this in picker mode.
                             picker cursor
-                        | None ->
+                        | None, None ->
                             let mon     = List.item cursor party
                             let actions = buildActions mon
                             let am      = MenuList.create actions.Length actions.Length true
@@ -287,6 +292,28 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                 else
                     Stay
 
+            | MovePick(slotIdx, moveMenu) ->
+                let mon = List.item slotIdx party
+                let moveMenu' =
+                    if edges.Up then MenuList.moveUp moveMenu
+                    elif edges.Down then MenuList.moveDown moveMenu
+                    else moveMenu
+                mode <- MovePick(slotIdx, moveMenu')
+
+                if edges.A then
+                    if moveMenu'.Cursor >= mon.Moves.Length then
+                        mode <- Browsing
+                        Stay
+                    else
+                        onMoveSelect
+                        |> Option.map (fun picker -> picker slotIdx moveMenu'.Cursor)
+                        |> Option.defaultValue Pop
+                elif edges.B then
+                    mode <- Browsing
+                    Stay
+                else
+                    Stay
+
             // ── ItemMsg: brief notice after an item action ───────────────────
             | ItemMsg _ ->
                 if edges.A || edges.B then
@@ -317,5 +344,15 @@ type PartyScene(content: Content, player: PlayerState, onChange: PlayerState -> 
                 let n   = currentPlayer.Party.Length
                 let row = BoxTop + 1 + n * 2
                 WindowRenderer.drawString fb content.Font palette (BoxLeft + 2) row (truncate 17 msg)
+
+            | MovePick(slotIdx, moveMenu) ->
+                let mon = List.item slotIdx currentPlayer.Party
+                let entries = [| yield! (mon.Moves |> List.map (fun (moveId, _) -> Moves.tryByIndex moveId |> Option.map _.Name |> Option.defaultValue (sprintf "MOVE %d" moveId))); yield "CANCEL" |]
+                WindowRenderer.drawBox fb content.Font palette 2 2 16 (entries.Length + 4)
+                WindowRenderer.drawString fb content.Font palette 3 3 "USE ON WHICH?"
+                for i in 0 .. entries.Length - 1 do
+                    let row = 5 + i
+                    if i = moveMenu.Cursor then WindowRenderer.drawCursor fb content.Font palette 3 row
+                    WindowRenderer.drawString fb content.Font palette 4 row entries.[i]
 
             | Browsing -> ()
