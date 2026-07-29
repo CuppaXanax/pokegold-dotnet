@@ -358,6 +358,123 @@ let ``applyMaxRevive fully restores a fainted mon and rejects a conscious target
     Assert.True(PackUseGive.applyRevive "MAX_REVIVE" 0 conscious |> Option.isNone)
     Assert.Equal(1, Bag.count "MAX_REVIVE" conscious.Bag)
 
+// ── Bitter herb / berry status-cure items ─────────────────────────────────────
+
+[<Fact>]
+let ``applyStatusCure cures the bitter-herb berry family and consumes the item`` () =
+    for item, status in
+        [ "PSNCUREBERRY", "PSN"
+          "BURNT_BERRY", "FRZ"
+          "ICE_BERRY", "BRN"
+          "MINT_BERRY", "SLP:3"
+          "MIRACLEBERRY", "PSN"
+          "HEAL_POWDER", "BRN" ] do
+        let mon = { PartyMon.create 4 10 with Status = status }
+        let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add item 1 Bag.empty }
+
+        match PackUseGive.applyStatusCure item 0 player with
+        | Some healed ->
+            Assert.Equal("", healed.Party.[0].Status)
+            Assert.Equal(0, Bag.count item healed.Bag)
+        | None -> Assert.Fail(sprintf "%s should cure %s" item status)
+
+[<Fact>]
+let ``applyStatusCure PSNCUREBERRY rejects a nonmatching status without consuming the item`` () =
+    let mon = { PartyMon.create 4 10 with Status = "BRN" }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "PSNCUREBERRY" 1 Bag.empty }
+
+    Assert.True(PackUseGive.applyStatusCure "PSNCUREBERRY" 0 player |> Option.isNone)
+    Assert.Equal(1, Bag.count "PSNCUREBERRY" player.Bag)
+
+// ── Bitter medicine items ──────────────────────────────────────────────────────
+
+[<Fact>]
+let ``applyHpHeal ENERGYPOWDER heals 50 HP`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 10; MaxHp = 100 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ENERGYPOWDER" 1 Bag.empty }
+
+    match PackUseGive.applyHpHeal "ENERGYPOWDER" 0 player with
+    | Some updated ->
+        Assert.Equal(60, updated.Party.[0].Hp)
+        Assert.Equal(0, Bag.count "ENERGYPOWDER" updated.Bag)
+    | None -> Assert.Fail("ENERGYPOWDER should heal 50 HP")
+
+[<Fact>]
+let ``applyHpHeal ENERGY_ROOT heals 200 HP and clamps at MaxHp`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 10; MaxHp = 35 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "ENERGY_ROOT" 1 Bag.empty }
+
+    match PackUseGive.applyHpHeal "ENERGY_ROOT" 0 player with
+    | Some updated ->
+        Assert.Equal(35, updated.Party.[0].Hp)
+        Assert.Equal(0, Bag.count "ENERGY_ROOT" updated.Bag)
+    | None -> Assert.Fail("ENERGY_ROOT should heal up to MaxHp")
+
+[<Fact>]
+let ``applyEther MYSTERYBERRY fully restores selected move PP`` () =
+    let mon = { PartyMon.create 4 10 with Moves = [ tackleId, 1 ] }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "MYSTERYBERRY" 1 Bag.empty }
+
+    match PackUseGive.applyEther "MYSTERYBERRY" 0 0 player with
+    | Some updated ->
+        Assert.Equal(tacklePp, snd updated.Party.[0].Moves.Head)
+        Assert.Equal(0, Bag.count "MYSTERYBERRY" updated.Bag)
+    | None -> Assert.Fail("MYSTERYBERRY should fully restore PP")
+
+    let full = { player with Party = [ { mon with Moves = [ tackleId, tacklePp ] } ] }
+    Assert.True(PackUseGive.applyEther "MYSTERYBERRY" 0 0 full |> Option.isNone)
+    Assert.Equal(1, Bag.count "MYSTERYBERRY" full.Bag)
+
+[<Fact>]
+let ``applyRevive REVIVAL_HERB fully restores a fainted mon and rejects a conscious target`` () =
+    let mon = { PartyMon.create 4 10 with Hp = 0 }
+    let player = { PlayerStateOps.initial with Party = [ mon ]; Bag = Bag.add "REVIVAL_HERB" 1 Bag.empty }
+
+    match PackUseGive.applyRevive "REVIVAL_HERB" 0 player with
+    | Some updated ->
+        Assert.Equal(mon.MaxHp, updated.Party.[0].Hp)
+        Assert.Equal(0, Bag.count "REVIVAL_HERB" updated.Bag)
+    | None -> Assert.Fail("REVIVAL_HERB should restore a fainted mon")
+
+    let conscious = { player with Party = [ PartyMon.create 4 10 ] }
+    Assert.True(PackUseGive.applyRevive "REVIVAL_HERB" 0 conscious |> Option.isNone)
+    Assert.Equal(1, Bag.count "REVIVAL_HERB" conscious.Bag)
+
+// ── SACRED_ASH: party-wide revive ──────────────────────────────────────────────
+
+[<Fact>]
+let ``isSacredAsh identifies SACRED_ASH only`` () =
+    Assert.True(PackUseGive.isSacredAsh "SACRED_ASH")
+    Assert.False(PackUseGive.isSacredAsh "REVIVE")
+
+[<Fact>]
+let ``applySacredAsh revives every fainted party member to full HP and consumes one`` () =
+    let fainted1 = { PartyMon.create 4 10 with Hp = 0; MaxHp = 35 }
+    let healthy = { PartyMon.create 1 5 with Hp = 21; MaxHp = 21 }
+    let fainted2 = { PartyMon.create 7 12 with Hp = 0; MaxHp = 40 }
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ fainted1; healthy; fainted2 ]
+            Bag = Bag.add "SACRED_ASH" 2 Bag.empty }
+
+    match PackUseGive.applySacredAsh player with
+    | Some updated ->
+        Assert.Equal(35, updated.Party.[0].Hp)
+        Assert.Equal(21, updated.Party.[1].Hp)  // untouched, already conscious
+        Assert.Equal(40, updated.Party.[2].Hp)
+        Assert.Equal(1, Bag.count "SACRED_ASH" updated.Bag)
+    | None -> Assert.Fail("SACRED_ASH should revive fainted party members")
+
+[<Fact>]
+let ``applySacredAsh returns None and does not consume the item when no one is fainted`` () =
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create 4 10 ]
+            Bag = Bag.add "SACRED_ASH" 1 Bag.empty }
+
+    Assert.True(PackUseGive.applySacredAsh player |> Option.isNone)
+    Assert.Equal(1, Bag.count "SACRED_ASH" player.Bag)
+
 // ── isHpHeal coverage ─────────────────────────────────────────────────────────
 
 [<Fact>]
