@@ -446,9 +446,19 @@ module Script =
             | Loadtrainer(group, id) -> suspend next world (LoadTrainer(group, id))
             | Winlosstext(win, loss) -> suspend next world (WinLossText(win, loss))
             | Startbattle -> suspend next world StartBattle
-            | Reloadmapafterbattle
             | Reloadmap
             | Refreshmap -> suspend next world ReloadMap
+            | Reloadmapafterbattle ->
+                let call =
+                    if World.getVar "__last_battle_was_wild" world <> 0 then
+                        if World.getVar "__last_battle_box_full" world <> 0 then "SPECIALCALL_BILL" else ""
+                    elif World.hasFlag "ENGINE_MOM_SAVING_MONEY" world then
+                        // Mom's item-selection and purchase logic is not yet ported;
+                        // saving money is the available source-compatible eligibility gate.
+                        "SPECIALCALL_MOM"
+                    else
+                        ""
+                suspend next (World.setBuffer "__special_phone_call" call world) ReloadMap
             | Changeblock(x, y, blockId) -> suspend next world (ChangeBlock(x, y, blockId))
             | Playmusic song -> suspend next world (PlayMusic song)
             | Playsound sound -> suspend next world (PlaySound sound)
