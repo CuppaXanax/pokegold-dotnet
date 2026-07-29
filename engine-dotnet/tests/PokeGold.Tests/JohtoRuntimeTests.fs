@@ -219,6 +219,57 @@ let ``Mike trades source Drowzee for Machop through the real Goldenrod script`` 
     driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
 
 [<Fact>]
+let ``Carrie grants the offline Mystery Gift package once through the Goldenrod 5F script`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(Warp("GoldenrodDeptStore5F", 9, 2, Some Up))
+
+    driver.Talk()
+
+    let claimed (snapshot: RuntimeSnapshot) =
+        snapshot.Overworld
+        |> Option.exists (fun overworld ->
+            overworld.Events |> List.contains "EVENT_GOT_OFFLINE_MYSTERY_GIFT")
+
+    advanceRuntimeUntil driver 2000 claimed
+
+    let overworld = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+    let expectedItems =
+        [ "BERRY"; "PRZCUREBERRY"; "MIRACLEBERRY"; "GOLD_BERRY"; "GREAT_BALL"
+          "REVIVE"; "WATER_STONE"; "FIRE_STONE"; "LEAF_STONE"; "THUNDERSTONE" ]
+    let expectedDecorationEvents =
+        [ "EVENT_DECO_JIGGLYPUFF_DOLL"; "EVENT_DECO_POLIWAG_DOLL"; "EVENT_DECO_DIGLETT_DOLL"
+          "EVENT_DECO_STARYU_DOLL"; "EVENT_DECO_MAGIKARP_DOLL"; "EVENT_DECO_ODDISH_DOLL"
+          "EVENT_DECO_GENGAR_DOLL"; "EVENT_DECO_SHELLDER_DOLL"; "EVENT_DECO_GRIMER_DOLL"
+          "EVENT_DECO_VOLTORB_DOLL"; "EVENT_DECO_CLEFAIRY_POSTER"; "EVENT_DECO_JIGGLYPUFF_POSTER"
+          "EVENT_DECO_SNES"; "EVENT_DECO_WEEDLE_DOLL"; "EVENT_DECO_GEODUDE_DOLL"; "EVENT_DECO_MACHOP_DOLL"
+          "EVENT_DECO_PLANT_1"; "EVENT_DECO_PLANT_2"; "EVENT_DECO_FAMICOM"; "EVENT_DECO_N64"
+          "EVENT_DECO_BULBASAUR_DOLL"; "EVENT_DECO_SQUIRTLE_DOLL"; "EVENT_DECO_BED_2"; "EVENT_DECO_BED_3"
+          "EVENT_DECO_CARPET_1"; "EVENT_DECO_CARPET_2"; "EVENT_DECO_CARPET_3"; "EVENT_DECO_CARPET_4"
+          "EVENT_DECO_PLANT_3"; "EVENT_DECO_VIRTUAL_BOY"; "EVENT_DECO_BIG_ONIX_DOLL"; "EVENT_DECO_POSTER_2"
+          "EVENT_DECO_BIG_LAPRAS_DOLL"; "EVENT_DECO_SURFING_PIKACHU_DOLL"; "EVENT_DECO_BED_4"
+          "EVENT_DECO_UNOWN_DOLL"; "EVENT_DECO_TENTACOOL_DOLL" ]
+
+    expectedItems
+    |> List.iter (fun item ->
+        Assert.True(
+            overworld.Player.Bag |> Map.tryFind item = Some 1,
+            $"expected {item} in {overworld.Player.Bag}"))
+
+    expectedDecorationEvents
+    |> List.iter (fun event -> Assert.Contains(event, overworld.Events))
+
+    advanceRuntimeUntil driver 40 (fun snapshot -> snapshot.TopScene = "OverworldScene")
+    driver.Talk()
+    advanceRuntimeUntil driver 200 (fun snapshot -> snapshot.TopScene = "OverworldScene")
+    let afterRepeat = driver.Snapshot.Overworld |> Option.defaultWith (fun () -> failwith "expected overworld")
+
+    expectedItems
+    |> List.iter (fun item -> Assert.Equal(Some 1, afterRepeat.Player.Bag |> Map.tryFind item))
+
+    Assert.Equal(expectedDecorationEvents.Length, expectedDecorationEvents |> List.filter (fun event -> afterRepeat.Events |> List.contains event) |> List.length)
+
+[<Fact>]
 let ``Goldenrod Flower Shop runtime gate gives SquirtBottle after PlainBadge`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
