@@ -24,7 +24,10 @@ type BaseStats =
       Item1: string option
       Item2: string option
       GenderRatio: int
-      GrowthRate: int }
+      GrowthRate: int
+      EggGroup1: int
+      EggGroup2: int
+      HatchCycles: int }
 
 /// A single evolution entry for a species.
 type EvolutionEntry =

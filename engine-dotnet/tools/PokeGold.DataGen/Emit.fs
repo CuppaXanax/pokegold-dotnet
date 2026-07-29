@@ -92,11 +92,11 @@ module Emit =
         for s in Parsers.species do
             sb.AppendLine(
                 sprintf
-                    "            (\"%s\", { Dex = %d; Name = \"%s\"; Hp = %d; Attack = %d; Defense = %d; Speed = %d; SpAttack = %d; SpDefense = %d; Type1 = %d; Type2 = %d; CatchRate = %d; BaseExp = %d; Item1 = %s; Item2 = %s; GenderRatio = %d; GrowthRate = %d })"
+                    "            (\"%s\", { Dex = %d; Name = \"%s\"; Hp = %d; Attack = %d; Defense = %d; Speed = %d; SpAttack = %d; SpDefense = %d; Type1 = %d; Type2 = %d; CatchRate = %d; BaseExp = %d; Item1 = %s; Item2 = %s; GenderRatio = %d; GrowthRate = %d; EggGroup1 = %d; EggGroup2 = %d; HatchCycles = %d })"
                     s.Constant s.Dex s.Constant s.Hp s.Attack s.Defense s.Speed s.SpAttack s.SpDefense s.Type1 s.Type2 s.CatchRate s.BaseExp
                     (s.Item1 |> Option.map (sprintf "Some \"%s\"") |> Option.defaultValue "None")
                     (s.Item2 |> Option.map (sprintf "Some \"%s\"") |> Option.defaultValue "None")
-                    s.GenderRatio s.GrowthRate
+                    s.GenderRatio s.GrowthRate s.EggGroup1 s.EggGroup2 s.HatchCycles
             )
             |> ignore
 
@@ -176,6 +176,24 @@ module Emit =
             for move in species.TmHmMoves do
                 sb.AppendLine(sprintf "                \"%s\"" move) |> ignore
             sb.AppendLine("            ])") |> ignore
+        sb.AppendLine("        ]") |> ignore
+        sb.ToString()
+
+    let private eggMovesFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated egg-move lists, keyed by species constant name.") |> ignore
+        sb.AppendLine("module EggMovesData =") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("    let bySpecies : Map<string, Set<string>> =") |> ignore
+        sb.AppendLine("        Map.ofList [") |> ignore
+
+        for species, moves in Parsers.eggMoves |> Map.toList |> List.sortBy fst do
+            let moves = moves |> List.map (sprintf "\"%s\"") |> String.concat "; "
+            sb.AppendLine(sprintf "            (\"%s\", set [ %s ])" species moves) |> ignore
+
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
@@ -625,6 +643,7 @@ module Emit =
           "Species.Generated.fs", speciesFile ()
           "Moves.Generated.fs", movesFile ()
           "TmHm.Generated.fs", tmHmFile ()
+          "EggMoves.Generated.fs", eggMovesFile ()
           "EvosAttacks.Generated.fs", evosAttacksFile ()
           "SpriteMovement.Generated.fs", spriteMovementFile ()
           "Maps.Generated.fs", EmitMaps.render MapParsers.maps MapParsers.spawnPoints MapParsers.flyPoints

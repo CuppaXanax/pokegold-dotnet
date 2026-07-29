@@ -121,7 +121,8 @@ module PartyMon =
                   Hp = 45; Attack = 45; Defense = 45; Speed = 45; SpAttack = 45; SpDefense = 45
                   Type1 = 0; Type2 = 0
                   CatchRate = 45; BaseExp = 64
-                  Item1 = None; Item2 = None; GenderRatio = 255; GrowthRate = 0 })
+                  Item1 = None; Item2 = None; GenderRatio = 255; GrowthRate = 0
+                  EggGroup1 = 15; EggGroup2 = 15; HatchCycles = 0 })
         let moveSlots =
             mon.Moves
             |> List.choose (fun (moveId, pp) ->

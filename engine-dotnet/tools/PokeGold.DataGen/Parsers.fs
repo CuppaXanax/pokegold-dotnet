@@ -169,6 +169,9 @@ module Parsers =
           Item2: string option
           GenderRatio: int
           GrowthRate: int
+          EggGroup1: int
+          EggGroup2: int
+          HatchCycles: int
           TmHmMoves: string list }
 
     let private dex = AsmConstants.load "constants/pokemon_constants.asm"
@@ -178,6 +181,7 @@ module Parsers =
     let private singleIntDbRx = Regex(@"^\s*db\s+(\d+)\s*$")
     let private growthRx = Regex(@"^\s*db\s+(GROWTH_\w+)")
     let private genderRx = Regex(@"^\s*db\s+(GENDER_\w+)\b")
+    let private eggGroupsRx = Regex(@"^\s*dn\s+(EGG_\w+),\s*(EGG_\w+)\b")
     let private tmHmRx = Regex(@"^\s*tmhm(?:\s+(.*?))?\s*$")
     let private growthRates =
         Map.ofList [
@@ -198,6 +202,9 @@ module Parsers =
             "GENDER_F100", 254
             "GENDER_UNKNOWN", 255
         ]
+    let private eggGroups : Map<string, int> =
+        AsmConstants.load "constants/pokemon_data_constants.asm"
+        |> Map.filter (fun name _ -> name.StartsWith "EGG_")
 
     let private parseSpecies (file: string) : Species =
         let lines =
@@ -254,13 +261,23 @@ module Parsers =
 
         let heldItem item = if item = "NO_ITEM" then None else Some item
 
-        let genderRatio =
+        let genderLineIndex, genderRatio =
             lines
             |> List.mapi (fun i l -> i, l)
             |> List.tryPick (fun (i, l) ->
                 let m = genderRx.Match l
-                if i > itemLineIndex && m.Success then genderRatios.TryFind m.Groups.[1].Value else None)
+                if i > itemLineIndex && m.Success then
+                    genderRatios.TryFind m.Groups.[1].Value |> Option.map (fun ratio -> i, ratio)
+                else None)
             |> Option.defaultWith (fun () -> failwithf "No gender ratio in %s" file)
+
+        let hatchCycles =
+            lines
+            |> List.mapi (fun i l -> i, l)
+            |> List.filter (fun (i, l) -> i > genderLineIndex && singleIntDbRx.IsMatch l)
+            |> List.tryItem 1
+            |> Option.map (fun (_, l) -> int (singleIntDbRx.Match(l).Groups.[1].Value))
+            |> Option.defaultWith (fun () -> failwithf "No hatch cycles in %s" file)
 
         let growthRate =
             lines
@@ -268,6 +285,17 @@ module Parsers =
                 let m = growthRx.Match l
                 if m.Success then growthRates.TryFind m.Groups.[1].Value else None)
             |> Option.defaultValue 0
+
+        let eggGroup1, eggGroup2 =
+            lines
+            |> List.tryPick (fun l ->
+                let m = eggGroupsRx.Match l
+                if m.Success then
+                    match eggGroups.TryFind m.Groups.[1].Value, eggGroups.TryFind m.Groups.[2].Value with
+                    | Some group1, Some group2 -> Some(group1, group2)
+                    | _ -> None
+                else None)
+            |> Option.defaultWith (fun () -> failwithf "No egg groups in %s" file)
 
         let tmHmMoves =
             lines
@@ -299,6 +327,9 @@ module Parsers =
           Item2 = heldItem item2
           GenderRatio = genderRatio
           GrowthRate = growthRate
+          EggGroup1 = eggGroup1
+          EggGroup2 = eggGroup2
+          HatchCycles = hatchCycles
           TmHmMoves = tmHmMoves }
 
     /// Every species' base stats, ordered by national dex number.
@@ -450,6 +481,54 @@ module Parsers =
                   Species = speciesConstant species
                   Evolutions = List.ofSeq evolutions
                   Learnset = List.ofSeq learnset } ]
+
+    // --- Egg moves -----------------------------------------------------------
+
+    let private eggMovesLabelRx = Regex(@"^\s*([A-Za-z0-9_]+)EggMoves:\s*$")
+    let private eggMoveDbRx = Regex(@"^\s*db\s+([A-Za-z0-9_]+)\s*$")
+
+    /// Egg-move lists keyed by species constant name.
+    let eggMoves : Map<string, string list> =
+        let lines = Repo.readText("data/pokemon/egg_moves.asm").Split('\n')
+        let result = ResizeArray<string * string list>()
+        let mutable currentSpecies: string option = None
+        let mutable currentMoves = ResizeArray<string>()
+
+        let finishCurrent () =
+            match currentSpecies with
+            | Some species ->
+               result.Add(species, List.ofSeq currentMoves)
+               currentSpecies <- None
+               currentMoves <- ResizeArray<string>()
+            | None -> ()
+
+        for raw in lines do
+            let line =
+               let i = raw.IndexOf(';')
+               if i >= 0 then raw.Substring(0, i) else raw
+
+            let labelMatch = eggMovesLabelRx.Match line
+
+            if labelMatch.Success then
+               finishCurrent ()
+               let label = labelMatch.Groups.[1].Value
+               let species = speciesConstant label
+
+               if dex.ContainsKey species then
+                   currentSpecies <- Some species
+            else
+               let moveMatch = eggMoveDbRx.Match line
+
+               if currentSpecies.IsSome && moveMatch.Success then
+                   let move = moveMatch.Groups.[1].Value
+
+                   if move = "-1" then
+                       finishCurrent ()
+                   else
+                       currentMoves.Add move
+
+        finishCurrent ()
+        result |> Map.ofSeq
 
     // --- Moves -------------------------------------------------------------
 

@@ -63,6 +63,7 @@
     <Compile Include="Data\Generated\Species.Generated.fs" />
     <Compile Include="Data\Generated\Moves.Generated.fs" />
     <Compile Include="Data\Generated\TmHm.Generated.fs" />
+    <Compile Include="Data\Generated\EggMoves.Generated.fs" />
     <Compile Include="Data\Generated\EvosAttacks.Generated.fs" />
     <Compile Include="Data\Generated\SpriteMovement.Generated.fs" />
     <Compile Include="Data\Generated\Maps.Generated.fs" />
@@ -82,6 +83,7 @@
     <Compile Include="Data\Species.fs" />
     <Compile Include="Data\Moves.fs" />
     <Compile Include="Data\EvosAttacks.fs" />
+    <Compile Include="Data\EggMoves.fs" />
     <Compile Include="Data\Maps.fs" />
     <Compile Include="Data\Content.fs" />
     <Compile Include="Data\Items.fs" />
@@ -251,6 +253,7 @@
     <GameDataInput Include="$(RepoRoot)data\moves\moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\base_stats\*.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\evos_attacks.asm" />
+    <GameDataInput Include="$(RepoRoot)data\pokemon\egg_moves.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\names.asm" />
     <GameDataInput Include="$(RepoRoot)data\pokemon\dex_entries\gold\*.asm" />
     <GameDataInput Include="$(RepoRoot)data\items\attributes.asm" />
@@ -289,6 +292,7 @@
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TmHm.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\EggMoves.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\EvosAttacks.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\SpriteMovement.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Maps.Generated.fs" />

@@ -304,7 +304,10 @@ let private species name t1 t2 : BaseStats =
       Item1 = None
       Item2 = None
       GenderRatio = 255
-      GrowthRate = 0 }
+      GrowthRate = 0
+      EggGroup1 = 15
+      EggGroup2 = 15
+      HatchCycles = 0 }
 
 /// A battler with explicit stats (physical == special so the class never changes
 /// the numbers) and neutral stages, for deterministic damage tests.
