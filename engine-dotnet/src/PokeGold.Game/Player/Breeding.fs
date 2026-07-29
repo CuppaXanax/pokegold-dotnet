@@ -74,6 +74,13 @@ module Breeding =
         |> List.choose (fun (id, _) -> Moves.tryByIndex id |> Option.map (fun move -> move.Name))
         |> List.filter (fun move -> Set.contains move eggMoves || Set.contains move tmHmMoves)
 
+    /// Gen 2's community-verified conversion from base-stat hatch cycles to
+    /// overworld steps is 256 steps per cycle; the source stores only the cycles.
+    let hatchStepsFor (speciesId: int) : int =
+        speciesById speciesId
+        |> Option.map (fun species -> species.HatchCycles * 256)
+        |> Option.defaultValue 0
+
     /// Generate an egg from two parents. The egg is the base species of the mother.
     let generateEgg (mon1: PartyMon) (mon2: PartyMon) : PartyMon =
         let offspringSpecies =
@@ -88,17 +95,10 @@ module Breeding =
                 @ inheritedMoves offspring mon2
                 |> moveSlots
             let egg = PartyMon.create offspringSpecies 5
-            { egg with Nickname = "EGG"; Friendship = 0; Moves = moves }
+            { egg with Nickname = "EGG"; Friendship = 0; Moves = moves; HatchSteps = Some(hatchStepsFor offspringSpecies) }
         | None ->
             let egg = PartyMon.create offspringSpecies 5
-            { egg with Nickname = "EGG"; Friendship = 0 }
+            { egg with Nickname = "EGG"; Friendship = 0; HatchSteps = Some(hatchStepsFor offspringSpecies) }
 
     let isEgg (mon: PartyMon) : bool =
         mon.Nickname = "EGG"
-
-    /// Gen 2's community-verified conversion from base-stat hatch cycles to
-    /// overworld steps is 256 steps per cycle; the source stores only the cycles.
-    let hatchStepsFor (speciesId: int) : int =
-        speciesById speciesId
-        |> Option.map (fun species -> species.HatchCycles * 256)
-        |> Option.defaultValue 0

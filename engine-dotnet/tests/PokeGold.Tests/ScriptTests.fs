@@ -460,12 +460,12 @@ let ``elevator suspends with its source floor-data label`` () =
     | other -> Assert.Fail($"expected OpenElevator FloorData, got {other}")
 
 [<Fact>]
-let ``giveegg suspends as GivePoke`` () =
+let ``giveegg suspends as GiveEgg`` () =
     let prog = parse "S:\n\tgiveegg CYNDAQUIL, 5\n\tend\n"
 
     match Script.start "S" World.empty prog "" with
-    | { Outcome = Suspended(_, GivePoke("CYNDAQUIL", 5, None, None, None)) } -> ()
-    | other -> Assert.Fail($"expected GivePoke effect, got {other}")
+    | { Outcome = Suspended(_, GiveEgg("CYNDAQUIL", 5)) } -> ()
+    | other -> Assert.Fail($"expected GiveEgg effect, got {other}")
 
 [<Fact>]
 let ``trade parses as a typed deferred opcode`` () =

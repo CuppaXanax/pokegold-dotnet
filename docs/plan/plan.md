@@ -411,9 +411,10 @@ Many specials have useful seams, but some are simplified or skipped.
   - Implement egg groups, gender rules, Ditto rules, species inheritance, move inheritance, hatch cycles, and parent growth.
   - Advance egg generation through runtime steps.
 
-- ⬜ **SCR-006 — Implement egg hatching.**
+- ✅ **SCR-006 — Implement egg hatching.**
   - Eggs count down while walking, hatch through a runtime scene, become usable Pokémon, and update the Pokédex.
   - Saving and loading preserves remaining cycles.
+  - Proved by `EggHatchTests`: eggs decrement once per overworld step, hatch in place with their generated level and moves, register seen/owned species only on hatch, and preserve mid-countdown state through save/reload.
 
 - 🟡 **SCR-007 — Finish the Bug-Catching Contest.**
   - Replace deterministic/minimal contest behavior with a playable timed or explicitly approved equivalent loop.
