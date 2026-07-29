@@ -30,6 +30,7 @@
     <Compile Include="AudioTests.fs" />
     <Compile Include="ScriptTests.fs" />
     <Compile Include="ScriptCommandConformanceTests.fs" />
+    <Compile Include="MapDispatchConformanceTests.fs" />
     <Compile Include="HealTests.fs" />
     <Compile Include="StdScriptsTests.fs" />
     <Compile Include="StoryGateTests.fs" />
