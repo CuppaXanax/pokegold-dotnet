@@ -24,6 +24,8 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Fresh-save/no-shortcuts runtime proof now boots only with `StartNewGame`,
   drives real inputs through the New Bark home, Elm's Lab, and starter
   acquisition, and asserts `RuntimeInvariants.assertHold` across the trace.
+- Route checkpoint helpers capture ordinary runtime save files, resume later
+  route legs from prior earned saves, and verify SHA-256-backed ancestry chains.
 - Build-time map script generation expands Goldenrod Underground `ugdoor_def` /
   `changeugdoor` macros without generic `Unsupported` script commands.
 - Generated trainer data preserves all 495 source party layouts, held items,

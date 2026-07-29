@@ -17,7 +17,8 @@ Read this file, then read only the files each work item names.
 end-to-end from the New Bark bedroom to the credits after Red (`GoldenPathStoryGateTests`
 gates **G1–G14**). A fresh-save/no-shortcuts runtime test now drives real input from
 `StartNewGame` through Elm's starter gift, and an automated obtainability proof covers all
-251 Pokédex species as a static source inventory, not as a runtime completion proof. Explicit
+251 Pokédex species as a static source inventory, not as a runtime completion proof. Durable
+route helpers now capture ordinary save files and verify checkpoint ancestry and hashes. Explicit
 trainer and wild source moves, held items, and generated attributes now reach runtime
 battles, while missing or invalid production staging fails visibly instead of creating a
 substitute. Stable identities now carry each Pokémon through battle, reordering, boxing,

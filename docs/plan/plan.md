@@ -491,7 +491,7 @@ A no-shortcuts runtime test reaches Elm’s starter; the remaining route uses st
 
 - ✅ **RTE-001 — Preserve `GameDriver` and per-frame invariants.**
 - ✅ **RTE-002 — Preserve the opening no-shortcuts proof through Elm’s starter.**
-- ⬜ **RTE-003 — Add durable route checkpoint helpers.**
+- ✅ **RTE-003 — Add durable route checkpoint helpers.**
   - Checkpoints are ordinary save files captured from the continuous run, not constructed state.
   - Each later test may load the prior earned checkpoint to control test duration.
   - A separate chaining test verifies checkpoint ancestry and hashes.

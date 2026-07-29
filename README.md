@@ -50,6 +50,8 @@ See [`docs/status.md`](docs/status.md) for the concise handoff status and
 - The test suite covers many core systems: graphics/data parsing, map rendering,
   collision, movement, scripts, story gates, battles, save/load, audio, menus,
   field moves, encounters, party/bag/storage systems, and conformance ledgers.
+- Continuous-route tests can persist ordinary runtime save files as durable
+  checkpoints and verify their SHA-256-backed ancestry before resuming.
 - The desktop host can run the native engine without a ROM.
 
 ## What is not done yet

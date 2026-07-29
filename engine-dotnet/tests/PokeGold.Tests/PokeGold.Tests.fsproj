@@ -9,6 +9,8 @@
     <Compile Include="DisplayTests.fs" />
     <Compile Include="PngTests.fs" />
     <Compile Include="GameDriver.fs" />
+    <Compile Include="RouteCheckpoint.fs" />
+    <Compile Include="RouteCheckpointTests.fs" />
     <Compile Include="RuntimeInvariants.fs" />
     <Compile Include="GameInputTests.fs" />
     <Compile Include="RuntimeDriverTests.fs" />
