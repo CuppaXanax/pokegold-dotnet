@@ -405,6 +405,78 @@ let ``card flip special plays a three coin fair game when player has coin case``
     Assert.True([ 0; 6 ] |> List.contains scene.DebugPlayer.Coins)
 
 [<Fact>]
+let ``SCR-008 slot winnings from a small balance buy Goldenrod Abra`` () =
+    let content = Content()
+    let slotState =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "SlotMachineScene"
+            (Array.append (Array.create 67 (Special "SlotMachine")) [| End |])
+
+    let startingPlayer =
+        { PlayerStateOps.initial with
+            Coins = 3
+            Bag = Bag.add "COIN_CASE" 1 PlayerStateOps.initial.Bag }
+
+    let slots =
+        OverworldScene(
+            content,
+            SilentSound(),
+            slotState,
+            encounterRandom = FixedRandom(List.replicate 67 16)
+        )
+
+    slots.Restore(World.empty, startingPlayer)
+    Assert.Equal(204, slots.DebugPlayer.Coins)
+
+    let prizeCounter =
+        OverworldScene(content, SilentSound(), OverworldState.loadByIdAt content "GoldenrodGameCorner" 18 3 Up)
+
+    prizeCounter.Restore(slots.DebugWorld, slots.DebugPlayer)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(prizeCounter :> Scene)
+
+    let tick buttons =
+        (stack.[stack.Count - 1].Update buttons) |> applyTransition stack
+
+    tick { Buttons.none with A = true }
+    tick Buttons.none
+
+    let completed () =
+        let player = prizeCounter.DebugPlayer
+        stack.Count = 1
+        && player.Coins = 4
+        && (player.Party |> List.exists (fun mon -> mon.SpeciesId = 63 && mon.Level = 10))
+        && Set.contains 63 player.DexSeen
+        && Set.contains 63 player.DexOwn
+
+    let mutable frame = 0
+    let mutable cancelMoves = 0
+
+    while frame < 6000 && not (completed ()) do
+        frame <- frame + 1
+        let boughtAbra = prizeCounter.DebugPlayer.Party |> List.exists (fun mon -> mon.SpeciesId = 63)
+
+        let buttons =
+            match stack.[stack.Count - 1].GetType().Name with
+            | "TextBoxScene"
+            | "YesNoScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | "ScriptMenuScene" when boughtAbra && frame % 2 = 0 && cancelMoves < 3 ->
+                cancelMoves <- cancelMoves + 1
+                { Buttons.none with Down = true }
+            | "ScriptMenuScene" when frame % 2 = 0 -> { Buttons.none with A = true }
+            | _ -> Buttons.none
+
+        tick buttons
+
+    Assert.True(completed (), "Slot winnings should reach Goldenrod's Abra price and redeem through its real prize-counter script.")
+
+[<Fact>]
 let ``checkcoins returns HAVE_LESS for insufficient coins`` () =
     let content = Content()
     let state =

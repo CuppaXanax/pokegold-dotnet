@@ -152,7 +152,7 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "GameCornerPrizeMonCheckDex" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B7 runtime test covers setval-staged prize dex registration before the Celadon Porygon givepoke path."
 
-          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B7 tests cover SlotMachine/CardFlip script dispatch and a minimal fair coin-game runtime seam; exact reel/card UI remains future Game Corner polish."
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-008 covers source-derived SlotMachine payout tiers, including the lucky-bias table, and a runtime earn-then-redeem route to Goldenrod's Abra prize; exact reel/card UI remains future Game Corner polish."
             [ "SlotMachine"; "CardFlip" ]
 
           yield entry ScriptSpecial "NameRater" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B8 tests cover Goldenrod Name Rater runtime selection and renaming through NamingScene; exact internal text prompts remain UI polish."
