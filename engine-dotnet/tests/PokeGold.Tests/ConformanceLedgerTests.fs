@@ -60,13 +60,12 @@ module ConformanceLedger =
     let all: LedgerEntry list =
         [
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "Runtime has a typed path, but behavior still needs command-level conformance proof."
-            [ "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"
-              "Loadwildmon"; "Checkpoke"; "Loadtrainer"; "Reloadmapafterbattle"; "Winlosstext"; "Setlasttalked"; "Giveegg"
+            [ "Reloadmapafterbattle"
               "Applymovement"; "Faceplayer"; "Faceobject"; "Disappear"; "Appear"; "Turnobject"; "Moveobject"; "Follow"; "Stopfollow"; "Variablesprite"; "Pause"; "Showemote"; "Earthquake"
               "Playmusic"; "Playsound"
               "Warpfacing"; "Reloadmap"; "Refreshmap"; "Doorstate"; "Dontrestartmapmusic"; "Playmapmusic"; "Musicfadeout"; "Newloadmap"; "Blackoutmod"; "Reanchormap"
-              "End"; "EndAll"; "Halloffame"; "Credits"; "Special"; "Pokemart"
-              "Checktime"; "Endifjustbattled"; "Gettrainername"; "Getitemname"; "Getmonname"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
+              "End"; "EndAll"; "Halloffame"; "Credits"; "Special"
+              "Checktime"; "Endifjustbattled"; "Getstring"; "Getnum"; "Getcurlandmarkname"; "TeleportFrom"; "TreeShake" ]
 
           yield! many ScriptCommandCase ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "No generated map script invokes these commands; their standard-script or source-asset paths cannot be proven with the map-command conformance harness."
             [ "Callstd"; "Setval"; "Writevar"; "Loadmem"; "Checkmapscene" ]
@@ -99,6 +98,13 @@ module ConformanceLedger =
             [ "Scall"; "Sjump"; "Iffalse"; "Iftrue"; "Ifequal"; "Ifnotequal"; "Ifgreater"; "Ifless"
               "Addval"; "Readvar"; "Loadvar"; "Readmem"; "Writemem"; "Random"
               "Checkevent"; "Checkflag"; "Setmapscene"; "Checkscene"; "Setscene"; "Checkitem" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-004 runs generated map commands through OverworldScene and proves wild and trainer battle staging (including trainer win/loss text and last-talked actor), Togepi egg acceptance/full-party refusal, source money/coin affordability and mutation, and resolved source mart inventory reaching MartScene. Givemoney uses the same generated source amount in an isolated handler test because no generated invocation exists. Exact native menu and battle presentation remain outside this runtime-state seam."
+            [ "Loadwildmon"; "Loadtrainer"; "Winlosstext"; "Setlasttalked"; "Giveegg"
+              "Checkmoney"; "Takemoney"; "Givemoney"; "Checkcoins"; "Takecoins"; "Givecoins"; "Pokemart" ]
+
+          yield! many ScriptCommandCase FaithfulTested [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "No generated map or standard script invokes these commands. SCR-004 therefore tests their live OverworldScene handlers with real source species and data-table operands: party membership and resolved species, item, and trainer display-name buffers. Source-specific invocation and presentation formatting quirks remain unproven."
+            [ "Checkpoke"; "Gettrainername"; "Getitemname"; "Getmonname" ]
 
           yield entry ScriptCommandCase "Checkjustbattled" ImplementedApproximate [ CriticalPathJohto; CriticalPathKanto; RequiredFor100Percent ] "SCR-001 ScriptTests prove the source-compatible transient trainer-script truth value, false branch, and one-shot endifjustbattled consumption through the port's __just_battled state seam."
 
