@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-17.
+Last updated: 2026-08-02.
 
 ## Current goal
 
@@ -110,7 +110,7 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
 - Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\tests\PokeGold.Tests` (1459/1459) are green from `engine-dotnet`.
+  .\\tests\\PokeGold.Tests` (~1530) are green from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps

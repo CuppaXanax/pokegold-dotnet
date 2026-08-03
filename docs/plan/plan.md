@@ -10,10 +10,10 @@ The project has a substantial native F#/.NET engine, but it is not yet a demonst
 
 Estimated current position:
 
-- Approximately **55% complete toward a 100%-able Pokémon Gold**.
-- Approximately **65–70% of an ordinary route through Red is represented in code or isolated tests**.
+- Approximately **70% complete toward a 100%-able Pokémon Gold**.
+- Approximately **75–80% of an ordinary route through Red is represented in code or isolated tests**.
 - **Under 15% of that route is proven as one continuous fresh-save runtime playthrough**.
-- The current desktop suite records **1,446 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
+- The current desktop suite records **~1,530 passing tests**, but this means implemented slices pass their tests—not that the game is completable.
 
 The following foundations are real and worth preserving:
 
