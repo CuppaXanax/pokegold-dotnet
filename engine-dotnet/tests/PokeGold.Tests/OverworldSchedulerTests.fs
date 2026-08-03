@@ -105,6 +105,27 @@ let private scriptedScene content mapId x y facing label commands =
             { Commands = commands
               Labels = Map.ofList [ label, 0 ] } }
 
+let private runContestJudging score species (rng: System.Random) =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ContestJudgingScene"
+            [| Special "BugContestJudging"; End |]
+
+    let world =
+        World.empty
+        |> World.setVar "__bug_contest_caught_species" species
+        |> World.setVar "__bug_contest_caught_score" score
+
+    let scene = OverworldScene(content, SilentSound(), state, encounterRandom = rng)
+    scene.Restore(world, PlayerStateOps.initial)
+    scene
+
 let private moveId name =
     MovesData.byIndex |> Array.findIndex (fun move -> move.Name = name)
 
@@ -503,6 +524,95 @@ let ``checkcoins returns HAVE_LESS for insufficient coins`` () =
     scene.Restore(World.empty, player)
 
     Assert.Equal(50, scene.DebugPlayer.Coins)
+
+[<Fact>]
+let ``bug contest score uses calculated stats remaining hp held item and DVs`` () =
+    let species = Species.byName "CATERPIE"
+    let mon =
+        { PartyMon.createWithDvs species.Dex 10 0x0000 with
+            Hp = 16
+            HeldItem = Some "BERRY" }
+    let stats = BattleMon.calculateStats species mon.Level mon.Dvs mon.StatExp
+    let expected =
+        stats.MaxHp * 4
+        + stats.Attack
+        + stats.Defense
+        + stats.Speed
+        + stats.SpAttack
+        + stats.SpDefense
+        + mon.Hp / 8
+        + 1
+
+    Assert.Equal(expected, BugContestScore.calculate mon)
+    Assert.Equal(0, BugContestScore.dvBonus 0x0000)
+    Assert.Equal(30, BugContestScore.dvBonus 0xffff)
+
+[<Fact>]
+let ``bug contest NPC scores vary with a seeded contest RNG`` () =
+    let first = (runContestJudging 400 123 (System.Random(1))).DebugWorld
+    let second = (runContestJudging 400 123 (System.Random(2))).DebugWorld
+    let scores (world: World) =
+        [ 1..5 ]
+        |> List.map (fun index -> World.getVar (sprintf "__bug_contest_npc_score_%d" index) world)
+
+    Assert.False(scores first = scores second)
+    Assert.All(scores first, fun score -> Assert.InRange(score, 226, 375))
+    Assert.All(scores second, fun score -> Assert.InRange(score, 226, 375))
+
+[<Fact>]
+let ``bug contest placement maps the player to first second third or no place`` () =
+    let npcScores = [ 300; 286; 357; 332; 318 ]
+    Assert.Equal(1, BugContestPlacement.playerPlacement 400 npcScores)
+    Assert.Equal(2, BugContestPlacement.playerPlacement 340 npcScores)
+    Assert.Equal(3, BugContestPlacement.playerPlacement 320 npcScores)
+    Assert.Equal(0, BugContestPlacement.playerPlacement 250 npcScores)
+
+[<Fact>]
+let ``bug contest judging returns the placement prize mapping and no catch returns zero`` () =
+    let judging score species =
+        let scene = runContestJudging score species (FixedRandom(List.replicate 10 0))
+        World.getVar "__bug_contest_placement" scene.DebugWorld
+
+    Assert.Equal(1, judging 400 123)
+    Assert.Equal(2, judging 340 123)
+    Assert.Equal(3, judging 320 123)
+    Assert.Equal(0, judging 0 0)
+
+[<Fact>]
+let ``bug contest capture tracks the caught species and score`` () =
+    let content = Content()
+    let state =
+        scriptedScene
+            content
+            "NewBarkTown"
+            5
+            5
+            Down
+            "ContestCatchScene"
+            [| Loadwildmon("SCYTHER", 5); Startbattle; End |]
+
+    let player =
+        { PlayerStateOps.initial with
+            Party = [ PartyMon.create (Species.byName "CYNDAQUIL").Dex 20 ]
+            Bag = Bag.empty |> Bag.add "MASTER_BALL" 1 }
+    let world = World.empty |> World.setFlag "ENGINE_BUG_CONTEST_TIMER"
+    let scene = OverworldScene(content, SilentSound(), state)
+    scene.Restore(world, player)
+
+    let stack = ResizeArray<Scene>()
+    stack.Add(scene :> Scene)
+    applyTransition stack ((scene :> Scene).Update Buttons.none)
+
+    let mutable frame = 0
+    while frame < 1000 && stack.Count > 1 do
+        frame <- frame + 1
+        applyTransition stack (stack.[stack.Count - 1].Update (driveBattlePackFirstItem frame stack.[stack.Count - 1]))
+
+    Assert.Equal(1, stack.Count)
+    (scene :> Scene).Update Buttons.none |> ignore
+    let caught = scene.DebugPlayer.Party |> List.last
+    Assert.Equal((Species.byName "SCYTHER").Dex, caught.SpeciesId)
+    Assert.Equal(BugContestScore.calculate caught, World.getVar "__bug_contest_caught_score" scene.DebugWorld)
 
 [<Fact>]
 let ``contest drop off masks party to lead mon`` () =

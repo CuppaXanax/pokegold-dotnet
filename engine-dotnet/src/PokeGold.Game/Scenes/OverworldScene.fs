@@ -55,6 +55,100 @@ module GameCorner =
 
             { player with Coins = min 9999 (max 0 (player.Coins - 3 + payout)) }
 
+type BugContestCatch =
+    { SpeciesId: int
+      BaseScore: int }
+
+type BugContestContestant =
+    { Name: string
+      Catches: BugContestCatch array }
+
+module BugContest =
+    let private catch speciesId baseScore =
+        { SpeciesId = speciesId
+          BaseScore = baseScore }
+
+    let contestants =
+        [| { Name = "Don"
+             Catches = [| catch 14 300; catch 11 285; catch 10 226 |] }
+           { Name = "Ed"
+             Catches = [| catch 12 286; catch 12 251; catch 10 237 |] }
+           { Name = "Nick"
+             Catches = [| catch 123 357; catch 12 349; catch 127 368 |] }
+           { Name = "William"
+             Catches = [| catch 127 332; catch 12 324; catch 48 321 |] }
+           { Name = "Benny"
+             Catches = [| catch 12 318; catch 13 295; catch 10 285 |] }
+           { Name = "Barry"
+             Catches = [| catch 127 366; catch 48 329; catch 14 314 |] }
+           { Name = "Cindy"
+             Catches = [| catch 12 341; catch 11 301; catch 10 264 |] }
+           { Name = "Josh"
+             Catches = [| catch 123 326; catch 12 292; catch 11 282 |] }
+           { Name = "Samuel"
+             Catches = [| catch 13 270; catch 127 282; catch 10 251 |] }
+           { Name = "Kipp"
+             Catches = [| catch 48 267; catch 46 254; catch 14 259 |] } |]
+
+    /// Set by SelectRandomBugContestContestants for contestants who do not enter.
+    let contestantFlags =
+        [| "EVENT_BUG_CATCHING_CONTESTANT_1A"
+           "EVENT_BUG_CATCHING_CONTESTANT_2A"
+           "EVENT_BUG_CATCHING_CONTESTANT_3A"
+           "EVENT_BUG_CATCHING_CONTESTANT_4A"
+           "EVENT_BUG_CATCHING_CONTESTANT_5A"
+           "EVENT_BUG_CATCHING_CONTESTANT_6A"
+           "EVENT_BUG_CATCHING_CONTESTANT_7A"
+           "EVENT_BUG_CATCHING_CONTESTANT_8A"
+           "EVENT_BUG_CATCHING_CONTESTANT_9A"
+           "EVENT_BUG_CATCHING_CONTESTANT_10A" |]
+
+module BugContestScore =
+    let private speciesByDex speciesId =
+        Species.all
+        |> Map.tryPick (fun _ species -> if species.Dex = speciesId then Some species else None)
+
+    /// The source uses bit manipulation over the two DV bytes. Keeping the two
+    /// lowest bits of each DV preserves the small DV contribution without
+    /// duplicating the byte-oriented implementation.
+    let dvBonus dvs =
+        let attack = BattleMon.attackDv dvs
+        let defense = BattleMon.defenseDv dvs
+        let speed = BattleMon.speedDv dvs
+        let special = BattleMon.specialDv dvs
+        let lowestBits = BattleMon.hpDv dvs
+        let secondBits =
+            (((attack >>> 1) &&& 1) <<< 3)
+            ||| (((defense >>> 1) &&& 1) <<< 2)
+            ||| (((speed >>> 1) &&& 1) <<< 1)
+            ||| ((special >>> 1) &&& 1)
+        lowestBits + secondBits
+
+    let calculate (mon: PartyMon) =
+        match speciesByDex mon.SpeciesId with
+        | None -> 0
+        | Some species ->
+            let stats = BattleMon.calculateStats species mon.Level mon.Dvs mon.StatExp
+            stats.MaxHp * 4
+            + stats.Attack
+            + stats.Defense
+            + stats.Speed
+            + stats.SpAttack
+            + stats.SpDefense
+            + dvBonus mon.Dvs
+            + max 0 mon.Hp / 8
+            + (if mon.HeldItem.IsSome then 1 else 0)
+
+module BugContestPlacement =
+    let playerPlacement playerScore npcScores =
+        (1, playerScore)
+        :: (npcScores |> List.mapi (fun index score -> index + 2, score))
+        |> List.sortBy (fun (contestantId, score) -> -score, contestantId)
+        |> List.tryFindIndex (fun (contestantId, _) -> contestantId = 1)
+        |> function
+            | Some index when index < 3 -> index + 1
+            | _ -> 0
+
 type OakPokedexRating =
     { Number: int
       MaxOwned: int
@@ -1393,6 +1487,14 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             world
             |> World.setVar "wParkBallsRemaining" 20
             |> World.setVar "__bug_contest_caught_species" 0
+            |> World.setVar "__bug_contest_caught_score" 0
+            |> World.setVar "__bug_contest_player_score" 0
+            |> World.setVar "__bug_contest_placement" 0
+
+        world <-
+            [ 1..BugContest.contestants.Length ]
+            |> List.fold (fun current index -> World.setVar (sprintf "__bug_contest_npc_score_%d" index) 0 current) world
+
         player <- { player with Bag = Bag.add "PARK_BALL" 20 player.Bag }
 
     member private _.ContestDropOffMons() =
@@ -1411,11 +1513,57 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | None -> ()
 
     member private _.BugContestJudgingResult() =
-        match World.getVar "__bug_contest_caught_species" world with
-        | 123
-        | 127 -> 1
-        | species when species > 0 -> 3
-        | _ -> 0
+        let caughtSpecies = World.getVar "__bug_contest_caught_species" world
+
+        if caughtSpecies <= 0 then
+            world <-
+                world
+                |> World.setVar "__bug_contest_player_score" 0
+                |> World.setVar "__bug_contest_placement" 0
+            0
+        else
+            world <-
+                [ 1..BugContest.contestants.Length ]
+                |> List.fold (fun current index -> World.setVar (sprintf "__bug_contest_npc_score_%d" index) 0 current) world
+
+            let playerScore =
+                let storedScore = World.getVar "__bug_contest_caught_score" world
+
+                if storedScore > 0 then
+                    storedScore
+                else
+                    player.Party
+                    |> List.tryFind (fun mon -> mon.SpeciesId = caughtSpecies)
+                    |> Option.map BugContestScore.calculate
+                    |> Option.defaultWith (fun () ->
+                        let fallback = PartyMon.create caughtSpecies 20
+                        BugContestScore.calculate fallback)
+
+            let selectedContestants =
+                BugContest.contestantFlags
+                |> Array.mapi (fun index flag -> index, flag)
+                |> Array.choose (fun (index, flag) ->
+                    if World.hasEvent flag world then None else Some index)
+                |> Array.toList
+                |> function
+                    | selected when selected.Length = 5 -> selected
+                    | _ -> [ 0..4 ]
+
+            let npcScores =
+                selectedContestants
+                |> List.map (fun index ->
+                    let contestant = BugContest.contestants.[index]
+                    let catchIndex = encounterRng.Next(contestant.Catches.Length)
+                    let score = contestant.Catches.[catchIndex].BaseScore + encounterRng.Next(8)
+                    world <- World.setVar (sprintf "__bug_contest_npc_score_%d" (index + 1)) score world
+                    score)
+
+            let placement = BugContestPlacement.playerPlacement playerScore npcScores
+            world <-
+                world
+                |> World.setVar "__bug_contest_player_score" playerScore
+                |> World.setVar "__bug_contest_placement" placement
+            placement
 
     member private _.CheckPartyFullAfterContest() =
         player <- { player with Bag = Bag.remove "PARK_BALL" 99 player.Bag }
@@ -1526,7 +1674,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 DexOwn = Set.add mon.Species.Dex player.DexOwn }
 
         if World.hasFlag "ENGINE_BUG_CONTEST_TIMER" world then
-            world <- World.setVar "__bug_contest_caught_species" mon.Species.Dex world
+            world <-
+                world
+                |> World.setVar "__bug_contest_caught_species" mon.Species.Dex
+                |> World.setVar "__bug_contest_caught_score" (BugContestScore.calculate captured)
 
         if updatedPlayer.Party.Length < BoxOps.partyLength then
             player <- { updatedPlayer with Party = updatedPlayer.Party @ [ captured ] }

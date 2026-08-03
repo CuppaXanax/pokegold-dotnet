@@ -176,7 +176,7 @@ module ConformanceLedger =
 
           yield entry ScriptSpecial "NameRater" ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B8 tests cover Goldenrod Name Rater runtime selection and renaming through NamingScene; exact internal text prompts remain UI polish."
 
-          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "B9 tests cover Park Ball setup, party drop-off/return seams, deterministic contestant selection, Scyther/Pinsir first-place judging, and caught-mon result cleanup; exact timed contest UI and NPC score randomization remain future polish."
+          yield! many ScriptSpecial ImplementedApproximate [ SideSystem; RequiredFor100Percent ] "SCR-007 OverworldSchedulerTests cover Park Ball setup, contest-mon score tracking, source NPC contestant tables with seeded score perturbation, player score calculation, and first/second/third/no-place results; the DV bonus remains an intentionally small approximation of the source bit routine."
             [ "BugContestJudging"; "CheckPartyFullAfterContest"; "ContestDropOffMons"; "ContestReturnMons"; "GiveParkBalls"; "SelectRandomBugContestContestants" ]
 
           yield entry ScriptSpecial "BillsGrandfather" FaithfulTested [ SideSystem; RequiredFor100Percent ] "B10 tests cover party selection returning the selected species id and BillsHouse reward/reject branches with the species-name text buffer."
