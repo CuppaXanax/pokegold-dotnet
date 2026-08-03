@@ -174,3 +174,33 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
    source.
 3. After the route gate is proven, update public docs with the exact command,
    current test count, and a host screenshot or GIF.
+
+## Release verification (Epic 5)
+
+**Test command:** `dotnet test .\tests\PokeGold.Tests` from `engine-dotnet/`.
+**Current count:** 1,543 tests, 0 failures (2026-08-02).
+**Supported platform:** Windows desktop (MonoGame DesktopGL).
+**Scope:** Pokemon Gold only; no Silver, Crystal, or ROM input.
+
+### Automated REL coverage
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| REL-001 Conformance ledger | Covered | Zero `Unknown` entries remain. `StubNoOp` debt is all Cosmetic, LinkOnly, or SideSystem — none blocks the golden route. |
+| REL-002 Fallback audit | Covered | Script, encounter, and menu fallbacks have test-backed ledger entries. Silent swallowing would break existing runtime-path tests. |
+| REL-003 Sprite gaps | Partial | CoverageSweepTests validates sprite/tile coverage. Manual visual verification deferred (REL-011). |
+| REL-006 No placeholder text | Covered | Runtime route tests traverse real text scripts; no `TODO`/placeholder in user-visible paths. |
+| REL-007 Three starters | Partial | Cyndaquil fully tested via fresh-save route. Totodile/Chikorita share the same code path but lack dedicated route tests. |
+| REL-008 Loss/retry | Covered | BAT-018: Falkner, Lance, and Red loss blackout tests, plus save-reload-retry. |
+| REL-009 Save/load | Covered | Egg hatch, Cut tree, route checkpoint save/reload tests; battle state round-tripping. |
+| REL-010 Cancellation | Covered | Evolution cancel, move-learn cancel, mart cancel, pack cancel, PC box, trade cancel, save-menu cancel. |
+| REL-013 Clean build | Proven | `dotnet build` and `dotnet test` pass without Android SDK or ROM. |
+| REL-014 Docs aligned | Done | README.md and status.md updated with current test count, platform, and scope. |
+
+### Human-only (deferred)
+
+- REL-004: Battle animation primitives (visual quality).
+- REL-005: Cries, fades, credits presentation.
+- REL-011: Manual fresh-save playthrough.
+- REL-012: Manual completion-channel pass.
+- REL-015: Release screenshots/video evidence.
