@@ -84,6 +84,11 @@ let ``critical New Bark story scenes are generated from symbolic constants`` () 
     // scene for the return trip. This is another cross-map symbolic scene operand.
     Assert.Contains(Setmapscene("ELMS_LAB", 3), mrPokemon.Script.Commands)
 
+    // `scene_const` entries still occupy a scene id even though they have no
+    // entry script. Elm uses scene 6 for the aide's Poké Ball coord trigger.
+    Assert.Equal("SCENE_ELMSLAB_AIDE_GIVES_POKE_BALLS", elm.Events.Scenes.[6])
+    Assert.Equal("", elm.Events.SceneLabels.[6])
+
 [<Fact>]
 let ``every generated map has a non-empty const and matching name`` () =
     for kv in MapsData.all do

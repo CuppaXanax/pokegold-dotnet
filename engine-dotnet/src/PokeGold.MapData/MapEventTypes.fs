@@ -149,6 +149,9 @@ module MapEventParser =
                 | "scene_script" ->
                     sceneLabels.Add(arg 0)
                     scenes.Add(arg 1)
+                | "scene_const" ->
+                    sceneLabels.Add("")
+                    scenes.Add(arg 0)
                 | "callback" ->
                     callbacks.Add({ Kind = arg 0; Label = arg 1 })
                 | "warp_event" ->
