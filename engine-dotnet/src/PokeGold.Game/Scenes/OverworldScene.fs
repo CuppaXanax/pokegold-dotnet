@@ -149,6 +149,38 @@ module BugContestPlacement =
             | Some index when index < 3 -> index + 1
             | _ -> 0
 
+module BugContestTimer =
+    [<Literal>]
+    let FramesPerSecond = 60
+
+    [<Literal>]
+    let DurationSeconds = 20 * 60
+
+    [<Literal>]
+    let DurationFrames = DurationSeconds * FramesPerSecond
+
+    [<Literal>]
+    let RemainingVar = "__bug_contest_frames_remaining"
+
+    [<Literal>]
+    let TimeUpVar = "__bug_contest_time_up"
+
+    let start world =
+        world
+        |> World.setVar RemainingVar DurationFrames
+        |> World.setVar TimeUpVar 0
+
+    let tick world =
+        let remaining = World.getVar RemainingVar world
+
+        if remaining <= 1 then
+            world
+            |> World.setVar RemainingVar 0
+            |> World.setVar TimeUpVar 1
+            |> World.clearFlag "ENGINE_BUG_CONTEST_TIMER"
+        else
+            World.setVar RemainingVar (remaining - 1) world
+
 type OakPokedexRating =
     { Number: int
       MaxOwned: int
@@ -1507,6 +1539,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             |> World.setVar "__bug_contest_player_score" 0
             |> World.setVar "__bug_contest_placement" 0
 
+        world <- BugContestTimer.start world
+
         world <-
             [ 1..BugContest.contestants.Length ]
             |> List.fold (fun current index -> World.setVar (sprintf "__bug_contest_npc_score_%d" index) 0 current) world
@@ -1527,6 +1561,10 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
             player <- { player with Party = (player.Party @ rest) |> List.truncate BoxOps.partyLength }
             contestPartyBackup <- None
         | None -> ()
+
+    member this.AdvanceBugContestTimer() =
+        if World.hasFlag "ENGINE_BUG_CONTEST_TIMER" world then
+            world <- BugContestTimer.tick world
 
     member private _.BugContestJudgingResult() =
         let caughtSpecies = World.getVar "__bug_contest_caught_species" world
@@ -2519,13 +2557,22 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         scene
 
     member private _.CaptureBlockers() : string list =
-        [ if pending.IsSome then "pending child scene"
-          if pendingElevatorDestination.IsSome then "elevator transition"
-          if runningMove.IsSome then "scripted movement"
-          if pauseVm.IsSome || pauseFrames > 0 then "script pause"
-          if fadeVm.IsSome || fadeRun.IsSome || fadeOverlay.IsSome then "palette fade"
-          if scriptQueue.Count > 0 then "queued script continuation"
-          if followPair.IsSome then "active follow relationship" ]
+        [ if (World.hasFlag "ENGINE_BUG_CONTEST_TIMER" world) || contestPartyBackup.IsSome then
+              "active bug contest"
+          if pending.IsSome then
+              "pending child scene"
+          if pendingElevatorDestination.IsSome then
+              "elevator transition"
+          if runningMove.IsSome then
+              "scripted movement"
+          if pauseVm.IsSome || pauseFrames > 0 then
+              "script pause"
+          if fadeVm.IsSome || fadeRun.IsSome || fadeOverlay.IsSome then
+              "palette fade"
+          if scriptQueue.Count > 0 then
+              "queued script continuation"
+          if followPair.IsSome then
+              "active follow relationship" ]
 
     /// True when all transient runtime state is idle and a persistent save snapshot
     /// can faithfully represent the overworld.

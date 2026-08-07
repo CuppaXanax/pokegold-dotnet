@@ -310,6 +310,11 @@ type Game(?saveDirectory: string) =
         // whatever is held this frame, so the newly-active scene starts clean.
         let armMask () = inputMask <- buttons
 
+        // The ROM checks the contest timer from the overworld time-event loop,
+        // independent of movement. Tick the persisted frame budget at the host's
+        // fixed 60 Hz boundary, including while a child scene is on top.
+        overworld |> Option.iter (fun ow -> ow.AdvanceBugContestTimer())
+
         match scenes.Peek().Update(effective) with
         | Stay -> ()
         | Push s -> scenes.Push s; armMask ()

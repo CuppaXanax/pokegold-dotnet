@@ -568,6 +568,59 @@ let ``bug contest placement maps the player to first second third or no place`` 
     Assert.Equal(0, BugContestPlacement.playerPlacement 250 npcScores)
 
 [<Fact>]
+let ``bug contest timer uses the source 20 minute 60 Hz frame budget`` () =
+    let started = World.empty |> World.setFlag "ENGINE_BUG_CONTEST_TIMER" |> BugContestTimer.start
+    let afterOne = BugContestTimer.tick started
+
+    Assert.Equal(20 * 60, BugContestTimer.DurationSeconds)
+    Assert.Equal(60, BugContestTimer.FramesPerSecond)
+    Assert.Equal(20 * 60 * 60, BugContestTimer.DurationFrames)
+    Assert.Equal(BugContestTimer.DurationFrames - 1, World.getVar BugContestTimer.RemainingVar afterOne)
+    Assert.True(World.hasFlag "ENGINE_BUG_CONTEST_TIMER" afterOne)
+    Assert.Equal(0, World.getVar BugContestTimer.TimeUpVar afterOne)
+
+[<Fact>]
+let ``bug contest timer expiry leaves a script consumable timeout state`` () =
+    let started =
+        World.empty
+        |> World.setFlag "ENGINE_BUG_CONTEST_TIMER"
+        |> BugContestTimer.start
+        |> World.setVar BugContestTimer.RemainingVar 1
+
+    let expired = BugContestTimer.tick started
+
+    Assert.Equal(0, World.getVar BugContestTimer.RemainingVar expired)
+    Assert.Equal(1, World.getVar BugContestTimer.TimeUpVar expired)
+    Assert.False(World.hasFlag "ENGINE_BUG_CONTEST_TIMER" expired)
+
+[<Fact>]
+let ``bug contest timer state survives save world round trip`` () =
+    let world =
+        World.empty
+        |> World.setFlag "ENGINE_BUG_CONTEST_TIMER"
+        |> BugContestTimer.start
+        |> BugContestTimer.tick
+
+    let overworld = OverworldState.loadByIdAt (Content()) "NewBarkTown" 5 5 Down
+    let save = PokeGold.Game.Save.SaveData.captureWith overworld world PlayerStateOps.initial
+    let restored = PokeGold.Game.Save.SaveData.worldOf save
+
+    Assert.Equal(BugContestTimer.DurationFrames - 1, World.getVar BugContestTimer.RemainingVar restored)
+    Assert.True(World.hasFlag "ENGINE_BUG_CONTEST_TIMER" restored)
+
+[<Fact>]
+let ``bug contest timer advances at an idle frame boundary`` () =
+    let content = Content()
+    let state = OverworldState.loadByIdAt content "NewBarkTown" 5 5 Down
+    let scene = OverworldScene(content, SilentSound(), state)
+    let world = World.empty |> World.setFlag "ENGINE_BUG_CONTEST_TIMER" |> BugContestTimer.start
+    scene.Restore(world, PlayerStateOps.initial)
+
+    scene.AdvanceBugContestTimer()
+
+    Assert.Equal(BugContestTimer.DurationFrames - 1, World.getVar BugContestTimer.RemainingVar scene.DebugWorld)
+
+[<Fact>]
 let ``bug contest judging returns the placement prize mapping and no catch returns zero`` () =
     let judging score species =
         let scene = runContestJudging score species (FixedRandom(List.replicate 10 0))
@@ -635,6 +688,7 @@ let ``contest drop off masks party to lead mon`` () =
     scene.Restore(World.empty, player)
 
     Assert.Equal<int list>([ 155 ], scene.DebugPlayer.Party |> List.map (fun mon -> mon.SpeciesId))
+    Assert.False(scene.CanCapture)
 
 [<Fact>]
 let ``bug contest judging gives first place for Scyther or Pinsir`` () =
