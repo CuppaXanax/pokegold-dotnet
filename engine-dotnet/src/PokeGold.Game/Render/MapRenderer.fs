@@ -20,7 +20,7 @@ module MapRenderer =
     /// are visited.
     let draw
         (fb: Framebuffer)
-        (palette: Palette)
+        (palettes: Palette[])
         (tileset: Tileset)
         (map: GameMap)
         (camX: int)
@@ -46,4 +46,10 @@ module MapRenderer =
                             if tileId < tileset.Tiles.Length then
                                 let px = bx * BlockPixels + tcol * Tile.Size - camX
                                 let py = by * BlockPixels + trow * Tile.Size - camY
+                                let paletteId =
+                                    if tileId < tileset.PaletteIds.Length then int tileset.PaletteIds.[tileId]
+                                    else 0
+                                let palette =
+                                    if paletteId < palettes.Length then palettes.[paletteId]
+                                    else palettes.[0]
                                 Graphics.drawTile fb palette px py tileset.Tiles.[tileId]

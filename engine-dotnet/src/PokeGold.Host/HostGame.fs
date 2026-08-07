@@ -2,6 +2,7 @@ namespace PokeGold.Host
 
 open System
 open Microsoft.Xna.Framework
+open Microsoft.Xna.Framework.Audio
 open Microsoft.Xna.Framework.Graphics
 open Microsoft.Xna.Framework.Input
 open PokeGold.Game.Core
@@ -23,7 +24,7 @@ type HostGame() as this =
     let mutable spriteBatch : SpriteBatch = null
     let mutable screen : Texture2D = null
     let mutable prevKb : KeyboardState = Unchecked.defaultof<KeyboardState>
-    let mutable hostAudio : HostAudio = Unchecked.defaultof<HostAudio>
+    let mutable hostAudio : HostAudio option = None
     let mutable debugServer : DebugServer = Unchecked.defaultof<DebugServer>
 
     do
@@ -44,8 +45,12 @@ type HostGame() as this =
     override _.LoadContent() =
         spriteBatch <- new SpriteBatch(this.GraphicsDevice)
         screen <- new Texture2D(this.GraphicsDevice, Display.Width, Display.Height, false, SurfaceFormat.Color)
-        hostAudio <- new HostAudio(game)
-        hostAudio.Start()
+        try
+            let audio = new HostAudio(game)
+            audio.Start()
+            hostAudio <- Some audio
+        with :? NoAudioHardwareException ->
+            hostAudio <- None
 
         // Expose the game's debug channel over a named pipe so a CLI/agent can
         // inspect and poke the running instance (T1). Commands are marshalled onto
@@ -78,7 +83,7 @@ type HostGame() as this =
         if pressed Keys.F9 then game.Load()
         prevKb <- kb
 
-        hostAudio.Update()
+        hostAudio |> Option.iter _.Update()
 
         base.Update(_gameTime)
 

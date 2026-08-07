@@ -9,6 +9,105 @@ open System.Text.RegularExpressions
 /// resolution happens here so the emitted code carries only final integers.
 module Parsers =
 
+    // --- Overworld palettes -----------------------------------------------
+
+    type PaletteData =
+        { BackgroundBanks: (byte * byte * byte)[][]
+          ObjectBanks: (byte * byte * byte)[][]
+          Tilesets: Map<string, byte[]>
+          SpriteDefaults: Map<string, byte> }
+
+    let private parsePaletteBanks relative =
+        let rgb = Regex(@"\bRGB\s+(.+?)(?:\s*;.*)?$", RegexOptions.IgnoreCase)
+        let numbers = Regex(@"\d+")
+
+        (Repo.readText relative).Split([| '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+        |> Array.collect (fun line ->
+            let m = rgb.Match line
+            if not m.Success then [||]
+            else
+                numbers.Matches(m.Groups.[1].Value)
+                |> Seq.cast<Match>
+                |> Seq.map (fun value -> byte (Int32.Parse value.Value))
+                |> Seq.chunkBySize 3
+                |> Seq.map (fun channels -> channels.[0], channels.[1], channels.[2])
+                |> Seq.toArray)
+        |> Array.chunkBySize 4
+
+    let private paletteId =
+        function
+        | "GRAY" -> 0uy
+        | "RED" -> 1uy
+        | "GREEN" -> 2uy
+        | "WATER" -> 3uy
+        | "YELLOW" -> 4uy
+        | "BROWN" -> 5uy
+        | "ROOF" -> 6uy
+        | "TEXT" -> 7uy
+        | name -> failwithf "Unknown background palette '%s'" name
+
+    let private parseTilesetPaletteMap path =
+        let row = Regex(@"^\s*tilepal\s+(\d+)\s*,\s*(.+?)(?:\s*;.*)?$", RegexOptions.IgnoreCase)
+
+        File.ReadAllLines path
+        |> Array.collect (fun line ->
+            let m = row.Match line
+            if not m.Success then [||]
+            else
+                let bank = Int32.Parse m.Groups.[1].Value
+                if bank <> 0 then failwithf "Unsupported palette-map VRAM bank %d in %s" bank path
+
+                m.Groups.[2].Value.Split(',')
+                |> Array.map (fun name -> paletteId (name.Trim().ToUpperInvariant())))
+
+    let private spritePaletteId name =
+        match name with
+        | "PAL_OW_RED" -> 0uy
+        | "PAL_OW_BLUE" -> 1uy
+        | "PAL_OW_GREEN" -> 2uy
+        | "PAL_OW_BROWN" -> 3uy
+        | "PAL_OW_PINK" -> 4uy
+        | "PAL_OW_EMOTE" -> 5uy
+        | "PAL_OW_TREE" -> 6uy
+        | "PAL_OW_ROCK" -> 7uy
+        | other -> failwithf "Unknown overworld sprite palette '%s'" other
+
+    let private parseSpriteDefaults () =
+        let spriteConstants =
+            (Repo.readText "constants/sprite_constants.asm").Split("DEF NUM_OVERWORLD_SPRITES").[0]
+
+        let constants =
+            spriteConstants.Split([| '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+            |> Array.choose (fun line ->
+                let m = Regex.Match(line, @"^\s*const\s+(SPRITE_[A-Z0-9_]+)")
+                if m.Success && m.Groups.[1].Value <> "SPRITE_NONE" then Some m.Groups.[1].Value else None)
+
+        let palettes =
+            (Repo.readText "data/sprites/sprites.asm").Split([| '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+            |> Array.choose (fun line ->
+                let m = Regex.Match(line, @"^\s*overworld_sprite\s+[^,]+,\s*[^,]+,\s*[^,]+,\s*(PAL_OW_[A-Z_]+)")
+                if m.Success then Some(spritePaletteId m.Groups.[1].Value) else None)
+
+        if constants.Length <> palettes.Length then
+            failwithf "Expected sprite constants and sprite data to align, found %d constants and %d rows" constants.Length palettes.Length
+
+        Array.zip constants palettes |> Map.ofArray
+
+    let palettes : PaletteData =
+        let tilesets =
+            Directory.GetFiles(Repo.path "gfx/tilesets", "*_palette_map.asm")
+            |> Array.map (fun path ->
+                let suffix = "_palette_map"
+                let filename = Path.GetFileNameWithoutExtension path
+                filename.Substring(0, filename.Length - suffix.Length), parseTilesetPaletteMap path)
+            |> Map.ofArray
+            |> Map.add "dark_cave" (parseTilesetPaletteMap (Repo.path "gfx/tilesets/cave_palette_map.asm"))
+
+        { BackgroundBanks = parsePaletteBanks "gfx/tilesets/bg_tiles.pal"
+          ObjectBanks = parsePaletteBanks "gfx/overworld/npc_sprites.pal"
+          Tilesets = tilesets
+          SpriteDefaults = parseSpriteDefaults () }
+
     // --- Types -------------------------------------------------------------
 
     /// Numeric type ids (`constants/type_constants.asm`).

@@ -457,6 +457,21 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         | Left -> -1, 0
         | Right -> 1, 0
 
+    let runtimeWorld (w: World) =
+        let facing =
+            match state.Player.Facing with
+            | Down -> 0
+            | Up -> 1
+            | Left -> 2
+            | Right -> 3
+
+        World.setVar "VAR_FACING" facing w
+
+    let persistScriptWorld (previous: World) (next: World) =
+        match Map.tryFind "VAR_FACING" previous.Vars with
+        | Some facing -> World.setVar "VAR_FACING" facing next
+        | None -> { next with Vars = Map.remove "VAR_FACING" next.Vars }
+
     let directionFromButtons (buttons: Buttons) : Direction option =
         if buttons.Down then Some Down
         elif buttons.Up then Some Up
@@ -1077,7 +1092,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private this.ContinueQueuedScripts() : Transition =
         if scriptQueue.Count > 0 then
             let vm, value = scriptQueue.Dequeue()
-            this.Drive(Script.resume value world vm)
+            this.Drive(Script.resume value (runtimeWorld world) vm)
         else
             Stay
 
@@ -1130,7 +1145,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 match fadeVm with
                 | Some vm ->
                     fadeVm <- None
-                    this.Drive(Script.resume None world vm)
+                    this.Drive(Script.resume None (runtimeWorld world) vm)
                 | None -> Stay
             else
                 fadeRun <- Some next
@@ -1141,7 +1156,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
         let sceneLabel = MapEvents.sceneLabelAt sceneIdx state.Events
 
         if sceneLabel <> "" && state.Script.Labels.ContainsKey sceneLabel then
-            this.Drive(Script.start sceneLabel world state.Script mapId)
+            this.Drive(Script.start sceneLabel (runtimeWorld world) state.Script mapId)
         else
             this.ContinueQueuedScripts()
 
@@ -1198,16 +1213,17 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
     member private this.RunMapCallbacks(mapId: string) =
         for cb in state.Events.Callbacks do
             if state.Script.Labels.ContainsKey cb.Label then
-                let step = Script.start cb.Label world state.Script mapId
+                let step = Script.start cb.Label (runtimeWorld world) state.Script mapId
                 // Drive callbacks to completion without UI; stateful effects still
                 // have to apply or map objects/tiles drift from script flags.
                 let rec drive (s: ScriptStep) =
-                    world <- s.World
+                    world <- persistScriptWorld world s.World
                     match s.Outcome with
                     | Completed -> ()
                     | Suspended(vm, effect) ->
                         this.ApplyCallbackEffect effect
-                        drive (Script.resume None world vm)
+                        let currentWorld = runtimeWorld world
+                        drive (Script.resume None currentWorld vm)
                 drive step
 
     /// Resolve a text label to its M5 token string. Map-local text wins; std-script
@@ -1803,10 +1819,11 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                 finished <- true
             | Some step ->
                 current <- None
-                world <- step.World
+                world <- persistScriptWorld world step.World
 
                 let resume value vm =
-                    current <- Some(Script.resume value world vm)
+                    let currentWorld = runtimeWorld world
+                    current <- Some(Script.resume value currentWorld vm)
 
                 let stop transition =
                     result <- transition
@@ -2742,7 +2759,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                 if run'.Done then
                     runningMove <- None
-                    this.Drive(Script.resume None world vm)
+                    this.Drive(Script.resume None (runtimeWorld world) vm)
                 else
                     runningMove <- Some(vm, actor, run')
                     Stay
@@ -2762,7 +2779,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     match pauseVm with
                     | Some vm ->
                         pauseVm <- None
-                        this.Drive(Script.resume None world vm)
+                        this.Drive(Script.resume None (runtimeWorld world) vm)
                     | None -> Stay
                 else
                     Stay
@@ -2907,7 +2924,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                         | GiveItem(_, _, true) -> Some 1  // verbose give succeeded
                         | _ -> None
 
-                    this.Drive(Script.resume value world vm)
+                    this.Drive(Script.resume value (runtimeWorld world) vm)
             | None ->
                 let aPressed = buttons.A && not prevA
                 let startPressed = buttons.Start && not prevStart
@@ -2957,7 +2974,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     let startScript label =
                         lastTalkedActor <- talkedNpcCandidate
                         interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
-                        this.Drive(Script.start label world state.Script state.MapId)
+                        this.Drive(Script.start label (runtimeWorld world) state.Script state.MapId)
 
                     let startBgScript bg =
                         match Triggers.conditionalBgScript world bg state.Script with
@@ -3053,7 +3070,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     // active map once the step settles (player rebased to the same world
                     // position, so the view is seamless).
                     match strengthFallLabel, (if completedTranslation then OverworldState.crossConnection content state else None) with
-                    | Some label, _ -> this.Drive(Script.start label world state.Script state.MapId)
+                    | Some label, _ -> this.Drive(Script.start label (runtimeWorld world) state.Script state.MapId)
                     | None, Some ns -> this.EnterMap(ns, true)
                     | None, None when not completedTranslation ->
                         Stay
@@ -3085,7 +3102,7 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
 
                                 if state.Script.Labels.ContainsKey npc.Event.Script then
                                     interpretHostEffect (HostEffect.PlaySfx "Sfx_Menu")
-                                    this.Drive(Script.start npc.Event.Script world state.Script state.MapId)
+                                    this.Drive(Script.start npc.Event.Script (runtimeWorld world) state.Script state.MapId)
                                 else
                                     Stay
                             | None ->
@@ -3104,14 +3121,20 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                                     match Triggers.coordToFire currentScene firedCoords state.Events (fst after) (snd after) with
                                     | Some c when state.Script.Labels.ContainsKey c.Script ->
                                         firedCoords <- Set.add after firedCoords
-                                        this.Drive(Script.start c.Script world state.Script state.MapId)
+                                        this.Drive(Script.start c.Script (runtimeWorld world) state.Script state.MapId)
                                     | Some _ ->
                                         firedCoords <- Set.add after firedCoords
                                         Stay
                                     | None -> Stay
 
         member this.Render(fb: Framebuffer) =
-            OverworldRenderer.draw fb state
+            let timeOfDay = GameTimeState.timeOfDay player.GameTime
+            let illuminated = World.getVar "__flash_active" world <> 0
+            let renderState =
+                { state with
+                    MapPalettes = OverworldState.resolveMapPalettes state.MapId timeOfDay illuminated
+                    SpritePalette = OverworldState.resolveSpritePalette "SPRITE_CHRIS" "0" timeOfDay }
+            OverworldRenderer.draw fb renderState
 
             // Draw visible NPC objects over the map (player already drawn above),
             // using each object's live, interpolated position and walk frame.
@@ -3126,7 +3149,8 @@ type OverworldScene(content: Content, sound: ISoundBoard, initial: OverworldStat
                     | Some spr ->
                         let frame, flip = NpcObject.frameAndFlip n
                         let px, py = NpcObject.worldPixel n
-                        SpriteRenderer.draw fb state.SpritePalette spr frame (px - state.CamX) (py - state.CamY) flip
+                        let palette = OverworldState.resolveSpritePalette spriteName n.Event.Palette timeOfDay
+                        SpriteRenderer.draw fb palette spr frame (px - state.CamX) (py - state.CamY) flip
                     | None -> ()
 
             match balanceOverlay with

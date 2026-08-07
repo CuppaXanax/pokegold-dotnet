@@ -7,44 +7,69 @@ open PokeGold.Game.Overworld.Script
 /// A loaded overworld: the map and its render/collision assets, the player, and
 /// the current camera. All immutable; scenes hold one of these and replace it
 /// each frame via the pure Overworld systems.
-type OverworldState =
-    { /// Stable identifier of the loaded map, used to rebuild it on load.
-      MapId: string
-      Map: GameMap
-      Tileset: Tileset
-      Collision: Collision
-      Sprite: Sprite
-      MapPalette: Palette
-      SpritePalette: Palette
-      Player: PlayerState
-      CamX: int
-      CamY: int
-      /// The map's parsed event tables (warps, coord triggers, signs, objects).
-      Events: MapEvents
-      /// The map's parsed script program (labels → commands).
-      Script: ScriptProgram
-      /// The map's text labels resolved to M5 token strings.
-      Text: Map<string, string>
-      /// Loaded, placed neighbour maps for border rendering, cross-join collision
-      /// and walking off the edge into the next map. Empty until populated by a
-      /// content-aware load (`withNeighbors`); a bare `build`/`createAt` has none.
-      Neighbors: MapConnections.NeighborMap list
-      /// The map's live overworld objects (NPCs, signs-as-objects, etc.), one per
-      /// visible-or-not object event, advanced each frame by the `ObjectStep`
-      /// system. Autonomous ones wander; the rest hold their pose.
-      Npcs: NpcObject[] }
+type OverworldState = { MapId: string; Map: GameMap; Tileset: Tileset; Collision: Collision; Sprite: Sprite; MapPalettes: Palette[]; SpritePalette: Palette; Player: PlayerState; CamX: int; CamY: int; Events: MapEvents; Script: ScriptProgram; Text: Map<string, string>; Neighbors: MapConnections.NeighborMap list; Npcs: NpcObject[] }
 
 module OverworldState =
 
-    // Real GBC day palette from `gfx/tilesets/bg_tiles.pal` for the map's tile
-    // indices 0..3; this is a much closer match to the original tile colors than
-    // the old hard-coded green DMG palette.
-    let private mapPalette =
-        Palette.ofColors
-            [ Palette.rgb555 27 31 27
-              Palette.rgb555 21 21 21
-              Palette.rgb555 13 13 13
-              Palette.rgb555 7 7 7 ]
+    let private paletteRow environment timeIndex =
+        let rows =
+            match environment with
+            | "TOWN"
+            | "ROUTE" ->
+                [| [| 0; 1; 2; 40; 4; 5; 6; 7 |]
+                   [| 8; 9; 10; 40; 12; 13; 14; 15 |]
+                   [| 16; 17; 18; 41; 20; 21; 22; 23 |]
+                   [| 24; 25; 26; 27; 28; 29; 30; 31 |] |]
+            | "INDOOR"
+            | "GATE" ->
+                [| [| 32; 33; 34; 35; 36; 37; 38; 7 |]
+                   [| 32; 33; 34; 35; 36; 37; 38; 7 |]
+                   [| 16; 17; 18; 19; 20; 21; 22; 7 |]
+                   [| 24; 25; 26; 27; 28; 29; 30; 7 |] |]
+            | _ ->
+                [| [| 0..7 |]
+                   [| 8..15 |]
+                   [| 16..23 |]
+                   [| 24..31 |] |]
+
+        rows.[timeIndex]
+
+    let private effectiveTime paletteMode timeOfDay illuminated =
+        match paletteMode with
+        | "PALETTE_MORN" -> 0
+        | "PALETTE_DAY" -> 1
+        | "PALETTE_NITE" -> 2
+        | "PALETTE_DARK" -> if illuminated then 2 else 3
+        | _ -> TimeOfDay.toIndex timeOfDay
+
+    let resolveMapPalettes mapId timeOfDay illuminated =
+        let meta = Maps.byName mapId |> Option.map _.Meta
+        let indices =
+            match meta with
+            | Some value -> paletteRow value.Environment (effectiveTime value.Palette timeOfDay illuminated)
+            | None -> paletteRow "ROUTE" (TimeOfDay.toIndex timeOfDay)
+
+        indices |> Array.map (fun index -> PaletteData.backgroundBanks.[index])
+
+    let resolveSpritePalette spriteName paletteName timeOfDay =
+        let explicitId =
+            match paletteName with
+            | "PAL_NPC_RED" -> Some 0
+            | "PAL_NPC_BLUE" -> Some 1
+            | "PAL_NPC_GREEN" -> Some 2
+            | "PAL_NPC_BROWN" -> Some 3
+            | "PAL_NPC_PINK" -> Some 4
+            | "PAL_NPC_EMOTE" -> Some 5
+            | "PAL_NPC_TREE" -> Some 6
+            | "PAL_NPC_ROCK" -> Some 7
+            | _ -> None
+
+        let paletteId =
+            explicitId
+            |> Option.orElseWith (fun () -> PaletteData.spriteDefaults |> Map.tryFind spriteName |> Option.map int)
+            |> Option.defaultValue 0
+        let timeOffset = TimeOfDay.toIndex timeOfDay * 8
+        PaletteData.objectBanks.[timeOffset + paletteId]
 
     // Sprite palette: index 0 is transparent (skipped at draw time); 1..3 are a
     // light→dark grayscale so the player reads clearly against the green map.
@@ -89,8 +114,8 @@ module OverworldState =
           Tileset = tileset
           Collision = coll
           Sprite = sprite
-          MapPalette = mapPalette
-          SpritePalette = spritePalette
+          MapPalettes = resolveMapPalettes mapId (TimeOfDay.current()) false
+          SpritePalette = resolveSpritePalette "SPRITE_CHRIS" "0" (TimeOfDay.current())
           Player = player
           CamX = camX
           CamY = camY
