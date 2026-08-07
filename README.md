@@ -1,82 +1,68 @@
 # pokegold-dotnet
 
-`pokegold-dotnet` is an experimental F# + MonoGame reimplementation/runtime for
-Pokemon Gold behavior. It uses the pret Pokemon Gold disassembly and source
-assets in this repository as its data source, and the native .NET engine does
-not require a ROM to run.
+**A native Pokemon Gold reimplementation in F# and MonoGame.**
 
-The active implementation lives in [`engine-dotnet`](engine-dotnet/). The
-current engineering gate is to prove a fresh-save, glitchless, playable route
-through Pokemon Gold in MonoGame/F# land. Longer-term research may explore pure
-functional modeling, solver-backed route analysis, and formal verification, but
-those are research directions, not current project guarantees.
-
-## Current status
-
-This is an active port, not a finished game release. The plan documents track a
-large amount of engine work as complete, including source-asset data generation,
-overworld systems, script VM work, battle systems, save/load, audio, UI scenes,
-and a substantial xUnit conformance suite. The current desktop suite has
-1,549/1,549 tests green as of 2026-08-07, including a script-VM golden path from
-New Bark bedroom to post-Red credits, source-authentic trainer/wild construction,
-visible failure for missing production battle data, stable party identity, and
-source-exact persistent DV/stat-experience calculations and complete identity-safe
-battle-state round-tripping, engine-owned per-defeat progression history, and
-source-defined blackout behavior that heals the party, floors lost money, and
-prevents Falkner, Lance, and Red defeats from continuing as victories, plus a
-real Falkner loss-save-reload-retry path that grants progression exactly once,
-source-ordered forced replacement across real multi-mon trainer battles,
-source-backed battle items plus held-item consumption/persistence coverage across
-runtime battle cleanup and save reload, seeded trainer AI with branch tests for player-move
-history, candidate-filtered switching, good-weather scoring, and X-item rolls, and a
-legal-party runtime component matrix spanning wild, ordinary trainer, gym, Elite Four,
-and Red battles. The authenticated no-shortcuts route now reaches Violet City
-from `StartNewGame`; the remaining public bar is the rest of the continuous
-fresh-save Epic 3 route.
+`pokegold-dotnet` turns the pret disassembly and its checked-in source assets
+into a typed, platform-independent game engine with a native desktop host.
+Maps, scripts, battles, encounters, graphics, palettes, saves, and audio are
+baked directly from repository source data at build time.
 
 ![Source-backed overworld palette rendering](docs/media/overworld-source-color.gif)
 
-The GIF is a native-host Azalea rendering sample, not the A2 route proof. The
-A2 proof is the passing `A2 route Cherrygrove to Violet with egg return` test.
+The active implementation lives in [`engine-dotnet`](engine-dotnet/). It pairs
+an F# game library with a MonoGame DesktopGL host and a deterministic headless
+runtime used for route and conformance testing.
 
-The remaining public bar is stronger than "tests exist": prove the route through
-the real runtime with real inputs, movement, collision, warps, triggers, battles,
-save state, and invariants from a fresh save without shortcut flags.
+## Current status
+
+Development is active. The engine currently has:
+
+- A script-VM story proof from the New Bark bedroom through post-Red credits.
+- An authenticated fresh-save runtime route through the rival, Elm's egg
+  handoff, Routes 30/31, and an earned Violet City checkpoint.
+- Source-backed overworld palettes, map rendering, movement, collision, warps,
+  objects, encounters, field moves, menus, saves, audio, and battle systems.
+- Persistent Pokemon identity and source-based stats, progression, trainer AI,
+  battle items, blackout, save/reload, and retry behavior.
+- More than 1,500 xUnit tests across data generation, conformance, isolated
+  systems, staged runtime behavior, and continuous-route checkpoints.
+
+The completion gate is one fresh-save, glitchless runtime route through Red,
+driven by ordinary input with earned state and persistent checkpoint ancestry.
+The Azalea GIF above demonstrates the native renderer; route completion is
+tracked independently by the continuous runtime tests.
 
 See [`docs/status.md`](docs/status.md) for the concise handoff status and
 [`docs/plan/`](docs/plan/) for the detailed milestone and victory plans.
 
-## What works
+## Architecture
 
-- `engine-dotnet/src/PokeGold.Game` is a platform-free F# game library with no
-  MonoGame dependency.
-- `engine-dotnet/src/PokeGold.Host` is a MonoGame DesktopGL host for the native
-  engine.
+- `engine-dotnet/src/PokeGold.Game` is the platform-independent F# game library.
+- `engine-dotnet/src/PokeGold.Host` presents the engine through MonoGame
+  DesktopGL.
 - Build-time data generation reads checked-in disassembly/source assets from
   `constants/`, `data/`, `maps/`, `gfx/`, and `audio/`.
-- The test suite covers many core systems: graphics/data parsing, map rendering,
-  collision, movement, scripts, story gates, battles, save/load, audio, menus,
-  field moves, encounters, party/bag/storage systems, and conformance ledgers.
+- The test suite covers graphics/data parsing, map rendering, collision,
+  movement, scripts, story gates, battles, save/load, audio, menus, field moves,
+  encounters, party/bag/storage systems, and conformance ledgers.
 - Continuous-route tests can persist ordinary runtime save files as durable
   checkpoints and verify their SHA-256-backed ancestry before resuming.
-- The desktop host can run the native engine without a ROM.
+- Repository source assets produce a self-contained desktop runtime.
 
-## What is not done yet
+## Current boundaries
 
-- Do not assume this is fully playable end-to-end as a public game release until
-  the fresh-save glitchless route gate is proven in the real runtime.
-- Off-route behavior is not exhaustively proven; the golden route is the first
-  target, and unusual menuing, losses, alternate starters, and detours may expose
-  more issues.
-- Frame-perfect Game Boy Color parity is not the goal of this MonoGame/F#
-  runtime.
-- The Android host is present, but the plan docs note that it requires an
-  Android SDK setup and should not be part of default local builds.
+- The authenticated continuous route currently reaches Violet City; later
+  Johto, Kanto, and Red checkpoints remain active integration work.
+- Golden-route coverage leads development, followed by alternate starters,
+  detours, unusual menu sequences, and broader completion play.
+- Gameplay and source behavior take priority over frame-perfect hardware timing.
+- Windows desktop is the primary validated host. Android development uses its
+  separate SDK-gated project.
 
 ## Build
 
-Use commands from `engine-dotnet`. Avoid building the whole solution unless the
-Android SDK is installed, because `PokeGold.Host.Android` is part of the solution.
+Run the targeted desktop projects from `engine-dotnet`. The complete solution
+also includes the Android SDK-gated host.
 
 ```powershell
 cd engine-dotnet
@@ -107,8 +93,8 @@ cd engine-dotnet
 dotnet run --project .\src\PokeGold.Host
 ```
 
-The host runs the native .NET engine against repository source assets. It does
-not ask for a ROM.
+The host runs the native .NET engine directly from baked repository source
+assets.
 
 ## Repository layout
 
@@ -132,21 +118,17 @@ docs/plan/                  Detailed milestone, victory, and agent handoff docs
 
 ## Legal and asset note
 
-This repository is based on a reverse-engineered Pokemon Gold disassembly and
-contains checked-in source assets and data files. The .NET runtime reads or bakes
-those repository files directly and does not require users to provide a ROM.
-
-This project is not affiliated with, endorsed by, or sponsored by Nintendo, Game
-Freak, Creatures, The Pokemon Company, or pret. Do not treat this repository as a
-commercial game release, and do not add new copyrighted branding or assets unless
-the rights and project purpose are clear.
+This repository is based on the reverse-engineered pret Pokemon Gold
+disassembly and its checked-in source assets. Pokemon and related properties
+belong to Nintendo, Game Freak, Creatures, and The Pokemon Company. This is an
+independent, non-commercial fan project maintained separately from pret.
 
 ## Contributing
 
 Most active work should happen under `engine-dotnet`. Before changing behavior,
 read the relevant `.asm` source in this repository and preserve behavior over
 clever refactors. Keep generated code, source assets, and runtime code clearly
-separated, and do not introduce a ROM dependency.
+separated; repository source assets remain the engine's data boundary.
 
 Use [`AGENTS.md`](AGENTS.md) for coding-agent handoff rules. Use
 [`docs/plan/victory-plan.md`](docs/plan/victory-plan.md) for the route gate and
