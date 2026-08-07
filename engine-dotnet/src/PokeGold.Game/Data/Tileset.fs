@@ -10,11 +10,7 @@ type Block =
 
 /// A map tileset: the decoded tile graphics plus the block definitions that
 /// arrange those tiles into 32×32 metatiles.
-type Tileset =
-    { /// Decoded 8×8 index tiles (from the tileset PNG).
-      Tiles: Tile[]
-      /// Block (metatile) definitions.
-      Blocks: Block[] }
+type Tileset = { Tiles: Tile[]; Blocks: Block[]; PaletteIds: byte[] }
 
 module Tileset =
 
@@ -32,9 +28,10 @@ module Tileset =
             { TileIds = Array.sub metatiles (i * TilesPerBlock) TilesPerBlock })
 
     /// Load a tileset from a tileset PNG and a metatiles `.bin`, both repo-relative.
-    let load (pngRelative: string) (metatilesRelative: string) : Tileset =
+    let load (name: string) (pngRelative: string) (metatilesRelative: string) : Tileset =
         { Tiles = Image.loadTiles pngRelative
-          Blocks = parseBlocks (Assets.readBytes metatilesRelative) }
+          Blocks = parseBlocks (Assets.readBytes metatilesRelative)
+          PaletteIds = PaletteData.tilesets.[name] }
 
     /// Load a named pret tileset by convention:
     ///   gfx/tilesets/<name>.png  +  data/tilesets/<name>_metatiles.bin
@@ -45,4 +42,4 @@ module Tileset =
             | "dark_cave" -> "cave"
             | _ -> name
 
-        load $"gfx/tilesets/{name}.png" $"data/tilesets/{metatilesName}_metatiles.bin"
+        load name $"gfx/tilesets/{name}.png" $"data/tilesets/{metatilesName}_metatiles.bin"

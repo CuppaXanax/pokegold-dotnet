@@ -2,6 +2,9 @@ module PokeGold.Tests.GraphicsTests
 
 open Xunit
 open PokeGold.Game.Core
+open PokeGold.Game.Data
+open PokeGold.Game.Overworld
+open PokeGold.Game.Render
 
 [<Fact>]
 let ``rgb555 expands 5-bit channels to 8-bit, opaque`` () =
@@ -53,6 +56,62 @@ let ``parsePalBank loads real bg_tiles palette data`` () =
     Assert.True(banks.Length >= 8)
     Assert.Equal(4, banks.[0].Colors.Length)
     Assert.Equal(Palette.rgb555 27 31 27, banks.[8].Colors.[0])
+
+[<Fact>]
+let ``generated overworld palettes preserve source banks and tile attributes`` () =
+    Assert.Equal(42, PaletteData.backgroundBanks.Length)
+    Assert.Equal(32, PaletteData.objectBanks.Length)
+
+    let attributes = PaletteData.tilesets.["johto_modern"]
+    Assert.Equal(96, attributes.Length)
+    Assert.Equal<byte>(0uy, attributes.[0])
+    Assert.Equal<byte>(5uy, attributes.[1])
+    Assert.Equal<byte>(5uy, attributes.[2])
+    Assert.Equal<byte>(1uy, attributes.[3])
+
+[<Fact>]
+let ``map renderer selects the source palette bank for each tile`` () =
+    let indexedTile = { Pixels = Array.create Tile.PixelCount 1uy }
+    let block = { TileIds = Array.init 16 (fun index -> byte (index % 2)) }
+    let tileset =
+        { Tiles = [| indexedTile; indexedTile |]
+          Blocks = [| block |]
+          PaletteIds = [| 0uy; 1uy |] }
+    let map = Map.ofBlk 1 1 [| 0uy |]
+    let palettes =
+        [| Palette.ofColors [ Palette.rgb555 0 0 0; Palette.rgb555 31 0 0 ]
+           Palette.ofColors [ Palette.rgb555 0 0 0; Palette.rgb555 0 31 0 ] |]
+    let fb = Framebuffer()
+
+    MapRenderer.draw fb palettes tileset map 0 0
+
+    let colorAt x =
+        let offset = x * 4
+        fb.Pixels.[offset], fb.Pixels.[offset + 1], fb.Pixels.[offset + 2]
+
+    Assert.Equal((255uy, 0uy, 0uy), colorAt 0)
+    Assert.Equal((0uy, 255uy, 0uy), colorAt 8)
+
+[<Fact>]
+let ``map palette resolution follows source environment time and water banks`` () =
+    let day = OverworldState.resolveMapPalettes "AzaleaTown" Day false
+    let night = OverworldState.resolveMapPalettes "AzaleaTown" Nite false
+    let indoor = OverworldState.resolveMapPalettes "AzaleaPokecenter1F" Day false
+
+    Assert.Equal(PaletteData.backgroundBanks.[8], day.[0])
+    Assert.Equal(PaletteData.backgroundBanks.[40], day.[3])
+    Assert.Equal(PaletteData.backgroundBanks.[16], night.[0])
+    Assert.Equal(PaletteData.backgroundBanks.[41], night.[3])
+    Assert.Equal(PaletteData.backgroundBanks.[32], indoor.[0])
+
+[<Fact>]
+let ``sprite palette resolution honors explicit color and source default`` () =
+    let explicitBlue = OverworldState.resolveSpritePalette "SPRITE_OAK" "PAL_NPC_BLUE" Day
+    let oakDefault = OverworldState.resolveSpritePalette "SPRITE_OAK" "0" Day
+
+    Assert.Equal(PaletteData.objectBanks.[9], explicitBlue)
+    Assert.Equal(PaletteData.objectBanks.[11], oakDefault)
+    Assert.NotEqual(explicitBlue, oakDefault)
 
 [<Fact>]
 let ``decode reads a 2bpp tile into the expected 8x8 index grid`` () =

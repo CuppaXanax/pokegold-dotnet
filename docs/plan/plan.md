@@ -516,8 +516,11 @@ A no-shortcuts runtime test reaches Elm’s starter; the remaining route uses st
 **Status: 🟡 PARTIAL**
 
 - ✅ Mr. Pokémon and rival script/component coverage exists.
-- ⬜ Walk Route 30/31, complete Mr. Pokémon’s visit, return, legitimately battle the rival, and reach Violet.
-- ⬜ The rival must use the correct starter and authentic moves; losing must blackout.
+- ✅ `A2 route Cherrygrove to Violet with egg return` walks Route 30/31,
+  completes Mr. Pokémon’s visit, legitimately defeats the rival, returns the
+  egg to Elm, and captures an earned Violet checkpoint.
+- 🟡 The route uses the correct rival starter and generated moves; add a focused
+  rival loss regression proving blackout without story advancement to close A2.
 
 ### Story 3.4 — A3: Falkner can be defeated for the Zephyr Badge
 
@@ -844,9 +847,14 @@ The static graph contains 251 recipes, every recipe’s acquisition channel has 
 
 ### Work items
 
-- ⬜ **REL-003 — Close overworld sprite gaps.**
+- 🟡 **REL-003 — Close overworld sprite and palette gaps.**
+  - ✅ Generate all source background/object palette banks and each tileset's
+    per-tile palette attributes; render source environment, time, water, player,
+    and explicit/default NPC palette choices.
+  - ✅ Record a representative native-host source-color Azalea capture at
+    `docs/media/overworld-source-color.gif`.
   - Every sprite type reachable during the route or completion content renders a nonblank correct asset.
-  - Add an automated inventory test and representative host captures.
+  - Add an automated inventory test and broader Johto/Kanto host captures.
 
 - 🟡 **REL-004 — Replace generic battle-animation tints.**
   - Animation scripts are parsed, but the renderer currently reduces them to generic full-screen tints.

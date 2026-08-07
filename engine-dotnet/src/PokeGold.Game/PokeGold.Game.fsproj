@@ -52,6 +52,7 @@
          moves, type chart) is generated at build time by PokeGold.DataGen into
          Data\Generated\ and baked into this assembly; see the GenerateGameData
          target below. -->
+          <Compile Include="Data\Generated\PaletteData.Generated.fs" />
     <Compile Include="Data\Tileset.fs" />
     <Compile Include="Data\Map.fs" />
     <Compile Include="Data\Generated\Collision.Generated.fs" />
@@ -277,6 +278,11 @@
     <GameDataInput Include="$(RepoRoot)data\trainers\dvs.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\maps.asm" />
     <GameDataInput Include="$(RepoRoot)data\sprites\map_objects.asm" />
+    <GameDataInput Include="$(RepoRoot)data\sprites\sprites.asm" />
+    <GameDataInput Include="$(RepoRoot)constants\sprite_constants.asm" />
+    <GameDataInput Include="$(RepoRoot)gfx\overworld\npc_sprites.pal" />
+    <GameDataInput Include="$(RepoRoot)gfx\tilesets\bg_tiles.pal" />
+    <GameDataInput Include="$(RepoRoot)gfx\tilesets\*_palette_map.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\attributes.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\blocks.asm" />
     <GameDataInput Include="$(RepoRoot)data\maps\spawn_points.asm" />
@@ -289,6 +295,7 @@
     <GameDataInput Include="$(RepoRoot)engine\events\std_scripts.asm" />
     <GameDataInput Include="$(RepoRoot)data\text\std_text.asm" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Collision.Generated.fs" />
+    <GeneratedDataOutput Include="$(GeneratedDataDir)\PaletteData.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\TypeChart.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Species.Generated.fs" />
     <GeneratedDataOutput Include="$(GeneratedDataDir)\Moves.Generated.fs" />

@@ -11,7 +11,7 @@ module OverworldRenderer =
     let draw (fb: Framebuffer) (s: OverworldState) =
         let px, py = Player.worldPixel s.Player
         fb.Clear(0uy, 0uy, 0uy, 255uy)
-        MapRenderer.draw fb s.MapPalette s.Tileset s.Map s.CamX s.CamY
+        MapRenderer.draw fb s.MapPalettes s.Tileset s.Map s.CamX s.CamY
 
         // Connected neighbour maps fill the screen beyond the current map's edges.
         // Each neighbour's block (0,0) sits at current cell (BaseCx, BaseCy), i.e.
@@ -21,7 +21,7 @@ module OverworldRenderer =
         for n in s.Neighbors do
             let camX = s.CamX - n.Placement.BaseCx * 16
             let camY = s.CamY - n.Placement.BaseCy * 16
-            MapRenderer.draw fb s.MapPalette n.Tileset n.Map camX camY
+            MapRenderer.draw fb s.MapPalettes n.Tileset n.Map camX camY
 
         let frame, hflip = Animation.frameAndFlip s.Player
         SpriteRenderer.draw fb s.SpritePalette s.Sprite frame (px - s.CamX) (py - s.CamY) hflip

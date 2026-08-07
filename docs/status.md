@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-08-02.
+Last updated: 2026-08-07.
 
 ## Current goal
 
@@ -22,10 +22,17 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - Script-VM golden path gates G1-G14, from New Bark bedroom through post-Red
   credits, verified at the VM/story layer.
 - Fresh-save/no-shortcuts runtime proof now boots only with `StartNewGame`,
-  drives real inputs through the New Bark home, Elm's Lab, and starter
-  acquisition, and asserts `RuntimeInvariants.assertHold` across the trace.
+  drives real input through New Bark, Cherrygrove, Mr. Pokemon's visit, the
+  rival battle, Elm's egg handoff, Routes 30/31, and an earned Violet City
+  checkpoint. `RuntimeInvariants.assertHold` is enforced across the trace.
 - Route checkpoint helpers capture ordinary runtime save files, resume later
   route legs from prior earned saves, and verify SHA-256-backed ancestry chains.
+- Overworld rendering now generates the source 42 background and 32 object
+  palette banks plus every tileset's 96 tile palette attributes. Map tiles use
+  source environment/time/water banks, and player/NPC sprites honor source
+  defaults and explicit object colors. A native-host Azalea GIF is recorded at
+  `docs/media/overworld-source-color.gif`; full reachable-sprite inventory and
+  broader representative captures remain REL-003 work.
 - Build-time map script generation expands Goldenrod Underground `ugdoor_def` /
   `changeugdoor` macros without generic `Unsupported` script commands.
 - Generated trainer data preserves all 495 source party layouts, held items,
@@ -109,15 +116,15 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
 - `startbattle` now returns source `WIN = 0` for a catch and `DRAW = 2` for a
   wild RUN; loss remains the explicit blackout/abort path. Mom/Bill dispatch from
   `reloadmapafterbattle` remains tracked under SCR-001.
-- Current validation: `dotnet build .\src\PokeGold.Game` and `dotnet test
-  .\\tests\\PokeGold.Tests` (~1530) are green from `engine-dotnet`.
+- Current validation: `dotnet test .\tests\PokeGold.Tests` passes 1,549 tests
+  from `engine-dotnet`.
 - `dotnet build .\src\PokeGold.Host --no-restore` is green from `engine-dotnet`.
 
 ## Current known gaps
 
 - The public engineering gate is still the full fresh-save route proof through
-  the real runtime; the no-shortcuts test currently proves only the opening
-  route prefix through Elm's starter gift.
+  the real runtime; the no-shortcuts checkpoint currently reaches Violet City.
+  A rival-specific loss/blackout regression is still required to close A2.
 - Production battle staging rejects missing/invalid combatants; stable identities
   survive battle/storage/save; and persistent stats now use packed DVs plus five
   source stat-exp words. Identity-safe battle round-tripping now preserves canonical
@@ -172,5 +179,5 @@ The current completion plan is `docs\plan\plan.md`. Known-good areas include:
    no-shortcuts route one earned checkpoint at a time.
 2. Keep conformance-ledger changes test-backed and tied to the relevant `.asm`
    source.
-3. After the route gate is proven, update public docs with the exact command,
-   current test count, and a host screenshot or GIF.
+3. Extend source-palette host captures alongside route checkpoints while keeping
+  development-scene presentation evidence distinct from continuous-route proof.

@@ -78,6 +78,42 @@ module Emit =
         sb.AppendLine("        ]") |> ignore
         sb.ToString()
 
+    let private paletteFile () : string =
+        let sb = StringBuilder()
+        sb.Append(header).Append('\n') |> ignore
+        sb.AppendLine("namespace PokeGold.Game.Data") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("open PokeGold.Game.Core") |> ignore
+        sb.AppendLine() |> ignore
+        sb.AppendLine("/// Generated source palettes and per-tile palette attributes.") |> ignore
+        sb.AppendLine("module PaletteData =") |> ignore
+
+        let emitBanks name (banks: (byte * byte * byte)[][]) =
+            sb.AppendLine($"    let {name} : Palette[] = [|") |> ignore
+            for bank in banks do
+                sb.AppendLine("        Palette.ofColors [") |> ignore
+                for r, g, b in bank do
+                    sb.AppendLine($"            Palette.rgb555 {r} {g} {b}") |> ignore
+                sb.AppendLine("        ]") |> ignore
+            sb.AppendLine("    |]") |> ignore
+            sb.AppendLine() |> ignore
+
+        emitBanks "backgroundBanks" Parsers.palettes.BackgroundBanks
+        emitBanks "objectBanks" Parsers.palettes.ObjectBanks
+
+        sb.AppendLine("    let tilesets : Map<string, byte[]> = Map.ofList [") |> ignore
+        for name, attributes in Parsers.palettes.Tilesets |> Map.toList |> List.sortBy fst do
+            let values = attributes |> Array.map (fun value -> $"{value}uy") |> String.concat "; "
+            sb.AppendLine($"        (\"{name}\", [| {values} |])") |> ignore
+        sb.AppendLine("    ]") |> ignore
+        sb.AppendLine() |> ignore
+
+        sb.AppendLine("    let spriteDefaults : Map<string, byte> = Map.ofList [") |> ignore
+        for name, palette in Parsers.palettes.SpriteDefaults |> Map.toList |> List.sortBy fst do
+            sb.AppendLine($"        (\"{name}\", {palette}uy)") |> ignore
+        sb.AppendLine("    ]") |> ignore
+        sb.ToString()
+
     let private speciesFile () : string =
         let sb = StringBuilder()
         sb.Append(header).Append('\n') |> ignore
@@ -638,27 +674,31 @@ module Emit =
     let all (outDir: string) : (string * bool) list =
         Validate.generatedScripts MapParsers.maps MapParsers.stdScripts
 
-        [ "TypeChart.Generated.fs", typeChart ()
-          "Collision.Generated.fs", collisionFile ()
-          "Species.Generated.fs", speciesFile ()
-          "Moves.Generated.fs", movesFile ()
-          "TmHm.Generated.fs", tmHmFile ()
-          "EggMoves.Generated.fs", eggMovesFile ()
-          "EvosAttacks.Generated.fs", evosAttacksFile ()
-          "SpriteMovement.Generated.fs", spriteMovementFile ()
-          "Maps.Generated.fs", EmitMaps.render MapParsers.maps MapParsers.spawnPoints MapParsers.flyPoints
-          "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
-          "Music.Generated.fs", musicFile ()
-          "Songs.Generated.fs", EmitSongs.render ()
-          "Items.Generated.fs", itemsFile ()
-          "Marts.Generated.fs", martsFile ()
-          "Trainers.Generated.fs", trainersFile ()
-          "WildEncounters.Generated.fs", wildEncountersFile ()
-          "TreeMons.Generated.fs", treeMonsFile ()
-          "FishEncounters.Generated.fs", fishEncountersFile ()
-          "ScriptMail.Generated.fs", scriptMailFile ()
-          "NpcTrades.Generated.fs", npcTradesFile ()
-          "Dex.Generated.fs", dexFile () ]
+        let outputs =
+            [ "TypeChart.Generated.fs", typeChart ()
+              "PaletteData.Generated.fs", paletteFile ()
+              "Collision.Generated.fs", collisionFile ()
+              "Species.Generated.fs", speciesFile ()
+              "Moves.Generated.fs", movesFile ()
+              "TmHm.Generated.fs", tmHmFile ()
+              "EggMoves.Generated.fs", eggMovesFile ()
+              "EvosAttacks.Generated.fs", evosAttacksFile ()
+              "SpriteMovement.Generated.fs", spriteMovementFile ()
+              "Maps.Generated.fs", EmitMaps.render MapParsers.maps MapParsers.spawnPoints MapParsers.flyPoints
+              "StdScripts.Generated.fs", EmitMaps.renderStdScripts MapParsers.stdScripts MapParsers.stdText
+              "Music.Generated.fs", musicFile ()
+              "Songs.Generated.fs", EmitSongs.render ()
+              "Items.Generated.fs", itemsFile ()
+              "Marts.Generated.fs", martsFile ()
+              "Trainers.Generated.fs", trainersFile ()
+              "WildEncounters.Generated.fs", wildEncountersFile ()
+              "TreeMons.Generated.fs", treeMonsFile ()
+              "FishEncounters.Generated.fs", fishEncountersFile ()
+              "ScriptMail.Generated.fs", scriptMailFile ()
+              "NpcTrades.Generated.fs", npcTradesFile ()
+              "Dex.Generated.fs", dexFile () ]
+
+        outputs
         |> List.map (fun (name, content) ->
             let path = Path.Combine(outDir, name)
             path, writeIfChanged path content)

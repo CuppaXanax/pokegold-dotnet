@@ -1,6 +1,7 @@
 module PokeGold.Tests.JohtoRuntimeTests
 
 open Xunit
+open PokeGold.Game
 open PokeGold.Game.Audio
 open PokeGold.Game.Core
 open PokeGold.Game.Data
@@ -403,6 +404,1271 @@ let private assertFreshSaveRouteReached (driver: GameDriver) (predicate: Runtime
     driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
     Assert.True(predicate driver.Snapshot, message)
 
+type private RealBattlePlan =
+    | AttackFirstMove
+    | WasteSecondMove
+    | FleeWildEncounters
+    | RunWildEncounters
+    | RunWildAttackTrainers
+    | FleeWildAttackTrainers
+    | LeerThenAttack
+    | SmokeScreenThenAttack
+    | PotionThenAttack
+    | SustainWithPotions
+    | SustainEconomically
+    | SmokeScreenOnceThenAttack
+    | EmberFirstMove
+    | SmokeScreenThenEmberWithPotions
+
+type private MoveChoice =
+    | ChooseFirstMove
+    | MoveToSecondMove
+    | ChooseSecondMove
+    | MoveToThirdMove
+    | ChooseThirdMove
+    | MoveToFourthMove
+    | ChooseFourthMove
+
+type private CommandChoice =
+    | RunDown
+    | RunRight
+    | RunSelect
+    | ItemDown
+    | ItemSelect
+    | PotionSelect
+    | PotionTargetSelect
+    | PotionReturnDown
+    | PotionReturnSelect
+
+let private battlePlayerHealth (driver: GameDriver) =
+    let field =
+        typeof<Game>.GetField(
+           "scenes",
+           System.Reflection.BindingFlags.Instance ||| System.Reflection.BindingFlags.NonPublic)
+
+    match field with
+    | null -> None
+    | scenesField ->
+        let scenes = scenesField.GetValue(driver.Game) :?> System.Collections.Generic.Stack<Scene>
+
+        match scenes.Peek() with
+        | :? BattleScene as battle ->
+           Some(battle.CurrentState.Player.Hp, battle.CurrentState.Player.MaxHp)
+        | _ -> None
+
+let private advanceRealInput
+    (driver: GameDriver)
+    (plan: RealBattlePlan)
+    maxFrames
+    (predicate: RuntimeSnapshot -> bool)
+    =
+    let mutable frame = 0
+    let mutable battleMode = None
+    let mutable battleKind = None
+    let mutable moveChoice = None
+    let mutable commandChoice = None
+    let mutable secondMoveUses = 0
+    let mutable thirdMoveUses = 0
+    let mutable potionUses = 0
+    let mutable moveUses = 0
+    let mutable returnToFight = false
+    let mutable potionMove = -1
+    let mutable namingStep = 0
+    let initialPotionCount =
+        driver.Snapshot.Overworld
+        |> Option.bind (fun overworld -> overworld.Player.Bag |> Map.tryFind "POTION")
+        |> Option.defaultValue 0
+    let potionLimit = min 10 initialPotionCount
+
+    while frame < maxFrames && not (predicate driver.Snapshot) do
+        frame <- frame + 1
+
+        match driver.Snapshot.Battle with
+        | Some battle ->
+            if battleMode <> Some battle.Mode || battleKind <> Some battle.Kind then
+                battleMode <- Some battle.Mode
+                battleKind <- Some battle.Kind
+
+                moveChoice <-
+                    if battle.Mode = "MoveMenu" then
+                        Some(
+                            match plan with
+                            | AttackFirstMove
+                            | FleeWildEncounters
+                            | RunWildEncounters
+                            | RunWildAttackTrainers
+                            | FleeWildAttackTrainers -> ChooseFirstMove
+                            | LeerThenAttack when secondMoveUses < 1 -> MoveToSecondMove
+                            | LeerThenAttack -> ChooseFirstMove
+                            | SmokeScreenThenAttack when thirdMoveUses < 3 -> MoveToSecondMove
+                            | SmokeScreenThenAttack -> ChooseFirstMove
+                            | SmokeScreenOnceThenAttack when thirdMoveUses < 1 -> MoveToSecondMove
+                            | SmokeScreenOnceThenAttack -> ChooseFirstMove
+                            | EmberFirstMove -> MoveToSecondMove
+                            | PotionThenAttack -> ChooseFirstMove
+                            | SustainWithPotions when secondMoveUses < 1 -> MoveToSecondMove
+                            | SustainWithPotions -> ChooseFirstMove
+                            | SustainEconomically when secondMoveUses < 1 -> MoveToSecondMove
+                            | SustainEconomically -> ChooseFirstMove
+                            | SmokeScreenThenEmberWithPotions -> MoveToSecondMove
+                            | WasteSecondMove -> MoveToSecondMove)
+                    else
+                        None
+
+                commandChoice <-
+                    match battle.Mode with
+                    | "CommandMenu"
+                        when plan = RunWildEncounters
+                             || (plan = RunWildAttackTrainers
+                                 || plan = FleeWildEncounters
+                                 || plan = FleeWildAttackTrainers
+                                 || plan = SustainEconomically)
+                                && battle.Kind = "Wild" ->
+                        Some RunDown
+                    | "CommandMenu" when returnToFight ->
+                        Some PotionReturnDown
+                    | "CommandMenu"
+                        when plan = PotionThenAttack
+                             && moveUses > 0
+                             && potionUses = 0
+                             && initialPotionCount > 0 ->
+                        Some ItemDown
+                    | "CommandMenu"
+                        when (plan = SustainWithPotions || plan = SmokeScreenThenEmberWithPotions)
+                            && moveUses > 0
+                            && potionUses < potionLimit
+                            && potionMove <> moveUses
+                            && battlePlayerHealth driver
+                               |> Option.exists (fun (hp, maxHp) -> hp > 0 && hp * 2 <= maxHp) ->
+                        Some ItemDown
+                    | "CommandMenu"
+                        when plan = SustainEconomically
+                            && moveUses > 0
+                            && potionUses < potionLimit
+                            && potionMove <> moveUses
+                            && battlePlayerHealth driver
+                               |> Option.exists (fun (hp, maxHp) -> hp > 0 && hp * 2 <= maxHp) ->
+                        Some ItemDown
+                    | "PackMenu"
+                        when plan = PotionThenAttack
+                             && potionUses = 0
+                             && initialPotionCount > 0 ->
+                        Some PotionSelect
+                    | "PackMenu"
+                        when (plan = SustainWithPotions || plan = SmokeScreenThenEmberWithPotions)
+                             && potionUses < potionLimit ->
+                        Some PotionSelect
+                    | "PackMenu" when plan = SustainEconomically && potionUses < potionLimit ->
+                        Some PotionSelect
+                    | "TargetMenu"
+                        when plan = PotionThenAttack
+                            && potionUses = 0
+                            && initialPotionCount > 0 ->
+                        Some PotionTargetSelect
+                    | "TargetMenu"
+                        when (plan = SustainWithPotions || plan = SmokeScreenThenEmberWithPotions)
+                             && potionUses < potionLimit ->
+                        Some PotionTargetSelect
+                    | "TargetMenu" when plan = SustainEconomically && potionUses < potionLimit ->
+                        Some PotionTargetSelect
+                    | _ -> None
+        | None ->
+            battleMode <- None
+            battleKind <- None
+            moveChoice <- None
+            commandChoice <- None
+
+        let buttons =
+            if frame % 2 = 1 then
+                Buttons.none
+            else
+                match driver.Snapshot.TopScene, driver.Snapshot.Battle with
+                | "TextBoxScene", _
+                | "PokePicWaitScene", _
+                | "YesNoScene", _
+                | "EvolutionScene", _ ->
+                    press "a"
+                | "NamingScene", _ ->
+                    if namingStep = 0 then
+                        namingStep <- 1
+                        press "a"
+                    elif namingStep = 1 then
+                        namingStep <- 2
+                        { Buttons.none with Start = true }
+                    else
+                        Buttons.none
+                | "BattleScene", Some battle when battle.MessageActive || not battle.PendingMessages.IsEmpty ->
+                    press "a"
+                | "BattleScene", Some battle when battle.Outcome.IsSome ->
+                    press "a"
+                | "BattleScene", Some battle ->
+                    match battle.Mode with
+                    | "CommandMenu" ->
+                        match commandChoice with
+                        | Some RunDown ->
+                            commandChoice <- Some RunRight
+                            directionButton Down
+                        | Some RunRight ->
+                            commandChoice <- Some RunSelect
+                            directionButton Right
+                        | Some RunSelect ->
+                            commandChoice <- Some RunDown
+                            press "a"
+                        | Some ItemDown ->
+                            if
+                                plan = SustainWithPotions
+                                || plan = SustainEconomically
+                                || plan = SmokeScreenThenEmberWithPotions
+                            then
+                               potionMove <- moveUses
+
+                            commandChoice <- Some ItemSelect
+                            directionButton Down
+                        | Some ItemSelect ->
+                            commandChoice <- None
+                            press "a"
+                        | Some PotionReturnDown ->
+                            commandChoice <- Some PotionReturnSelect
+                            directionButton Down
+                        | Some PotionReturnSelect ->
+                            commandChoice <- None
+                            returnToFight <- false
+                            press "a"
+                        | None -> press "a"
+                        | _ -> press "a"
+                    | "PackMenu" ->
+                        commandChoice <- None
+                        press "a"
+                    | "TargetMenu" ->
+                        potionUses <- potionUses + 1
+                        returnToFight <- true
+                        commandChoice <- None
+                        press "a"
+                    | "MoveMenu" ->
+                        match moveChoice with
+                        | Some ChooseFirstMove ->
+                            moveUses <- moveUses + 1
+                            moveChoice <- Some MoveToSecondMove
+                            press "a"
+                        | Some MoveToSecondMove ->
+                            moveChoice <-
+                                Some(
+                                    if
+                                       plan = SmokeScreenThenAttack
+                                       || plan = SmokeScreenOnceThenAttack
+                                    then
+                                       MoveToThirdMove
+                                    elif plan = EmberFirstMove then
+                                        MoveToThirdMove
+                                    elif plan = SmokeScreenThenEmberWithPotions && thirdMoveUses >= 3 then
+                                        MoveToThirdMove
+                                    elif plan = SmokeScreenThenEmberWithPotions then
+                                        MoveToThirdMove
+                                    else
+                                       ChooseSecondMove)
+                            directionButton Down
+                        | Some MoveToThirdMove ->
+                            moveChoice <-
+                                Some(
+                                    if
+                                        plan = EmberFirstMove
+                                        || (plan = SmokeScreenThenEmberWithPotions && thirdMoveUses >= 3)
+                                    then
+                                       MoveToFourthMove
+                                    else
+                                       ChooseThirdMove)
+                            directionButton Down
+                        | Some ChooseSecondMove ->
+                            if
+                                (plan = LeerThenAttack
+                                 || plan = SustainWithPotions
+                                 || plan = SustainEconomically)
+                                && secondMoveUses < 1
+                            then
+                                secondMoveUses <- secondMoveUses + 1
+                                moveChoice <- Some ChooseFirstMove
+                            else
+                                moveChoice <- Some MoveToSecondMove
+                            press "a"
+                        | Some ChooseThirdMove ->
+                            if
+                                plan = SmokeScreenThenAttack
+                                && thirdMoveUses < 3
+                            then
+                                thirdMoveUses <- thirdMoveUses + 1
+                                moveChoice <- Some ChooseFirstMove
+                             elif
+                                plan = SmokeScreenThenEmberWithPotions
+                                && thirdMoveUses < 3
+                             then
+                                thirdMoveUses <- thirdMoveUses + 1
+                                moveUses <- moveUses + 1
+                                moveChoice <- Some ChooseFirstMove
+                            elif
+                                plan = SmokeScreenOnceThenAttack
+                                && thirdMoveUses < 1
+                            then
+                                thirdMoveUses <- thirdMoveUses + 1
+                                moveChoice <- Some ChooseFirstMove
+                            else
+                                moveChoice <- Some MoveToSecondMove
+                            press "a"
+                        | Some MoveToFourthMove ->
+                            moveChoice <- Some ChooseFourthMove
+                            directionButton Down
+                        | Some ChooseFourthMove ->
+                            moveUses <- moveUses + 1
+                            moveChoice <- Some ChooseFirstMove
+                            press "a"
+                        | None ->
+                            moveChoice <- Some ChooseFirstMove
+                            press "a"
+                    | _ -> press "a"
+                | _ -> Buttons.none
+
+        driver.Tick buttons |> ignore
+
+        if
+            plan = SmokeScreenThenEmberWithPotions
+            && driver.Snapshot.Battle
+               |> Option.exists (fun battle -> battle.Outcome = Some "Lose")
+        then
+            invalidOp "SmokeScreenThenEmberWithPotions lost the real battle."
+
+    if not (predicate driver.Snapshot) then
+        let map = driver.Snapshot.Overworld |> Option.map _.MapId |> Option.defaultValue "<none>"
+        let battle =
+            driver.Snapshot.Battle
+            |> Option.map (fun current ->
+                let outcome = current.Outcome |> Option.defaultValue "-"
+                $"{current.Kind}:{current.Mode}:outcome={outcome}:message={current.MessageActive}:pending={current.PendingMessages.Length}")
+            |> Option.defaultValue "<none>"
+        let position =
+            driver.Snapshot.Overworld
+            |> Option.map (fun ow ->
+                let text = ow.LastTextLabel |> Option.defaultValue "-"
+                $"({ow.Player.CellX},{ow.Player.CellY}) scene={ow.SceneId} text={text}")
+            |> Option.defaultValue "<none>"
+        invalidOp
+            $"Real-input route did not reach its boundary within {maxFrames} frame(s): map={map}, position={position}, scene={driver.Snapshot.TopScene}, battle={battle}."
+
+let private settleRealInput (driver: GameDriver) plan maxFrames =
+    advanceRealInput
+        driver
+        plan
+        maxFrames
+        (fun snapshot ->
+            snapshot.TopScene = "OverworldScene"
+            && snapshot.Battle.IsNone
+            && snapshot.Overworld
+               |> Option.exists (fun ow -> ow.CanCapture && not ow.Player.Moving))
+
+let private tryBuildWalkPathCore
+    (content: Content)
+    (ow: RuntimeOverworldSnapshot)
+    (extraBlocked: Set<int * int>)
+    (allowStart: bool)
+    (isGoal: (int * int) -> bool)
+    =
+    let state =
+        OverworldState.loadByIdAt content ow.MapId ow.Player.CellX ow.Player.CellY ow.Player.Facing
+
+    let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+    let width = state.Map.Width * 2
+    let height = state.Map.Height * 2
+    let start = ow.Player.CellX, ow.Player.CellY
+
+    let blocked =
+        ow.Actors
+        |> List.filter _.Visible
+        |> List.map (fun actor -> actor.CellX, actor.CellY)
+        |> Set.ofList
+        |> Set.remove start
+        |> Set.union extraBlocked
+
+    let directions =
+        [ Left, -1, 0
+          Up, 0, -1
+          Down, 0, 1
+          Right, 1, 0 ]
+
+    let frontier = System.Collections.Generic.Queue<int * int>()
+    let parents = System.Collections.Generic.Dictionary<int * int, ((int * int) * Direction) option>()
+    let mutable goal = None
+
+    frontier.Enqueue(start)
+    parents.Add(start, None)
+
+    while frontier.Count > 0 && goal.IsNone do
+        let x, y = frontier.Dequeue()
+        let current = x, y
+
+        if (allowStart || current <> start) && isGoal current then
+            goal <- Some current
+        else
+            for direction, dx, dy in directions do
+                let nx, ny = x + dx, y + dy
+                let next = nx, ny
+
+                if
+                    nx >= 0
+                    && ny >= 0
+                    && nx < width
+                    && ny < height
+                    && not (parents.ContainsKey next)
+                    && walkable nx ny
+                    && not (Set.contains next blocked)
+                then
+                    parents.Add(next, Some(current, direction))
+                    frontier.Enqueue(next)
+
+    match goal with
+    | None -> None
+    | Some target ->
+        let rec rebuild node acc =
+            match parents.[node] with
+            | None -> acc
+            | Some(previous, direction) -> rebuild previous (direction :: acc)
+
+        Some(rebuild target [])
+
+let private tryBuildWalkPath
+    (content: Content)
+    (ow: RuntimeOverworldSnapshot)
+    (isGoal: (int * int) -> bool)
+    =
+    tryBuildWalkPathCore content ow Set.empty true isGoal
+
+let private tryBuildWalkPathAfterStart
+    (content: Content)
+    (ow: RuntimeOverworldSnapshot)
+    (isGoal: (int * int) -> bool)
+    =
+    tryBuildWalkPathCore content ow Set.empty false isGoal
+
+let private walkToGoalWithBlocked (driver: GameDriver) plan extraBlocked isGoal =
+    let content = Content()
+    let initialMap = owMap driver.Snapshot
+    let initialPosition =
+        let ow = owOf driver.Snapshot
+        ow.Player.CellX, ow.Player.CellY
+    let mutable steps = 0
+
+    settleRealInput driver plan 5000
+
+    let atGoal () =
+        let ow = owOf driver.Snapshot
+        isGoal (ow.Player.CellX, ow.Player.CellY)
+
+    let pathFromCurrent () =
+        let rec findPath attempts =
+            let ow = owOf driver.Snapshot
+
+            match tryBuildWalkPathCore content ow extraBlocked true isGoal with
+            | Some path -> path
+            | None when attempts < 512 ->
+                driver.Tick() |> ignore
+
+                if driver.Snapshot.Battle.IsSome then
+                    settleRealInput driver plan 20000
+
+                findPath (attempts + 1)
+            | None ->
+                let actors =
+                    ow.Actors
+                    |> List.filter _.Visible
+                    |> List.map (fun actor -> sprintf "%s@(%d,%d)" actor.Script actor.CellX actor.CellY)
+                    |> String.concat "; "
+
+                failwith
+                    $"Could not reach the requested cell on {ow.MapId} from ({ow.Player.CellX},{ow.Player.CellY}); visible actors [{actors}]."
+
+        findPath 0
+
+    let mutable path = pathFromCurrent ()
+
+    while (steps < 3000) && (owMap driver.Snapshot = initialMap) && not (atGoal ()) do
+        let ow = owOf driver.Snapshot
+
+        match path with
+        | nextStep :: _ ->
+            driver.Step nextStep
+            settleRealInput driver plan 20000
+
+            if owMap driver.Snapshot = initialMap then
+                path <- pathFromCurrent ()
+            else
+                path <- []
+        | [] -> path <- pathFromCurrent ()
+
+        steps <- steps + 1
+
+    let ow = owOf driver.Snapshot
+    if ow.MapId <> initialMap then
+        invalidOp
+            $"Walking to the requested cell unexpectedly left {initialMap} for {ow.MapId}; started at ({fst initialPosition},{snd initialPosition}), ended at ({ow.Player.CellX},{ow.Player.CellY})."
+
+    if not (atGoal ()) then
+        invalidOp $"Could not reach the requested cell on {initialMap}; stopped at ({ow.Player.CellX},{ow.Player.CellY})."
+
+let private walkToGoal (driver: GameDriver) plan isGoal =
+    walkToGoalWithBlocked driver plan Set.empty isGoal
+
+let private walkToCell (driver: GameDriver) plan target =
+    walkToGoal driver plan (fun cell -> cell = target)
+
+let private walkToCellAllowMapChange (driver: GameDriver) plan target =
+    let content = Content()
+    let initialMap = owMap driver.Snapshot
+    let mutable steps = 0
+
+    settleRealInput driver plan 5000
+    let atTarget () =
+        let ow = owOf driver.Snapshot
+        (ow.Player.CellX, ow.Player.CellY) = target
+
+    while steps < 3000 && owMap driver.Snapshot = initialMap && not (atTarget ()) do
+        let ow = owOf driver.Snapshot
+        let path =
+            tryBuildWalkPath content ow (fun cell -> cell = target)
+            |> Option.defaultWith (fun () ->
+                failwith
+                    $"Could not reach the requested cell on {initialMap} from ({ow.Player.CellX},{ow.Player.CellY}).")
+
+        match path with
+        | nextStep :: _ ->
+            driver.Step nextStep
+            settleRealInput driver plan 20000
+        | [] -> ()
+
+        steps <- steps + 1
+
+    if owMap driver.Snapshot = initialMap then
+        let ow = owOf driver.Snapshot
+
+        if (ow.Player.CellX, ow.Player.CellY) <> target then
+            failwith
+                $"Could not reach the requested cell on {initialMap}; stopped at ({ow.Player.CellX},{ow.Player.CellY})."
+
+let private walkToBattleOnce (driver: GameDriver) plan target =
+    let content = Content()
+    let mutable settledBattle = false
+    let positions = ResizeArray<string>()
+
+    let tryStep direction =
+        if not settledBattle then
+            let traceStart = driver.Trace.Length
+            driver.Step direction
+            let battleStarted = driver.Snapshot.Battle.IsSome
+            let player = (owOf driver.Snapshot).Player
+            positions.Add($"({player.CellX},{player.CellY})")
+            settleRealInput driver plan 20000
+
+            let battleStartedWhileSettling =
+                driver.Trace
+                |> Seq.skip traceStart
+                |> Seq.exists (fun tick -> tick.Snapshot.Battle.IsSome)
+
+            settledBattle <- settledBattle || battleStarted || battleStartedWhileSettling
+
+    let position () =
+        let player = (owOf driver.Snapshot).Player
+        player.CellX, player.CellY
+
+    let initialPosition = position ()
+    let mutable steps = 0
+    while steps < 3000 && not settledBattle && position () <> target do
+        let ow = owOf driver.Snapshot
+
+        match tryBuildWalkPath content ow (fun cell -> cell = target) with
+        | Some (nextStep :: _) -> tryStep nextStep
+        | Some [] -> ()
+        | None ->
+            failwith
+                $"Could not reach battle target on {ow.MapId} from ({ow.Player.CellX},{ow.Player.CellY})."
+
+        steps <- steps + 1
+
+    if not settledBattle && position () = target then
+        let triggerStart = position ()
+        let tryAwayAndBack away back =
+            if not settledBattle then
+                tryStep away
+                let mutable movedAway = position () <> triggerStart
+                let mutable attempts = 0
+
+                while not movedAway && attempts < 3 && not settledBattle do
+                    tryStep away
+                    movedAway <- position () <> triggerStart
+                    attempts <- attempts + 1
+
+                if movedAway && not settledBattle then
+                    let mutable returned = position () = triggerStart
+                    attempts <- 0
+
+                    while not returned && attempts < 4 && not settledBattle do
+                        tryStep back
+                        returned <- position () = triggerStart
+                        attempts <- attempts + 1
+
+        tryAwayAndBack Up Down
+        tryAwayAndBack Down Up
+
+    if not settledBattle then
+        let ow = owOf driver.Snapshot
+        let path = positions |> Seq.toList |> String.concat ";"
+        let actors =
+            ow.Actors
+            |> List.filter _.Visible
+            |> List.map (fun actor -> $"{actor.Script}@({actor.CellX},{actor.CellY})")
+            |> String.concat ";"
+        invalidOp
+            $"Expected a battle before reaching ({fst target},{snd target}) on {ow.MapId}; stopped at ({ow.Player.CellX},{ow.Player.CellY}) from ({fst initialPosition},{snd initialPosition}); facing={ow.Player.Facing}; scene={ow.SceneId}; capture={ow.CanCapture}; top={driver.Snapshot.TopScene}; actors={actors}; positions={path}."
+
+let private walkToCellAvoid (driver: GameDriver) plan forbidden target =
+    walkToGoalWithBlocked driver plan (Set.ofList forbidden) (fun cell -> cell = target)
+
+let private trainWildEncounters (driver: GameDriver) plan count =
+    let content = Content()
+    let startingMap = owMap driver.Snapshot
+    let stateFor (ow: RuntimeOverworldSnapshot) : OverworldState =
+        OverworldState.loadByIdAt content ow.MapId ow.Player.CellX ow.Player.CellY ow.Player.Facing
+
+    let encounterCell (state: OverworldState) (x, y) =
+        WildEncounter.isEncounterTile (MapConnections.collisionId state.Map state.Collision state.Neighbors x y)
+
+    let directions =
+        [ Left, -1, 0
+          Up, 0, -1
+          Down, 0, 1
+          Right, 1, 0 ]
+
+    let findPatrolPath (ow: RuntimeOverworldSnapshot) (state: OverworldState) =
+        let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+        let isGrass cell = encounterCell state cell
+        let start = ow.Player.CellX, ow.Player.CellY
+        let blocked =
+            ow.Actors
+            |> List.filter _.Visible
+            |> List.map (fun actor -> actor.CellX, actor.CellY)
+            |> Set.ofList
+            |> Set.remove start
+        let frontier = System.Collections.Generic.Queue<int * int>()
+        let parents = System.Collections.Generic.Dictionary<int * int, ((int * int) * Direction) option>()
+        let mutable target = None
+
+        frontier.Enqueue(start)
+        parents.Add(start, None)
+
+        while frontier.Count > 0 && target.IsNone do
+            let x, y = frontier.Dequeue()
+
+            if not (isGrass (x, y)) && walkable x y then
+                match
+                    directions
+                    |> List.tryFind (fun (_, dx, dy) ->
+                        let next = x + dx, y + dy
+                        walkable (fst next) (snd next)
+                        && not (Set.contains next blocked)
+                        && isGrass next)
+                with
+                | Some(direction, dx, dy) -> target <- Some((x, y), (x + dx, y + dy), direction)
+                | None -> ()
+
+            if target.IsNone then
+                for direction, dx, dy in directions do
+                    let next = x + dx, y + dy
+
+                    if
+                        walkable (fst next) (snd next)
+                        && not (Set.contains next blocked)
+                        && not (parents.ContainsKey next)
+                    then
+                        parents.Add(next, Some((x, y), direction))
+                        frontier.Enqueue(next)
+
+        match target with
+        | None -> None
+        | Some(edge, grass, direction) ->
+            let rec rebuild node path =
+                match parents.[node] with
+                | None -> path
+                | Some(previous, step) -> rebuild previous (step :: path)
+
+            Some(rebuild edge [], edge, grass, direction)
+
+    let tryPatrolStep direction expected =
+        let before = owOf driver.Snapshot
+        driver.Step direction
+
+        if driver.Snapshot.Battle.IsSome then
+            settleRealInput driver plan 5000
+            false
+        else
+            let after = owOf driver.Snapshot
+
+            if (after.Player.CellX, after.Player.CellY) = expected then
+                true
+            elif before.Player.Facing <> direction then
+                driver.Step direction
+                if driver.Snapshot.Battle.IsSome then
+                    settleRealInput driver plan 5000
+                    false
+                else
+                    let moved = owOf driver.Snapshot
+                    (moved.Player.CellX, moved.Player.CellY) = expected
+            else
+                false
+
+    let walkPath path =
+        let mutable moving = true
+
+        for direction in path do
+            if moving then
+                let before = owOf driver.Snapshot
+                driver.Step direction
+
+                if driver.Snapshot.Battle.IsSome then
+                    settleRealInput driver plan 5000
+                    moving <- false
+                elif before.Player.Facing <> direction then
+                    let afterTurn = owOf driver.Snapshot
+
+                    if afterTurn.Player.CellX = before.Player.CellX && afterTurn.Player.CellY = before.Player.CellY then
+                        driver.Step direction
+
+                        if driver.Snapshot.Battle.IsSome then
+                            settleRealInput driver plan 5000
+                            moving <- false
+
+        moving
+
+    let mutable encounters = 0
+    let mutable attempts = 0
+    let maxAttempts = max 1 (count * 100)
+
+    while encounters < count && attempts < maxAttempts do
+        attempts <- attempts + 1
+        let ow = owOf driver.Snapshot
+
+        Assert.Equal(startingMap, ow.MapId)
+        let state = stateFor ow
+        let pathToPatrol =
+            findPatrolPath ow state
+            |> Option.defaultWith (fun () ->
+                failwith $"Could not reach a reachable encounter patrol on {ow.MapId} from ({ow.Player.CellX},{ow.Player.CellY}).")
+
+        let pathToEdge, edge, grass, direction = pathToPatrol
+
+        if not (walkPath pathToEdge) then
+            encounters <- encounters + 1
+        else
+            let current = owOf driver.Snapshot
+
+            if (current.Player.CellX, current.Player.CellY) <> edge then
+                ()
+            else
+                let backDirection = directions |> List.find (fun (_, dx, dy) -> fst grass + dx = fst edge && snd grass + dy = snd edge) |> fun (d, _, _) -> d
+                let mutable patrol = 0
+                let mutable finished = false
+
+                while patrol < 20 && encounters < count && not finished do
+                    patrol <- patrol + 1
+                    let entered = tryPatrolStep direction grass
+
+                    if not entered then
+                        encounters <- encounters + 1
+                        finished <- true
+                    elif not (tryPatrolStep backDirection edge) then
+                        encounters <- encounters + 1
+                        finished <- true
+
+        if owMap driver.Snapshot <> startingMap then
+            failwith $"Wild training unexpectedly left {startingMap} for {owMap driver.Snapshot}."
+
+    if encounters < count then
+        let ow = owOf driver.Snapshot
+        failwith
+            $"Wild training did not reach {count} encounter(s) within {maxAttempts} attempt(s) on {ow.MapId} at ({ow.Player.CellX},{ow.Player.CellY}); completed={encounters}."
+
+let private fleeWildEncounterReal (driver: GameDriver) =
+    advanceRuntimeUntil
+        driver
+        3000
+        (fun snapshot ->
+            match snapshot.Battle with
+            | Some battle -> battle.Mode = "CommandMenu" && not battle.MessageActive
+            | None -> false)
+
+    driver.Press(directionButton Down)
+    driver.Press(directionButton Right)
+    driver.Press(press "a")
+
+    advanceRuntimeUntil driver 3000 (fun snapshot -> snapshot.Battle.IsNone && (owOf snapshot).CanCapture)
+
+let private walkRoute29ToCherrygrove (driver: GameDriver) =
+    let content = Content()
+    let mutable steps = 0
+
+    while owMap driver.Snapshot = "Route29" && steps < 400 do
+        let ow = owOf driver.Snapshot
+
+        let path =
+            tryBuildWalkPath content ow (fun cell -> cell = (3, 6))
+            |> Option.defaultWith (fun () ->
+                failwith
+                    $"Could not build the Route29 path from ({ow.Player.CellX},{ow.Player.CellY}) to (3,6).")
+
+        match path with
+        | nextStep :: _ ->
+            driver.Step nextStep
+
+            if driver.Snapshot.Battle.IsSome then
+                fleeWildEncounterReal driver
+        | [] -> ()
+
+        steps <- steps + 1
+
+    if owMap driver.Snapshot = "Route29" then
+        let mutable exits = 0
+
+        while exits < 20 && owMap driver.Snapshot = "Route29" do
+            driver.Step Left
+
+            if driver.Snapshot.Battle.IsSome then
+                fleeWildEncounterReal driver
+
+            exits <- exits + 1
+
+let private stepUntilMap (driver: GameDriver) plan direction destination maxSteps =
+    let mutable steps = 0
+
+    while steps < maxSteps && owMap driver.Snapshot <> destination do
+        driver.Step direction
+        settleRealInput driver plan 20000
+        steps <- steps + 1
+
+    if owMap driver.Snapshot <> destination then
+        let ow = owOf driver.Snapshot
+        invalidOp
+            $"Expected {destination} after walking {direction}, got {ow.MapId} at ({ow.Player.CellX},{ow.Player.CellY})."
+
+let private exitToMap (driver: GameDriver) plan destination =
+    let content = Content()
+    let sourceMap = owMap driver.Snapshot
+    let initial =
+        OverworldState.loadByIdAt
+            content
+            sourceMap
+            (owOf driver.Snapshot).Player.CellX
+            (owOf driver.Snapshot).Player.CellY
+            (owOf driver.Snapshot).Player.Facing
+
+    let neighbor =
+        initial.Neighbors
+        |> List.tryFind (fun neighbor ->
+            System.String.Equals(
+                neighbor.Placement.Conn.Map,
+                destination,
+                System.StringComparison.OrdinalIgnoreCase))
+        |> Option.defaultWith (fun () ->
+            let neighbors =
+                initial.Neighbors
+                |> List.map (fun neighbor -> neighbor.Placement.Conn.Map)
+                |> String.concat ", "
+
+            failwith $"Map {sourceMap} has no connection to {destination}; available connections: [{neighbors}].")
+
+    let direction =
+        match neighbor.Placement.Conn.Direction.ToLowerInvariant() with
+        | "north" -> Up
+        | "south" -> Down
+        | "west" -> Left
+        | "east" -> Right
+        | other -> failwith $"Unsupported map connection direction '{other}'."
+
+    let width = initial.Map.Width * 2
+    let height = initial.Map.Height * 2
+    let placement = neighbor.Placement
+    let walkable =
+        MapConnections.cellWalkable
+            initial.Map
+            initial.Collision
+            initial.Neighbors
+
+    let onEdge (x, y) =
+        let boundary =
+            match direction with
+            | Up -> y = 0
+            | Down -> y = height - 1
+            | Left -> x = 0
+            | Right -> x = width - 1
+
+        let outside =
+            match direction with
+            | Up -> x, y - 1
+            | Down -> x, y + 1
+            | Left -> x - 1, y
+            | Right -> x + 1, y
+
+        boundary
+        && MapConnections.localCell placement (fst outside) (snd outside) |> Option.isSome
+        && walkable (fst outside) (snd outside)
+
+    let mutable steps = 0
+
+    while steps < 5000 && owMap driver.Snapshot <> destination do
+        let ow = owOf driver.Snapshot
+
+        let mutable path = tryBuildWalkPath content ow onEdge
+
+        if path.IsNone && sourceMap = "Route30" && destination = "Route31" then
+            let mutable waitFrames = 0
+
+            while path.IsNone && waitFrames < 2048 do
+                driver.Tick() |> ignore
+
+                if driver.Snapshot.Battle.IsSome then
+                    settleRealInput driver plan 20000
+
+                if owMap driver.Snapshot = sourceMap then
+                    let current = owOf driver.Snapshot
+                    path <- tryBuildWalkPath content current onEdge
+
+                waitFrames <- waitFrames + 1
+
+        let path =
+            path
+            |> Option.defaultWith (fun () ->
+                let pathWithoutActors =
+                    tryBuildWalkPath content { ow with Actors = [] } onEdge
+                    |> Option.isSome
+                let rows =
+                    [ for y in max 0 (height - 5) .. height - 1 do
+                          let cells =
+                              [ for x in 0 .. width - 1 do
+                                    if
+                                        MapConnections.cellWalkable
+                                            initial.Map
+                                            initial.Collision
+                                            initial.Neighbors
+                                            x
+                                            y
+                                    then
+                                        string x ]
+                              |> String.concat ","
+                          yield $"y={y} [{cells}]" ]
+                    |> String.concat " "
+                let actors =
+                    ow.Actors
+                    |> List.filter _.Visible
+                    |> List.map (fun actor -> sprintf "%s@(%d,%d)" actor.Script actor.CellX actor.CellY)
+                    |> String.concat "; "
+                let singleBlockers =
+                    ow.Actors
+                    |> List.filter _.Visible
+                    |> List.choose (fun actor ->
+                        let remaining =
+                            ow.Actors
+                            |> List.filter (fun other -> other.Index <> actor.Index)
+
+                        if tryBuildWalkPath content { ow with Actors = remaining } onEdge |> Option.isSome then
+                            Some(sprintf "%s@(%d,%d)" actor.Script actor.CellX actor.CellY)
+                        else
+                            None)
+                    |> String.concat "; "
+
+                failwith
+                    $"Could not reach the {neighbor.Placement.Conn.Direction} edge from {sourceMap} toward {destination} at ({ow.Player.CellX},{ow.Player.CellY}); pathWithoutActors={pathWithoutActors}; singleBlockers=[{singleBlockers}]. actors=[{actors}] {rows}")
+
+        match path with
+        | nextStep :: _ ->
+            driver.Step nextStep
+            settleRealInput driver plan 20000
+        | [] ->
+            driver.Step direction
+            settleRealInput driver plan 20000
+
+        steps <- steps + 1
+
+    if owMap driver.Snapshot <> destination then
+        let ow = owOf driver.Snapshot
+        let rows =
+            [ for y in max 0 (height - 5) .. height - 1 do
+                  let cells =
+                      [ for x in 0 .. width - 1 do
+                            if MapConnections.cellWalkable initial.Map initial.Collision initial.Neighbors x y then
+                                string x ]
+                      |> String.concat ","
+                  yield $"y={y} [{cells}]" ]
+            |> String.concat " "
+
+        invalidOp
+            $"Expected {destination} after leaving {sourceMap}, got {owMap driver.Snapshot} at ({ow.Player.CellX},{ow.Player.CellY}) facing {ow.Player.Facing}. {rows}"
+
+let private walkToMapWarp (driver: GameDriver) plan destination =
+    let content = Content()
+    let sourceMap = owMap driver.Snapshot
+    let ow = owOf driver.Snapshot
+    let destinationRuntime = Maps.runtimeName destination |> Option.defaultValue destination
+    let state =
+        OverworldState.loadByIdAt content sourceMap ow.Player.CellX ow.Player.CellY ow.Player.Facing
+
+    let warp =
+        state.Events.Warps
+        |> Array.tryFind (fun candidate ->
+            let candidateRuntime = Maps.runtimeName candidate.DestMap |> Option.defaultValue candidate.DestMap
+            System.String.Equals(candidateRuntime, destinationRuntime, System.StringComparison.OrdinalIgnoreCase))
+        |> Option.defaultWith (fun () ->
+            let available = state.Events.Warps |> Array.map _.DestMap |> String.concat ", "
+            failwith $"Map {sourceMap} has no warp to {destination}; available destinations: {available}.")
+
+    let mutable steps = 0
+    let mutable lastDirection = None
+
+    while steps < 5000 && owMap driver.Snapshot = sourceMap do
+        let current = owOf driver.Snapshot
+        let currentCell = current.Player.CellX, current.Player.CellY
+
+        let direction =
+            if currentCell = (warp.X, warp.Y) then
+                lastDirection
+                |> Option.defaultWith (fun () ->
+                    failwith $"Arrived on the {destination} warp without a movement direction.")
+            else
+                tryBuildWalkPath content current (fun cell -> cell = (warp.X, warp.Y))
+                |> Option.bind List.tryHead
+                |> Option.defaultWith (fun () ->
+                    failwith
+                        $"Could not reach the {destination} warp on {sourceMap} from ({current.Player.CellX},{current.Player.CellY}).")
+
+        lastDirection <- Some direction
+        driver.Step direction
+        settleRealInput driver plan 20000
+        steps <- steps + 1
+
+    if not (System.String.Equals(owMap driver.Snapshot, destinationRuntime, System.StringComparison.OrdinalIgnoreCase)) then
+        let current = owOf driver.Snapshot
+        invalidOp
+            $"Expected {destination} after stepping to its warp on {sourceMap}, got {owMap driver.Snapshot} at ({current.Player.CellX},{current.Player.CellY}), target=({warp.X},{warp.Y})."
+
+let private talkToTrainer (driver: GameDriver) plan stand facing =
+    let map = owMap driver.Snapshot
+    let battlesBefore =
+        driver.Trace
+        |> List.choose (fun tick -> tick.Snapshot.Battle)
+        |> List.length
+
+    walkToCell driver plan stand
+    driver.Step facing
+    settleRealInput driver plan 20000
+
+    let battlesAfter =
+        driver.Trace
+        |> List.choose (fun tick -> tick.Snapshot.Battle)
+        |> List.length
+
+    if
+        owMap driver.Snapshot = map
+        && driver.Snapshot.TopScene = "OverworldScene"
+        && battlesAfter = battlesBefore
+    then
+        driver.Talk()
+        settleRealInput driver plan 10000
+
+let private talkToTrainerWithTravelPlan (driver: GameDriver) travelPlan battlePlan stand facing =
+    let map = owMap driver.Snapshot
+    walkToCell driver travelPlan stand
+    driver.Step facing
+    settleRealInput driver travelPlan 20000
+
+    if
+        owMap driver.Snapshot = map
+        && driver.Snapshot.TopScene = "OverworldScene"
+        && driver.Snapshot.Battle.IsNone
+    then
+        driver.Talk()
+        settleRealInput driver battlePlan 20000
+
+let private talkToTrainerAllowMapChange (driver: GameDriver) plan stand facing =
+    let map = owMap driver.Snapshot
+    walkToCellAllowMapChange driver plan stand
+
+    if owMap driver.Snapshot = map then
+        driver.Step facing
+        settleRealInput driver plan 20000
+
+        if
+            owMap driver.Snapshot = map
+            && driver.Snapshot.TopScene = "OverworldScene"
+            && driver.Snapshot.Battle.IsNone
+        then
+            driver.Talk()
+            settleRealInput driver plan 20000
+
+let private healAtPokemonCenter (driver: GameDriver) plan centerMap cityMap =
+    let cityBefore = owOf driver.Snapshot
+
+    if owMap driver.Snapshot = cityMap && cityBefore.Player.CellY < 0 then
+        failwith $"Cannot enter {centerMap} from invalid {cityMap} position ({cityBefore.Player.CellX},{cityBefore.Player.CellY})."
+
+    walkToMapWarp driver plan centerMap
+
+    let content = Content()
+    let ow = owOf driver.Snapshot
+    let centerRuntime = ow.MapId
+    let state =
+        OverworldState.loadByIdAt content centerRuntime ow.Player.CellX ow.Player.CellY ow.Player.Facing
+
+    let nurse =
+        state.Events.Objects
+        |> Array.tryFind (fun actor -> actor.Script.ToUpperInvariant().Contains("NURSE"))
+        |> Option.defaultWith (fun () -> failwith $"Could not find a nurse on {centerMap}.")
+
+    let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+
+    let stand, facing =
+        [ (nurse.X, nurse.Y + 2), Up
+          (nurse.X, nurse.Y + 1), Up
+          (nurse.X, nurse.Y - 1), Down
+          (nurse.X, nurse.Y - 2), Down
+          (nurse.X + 1, nurse.Y), Left
+          (nurse.X + 2, nurse.Y), Left
+          (nurse.X - 1, nurse.Y), Right
+          (nurse.X - 2, nurse.Y), Right ]
+        |> List.tryPick (fun ((x, y), direction) ->
+            if
+                x >= 0
+                && y >= 0
+                && x < state.Map.Width * 2
+                && y < state.Map.Height * 2
+                && walkable x y
+            then
+                tryBuildWalkPath content ow (fun cell -> cell = (x, y))
+                |> Option.map (fun _ -> (x, y), direction)
+            else
+                None)
+        |> Option.defaultWith (fun () -> failwith $"Could not find a walkable nurse position on {centerMap}.")
+
+    talkToTrainer driver plan stand facing
+    Assert.Equal(centerRuntime, owMap driver.Snapshot)
+    walkToCellAvoid driver plan [ (3, 7) ] (4, 6)
+    stepUntilMap driver plan Down cityMap 20
+
+    let city = owOf driver.Snapshot
+
+    if city.Player.CellY < 0 then
+        failwith $"Exited {centerMap} to invalid {cityMap} position ({city.Player.CellX},{city.Player.CellY})."
+
+let private advanceMenuSceneUntil (driver: GameDriver) maxFrames predicate =
+    let mutable frame = 0
+
+    while frame < maxFrames && not (predicate driver.Snapshot) do
+        frame <- frame + 1
+
+        let buttons =
+            if
+                frame % 2 = 0
+                && (driver.Snapshot.TopScene = "TextBoxScene"
+                    || driver.Snapshot.TopScene = "YesNoScene")
+            then
+                press "a"
+            else
+                Buttons.none
+
+        driver.Tick buttons |> ignore
+
+    if not (predicate driver.Snapshot) then
+        let stack = String.concat "/" driver.Snapshot.SceneStack
+
+        invalidOp
+            $"Menu scene did not reach its expected boundary within {maxFrames} frame(s); top={driver.Snapshot.TopScene}; stack={stack}."
+
+let private buyPotionsAtMart (driver: GameDriver) plan martMap clerkStand clerkFacing quantity =
+    walkToMapWarp driver plan martMap
+    let content = Content()
+    let ow = owOf driver.Snapshot
+    let state =
+        OverworldState.loadByIdAt content ow.MapId ow.Player.CellX ow.Player.CellY ow.Player.Facing
+
+    let clerk =
+        state.Events.Objects
+        |> Array.tryFind (fun actor -> actor.Script.ToUpperInvariant().Contains("CLERK"))
+        |> Option.defaultWith (fun () -> failwith $"Could not find a clerk on {martMap}.")
+
+    let walkable = MapConnections.cellWalkable state.Map state.Collision state.Neighbors
+    let candidates =
+        [ (clerkStand, clerkFacing)
+          (clerk.X, clerk.Y + 1), Up
+          (clerk.X, clerk.Y + 2), Up
+          (clerk.X, clerk.Y - 1), Down
+          (clerk.X, clerk.Y - 2), Down
+          (clerk.X + 1, clerk.Y), Left
+          (clerk.X + 2, clerk.Y), Left
+          (clerk.X - 1, clerk.Y), Right
+          (clerk.X - 2, clerk.Y), Right ]
+
+    let stand, facing =
+        candidates
+        |> List.tryPick (fun ((x, y), direction) ->
+            if
+                x >= 0
+                && y >= 0
+                && x < state.Map.Width * 2
+                && y < state.Map.Height * 2
+                && walkable x y
+            then
+                tryBuildWalkPath content ow (fun cell -> cell = (x, y))
+                |> Option.map (fun _ -> (x, y), direction)
+            else
+                None)
+        |> Option.defaultWith (fun () -> failwith $"Could not find a walkable clerk position on {martMap}.")
+
+    walkToCell driver plan stand
+    driver.Step facing
+    driver.Talk()
+    advanceMenuSceneUntil driver 10000 (fun snapshot -> snapshot.TopScene = "MartScene")
+
+    for _ in 1 .. quantity do
+        driver.Press(press "a")
+        driver.Press(press "a")
+        driver.Press(press "a")
+        advanceMenuSceneUntil driver 5000 (fun snapshot -> snapshot.TopScene = "YesNoScene")
+        driver.Press(press "a")
+        advanceMenuSceneUntil driver 10000 (fun snapshot -> snapshot.TopScene = "MartScene")
+        driver.Press(press "a")
+
+    driver.Press(press "b")
+    advanceMenuSceneUntil driver 10000 (fun snapshot -> snapshot.TopScene = "OverworldScene")
+
+    let potions =
+        (owOf driver.Snapshot).Player.Bag
+        |> Map.tryFind "POTION"
+        |> Option.defaultValue 0
+
+    Assert.True(potions >= quantity, $"Expected at least {quantity} real Potions after shopping, found {potions}.")
+
+let private buyPotionsAtCherrygroveMart (driver: GameDriver) plan quantity =
+    buyPotionsAtMart driver plan "CherrygroveMart" (3, 3) Left quantity
+
+let private assertTraceInvariants (driver: GameDriver) =
+    driver.Trace |> List.iter (fun tick -> assertHold core tick.Snapshot)
+
+let private setFastTextSpeed (driver: GameDriver) =
+    driver.Press({ Buttons.none with Start = true })
+    driver.RunUntil((fun snapshot -> snapshot.TopScene = "StartMenuScene"), 100) |> ignore
+
+    for _ in 1 .. 5 do
+        driver.Press(directionButton Down)
+
+    driver.Press(press "a")
+    driver.RunUntil((fun snapshot -> snapshot.TopScene = "OptionsScene"), 100) |> ignore
+    driver.Press(directionButton Right)
+    driver.Press(press "b")
+    driver.RunUntil((fun snapshot -> snapshot.TopScene = "StartMenuScene"), 100) |> ignore
+    driver.Press(press "b")
+    driver.RunUntil((fun snapshot -> snapshot.TopScene = "OverworldScene"), 100) |> ignore
+
 let private earnElmStarterFromFreshSave (driver: GameDriver) =
     // PlayersHouse2F -> PlayersHouse1F via the bedroom stair warp.
     [ Right; Right; Right; Up; Up; Up; Up ]
@@ -463,6 +1729,58 @@ let private earnElmStarterFromFreshSave (driver: GameDriver) =
         "Fresh-save no-shortcuts route should reach Elm starter acquisition using only StartNewGame and real inputs."
 
     cyndaquilDex
+
+let private replayA1ToCherrygrove (route: RouteRun) =
+    let driver = route.Driver
+    let cyndaquilDex = earnElmStarterFromFreshSave driver
+    let starterParty = (owOf driver.Snapshot).Player.PartySpecies
+    let starterCheckpoint = route.Capture("elm-starter")
+
+    Assert.Equal<int list>([ cyndaquilDex ], starterParty)
+    Assert.True(System.IO.File.Exists(starterCheckpoint.SavePath))
+
+    [ Down; Down; Left; Down; Down; Down ]
+    |> List.iter (fun direction -> driver.Step direction)
+
+    advanceFreshSaveRouteUntil
+        driver
+        3000
+        (fun snapshot ->
+            match snapshot.Overworld with
+            | Some ow -> ow.CanCapture && ow.LastTextLabel = Some "ElmsAidePotionText"
+            | None -> false)
+
+    [ Down; Down; Down ]
+    |> List.iter (fun direction -> driver.Step direction)
+
+    advanceFreshSaveRouteUntil
+        driver
+        1000
+        (fun snapshot ->
+            match snapshot.Overworld with
+            | Some ow -> ow.MapId = "NewBarkTown" && ow.CanCapture
+            | None -> false)
+
+    // The New Bark teacher leaves a narrow real path around the south side of town.
+    [ Down; Down; Down; Down; Right; Right; Right; Down; Down; Down
+      Left; Left; Left; Left; Left; Left; Left; Left; Left; Left; Left; Left ]
+    |> List.iter (fun direction ->
+        if owMap driver.Snapshot = "NewBarkTown" then
+            driver.Step direction
+            settleRealInput driver AttackFirstMove 20000)
+
+    if owMap driver.Snapshot <> "Route29" then
+        exitToMap driver FleeWildEncounters "Route29"
+
+    walkRoute29ToCherrygrove driver
+
+    let cherrygrove = owOf driver.Snapshot
+    Assert.Equal("CherrygroveCity", cherrygrove.MapId)
+    Assert.Equal<int list>(starterParty, cherrygrove.Player.PartySpecies)
+
+    let cherrygroveCheckpoint = route.Capture("cherrygrove")
+    assertTraceInvariants driver
+    cherrygroveCheckpoint
 
 [<Fact>]
 let ``Fresh-save no-shortcuts route reaches Elm starter acquisition`` () =
@@ -1268,6 +2586,37 @@ let ``A5 Bugsy gives HiveBadge and TM49 after battle`` () =
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
 
 [<Fact>]
+let ``Cherrygrove rival south coord event fires at scene 1`` () =
+    let driver = GameDriver()
+    driver.Apply(StartNewGame "A")
+    driver.Apply(SetScene("CHERRYGROVE_CITY", 1))
+    driver.Apply(SetEvent("EVENT_GOT_A_POKEMON_FROM_ELM", true))
+    driver.Apply(SetEvent("EVENT_GOT_CYNDAQUIL_FROM_ELM", true))
+    // Enter north of the south-approach trigger and take the real step onto it.
+    driver.Apply(Warp("CherrygroveCity", 33, 6, Some Down))
+
+    driver.Step Down
+
+    let mutable sawBattle = false
+    let mutable sawText = false
+    let mutable frame = 0
+    while frame < 2000 && not sawBattle do
+        frame <- frame + 1
+        let buttons =
+            match driver.Snapshot.TopScene with
+            | "TextBoxScene" ->
+                sawText <- true
+                if frame % 2 = 0 then press "a" else Buttons.none
+            | "BattleScene" ->
+                sawBattle <- true
+                Buttons.none
+            | _ -> Buttons.none
+        driver.Tick buttons |> ignore
+
+    Assert.True(sawText, "Cherrygrove rival should show text before battle at (33,7)")
+    Assert.True(sawBattle, "Cherrygrove south rival coord should start a battle")
+
+[<Fact>]
 let ``A5 Azalea rival coord event fires at scene 1`` () =
     let driver = GameDriver()
     driver.Apply(StartNewGame "A")
@@ -1302,6 +2651,99 @@ let ``A5 Azalea rival coord event fires at scene 1`` () =
     Assert.True(sawText, "Rival should show text before battle at (5,10)")
     Assert.True(sawBattle, "Rival encounter should start a battle")
     driver.Trace |> List.iter (fun t -> assertHold core t.Snapshot)
+
+// ---------------------------------------------------------------------------
+// A2 — Cherrygrove → Violet City
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``A2 route Cherrygrove to Violet with egg return`` () =
+    let checkpointRoot =
+        System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "pokegold-a2-a5-route-" + System.Guid.NewGuid().ToString("N"))
+
+    try
+        let store = CheckpointStore(checkpointRoot)
+
+        use a1Route = store.StartNewGame("A")
+        setFastTextSpeed a1Route.Driver
+        let cherrygroveCheckpoint = replayA1ToCherrygrove a1Route
+        store.VerifyChain([ "elm-starter"; "cherrygrove" ]) |> ignore
+
+        use a2Route = store.Resume(cherrygroveCheckpoint.Name)
+        let a2 = a2Route.Driver
+        let travelPlan = FleeWildEncounters
+
+        buyPotionsAtCherrygroveMart a2 travelPlan 10
+        stepUntilMap a2 travelPlan Down "CherrygroveCity" 20
+
+        walkToCell a2 travelPlan (16, 4)
+        stepUntilMap a2 travelPlan Up "Route30" 20
+        trainWildEncounters a2 AttackFirstMove 2
+        walkToCell a2 travelPlan (17, 6)
+        stepUntilMap a2 travelPlan Up "MrPokemonsHouse" 20
+
+        let mrPokemon = owOf a2.Snapshot
+        Assert.Contains("EVENT_GOT_MYSTERY_EGG_FROM_MR_POKEMON", mrPokemon.Events)
+
+        walkToCell a2 travelPlan (3, 6)
+        stepUntilMap a2 travelPlan Down "Route30" 20
+        walkToCell a2 travelPlan (6, 52)
+        stepUntilMap a2 travelPlan Down "CherrygroveCity" 20
+        healAtPokemonCenter a2 travelPlan "CherrygrovePokeCenter1F" "CherrygroveCity"
+
+        Assert.Equal(1, (owOf a2.Snapshot).SceneId)
+        walkToBattleOnce a2 SustainEconomically (33, 7)
+
+        let cherrygroveRivalWon =
+            a2.Trace
+            |> List.exists (fun tick ->
+                tick.Snapshot.Battle
+                |> Option.exists (fun battle ->
+                    battle.Kind.StartsWith("Trainer:RIVAL1")
+                    && battle.Outcome = Some "Win"))
+
+        Assert.True(cherrygroveRivalWon, "The Cherrygrove rival battle should be won through real move input.")
+
+        // Returning the egg to Elm is the real story gate that clears the
+        // Route30 opening battle objects before the northbound leg.
+        walkToCell a2 FleeWildEncounters (39, 7)
+        stepUntilMap a2 FleeWildEncounters Right "Route29" 2
+        walkToCell a2 FleeWildEncounters (59, 8)
+        stepUntilMap a2 FleeWildEncounters Right "NewBarkTown" 2
+        walkToMapWarp a2 FleeWildEncounters "ElmsLab"
+        talkToTrainer a2 FleeWildEncounters (5, 4) Up
+        // Approach Elm from the side so both scripted jumps stay clear of the
+        // player's cell while the real handoff dialogue runs.
+        talkToTrainer a2 FleeWildEncounters (4, 2) Right
+        Assert.Contains("EVENT_GAVE_MYSTERY_EGG_TO_ELM", (owOf a2.Snapshot).Events)
+        talkToTrainer a2 FleeWildEncounters (2, 2) Up
+        walkToMapWarp a2 FleeWildEncounters "NewBarkTown"
+        walkToCell a2 FleeWildEncounters (0, 8)
+        stepUntilMap a2 FleeWildEncounters Left "Route29" 2
+        walkToCell a2 FleeWildEncounters (0, 7)
+        stepUntilMap a2 FleeWildEncounters Left "CherrygroveCity" 2
+        healAtPokemonCenter a2 travelPlan "CherrygrovePokeCenter1F" "CherrygroveCity"
+        walkToCell a2 SustainEconomically (16, 4)
+        stepUntilMap a2 SustainEconomically Up "Route30" 20
+        a2.Step Up
+        settleRealInput a2 SustainEconomically 20000
+        walkToCellAvoid a2 SustainEconomically [ for x in 0 .. 19 -> (x, 53) ] (6, 1)
+        stepUntilMap a2 SustainEconomically Up "Route31" 100
+        walkToCell a2 SustainEconomically (5, 7)
+        stepUntilMap a2 travelPlan Left "Route31VioletGate" 2
+        stepUntilMap a2 travelPlan Left "VioletCity" 20
+        let violet = owOf a2.Snapshot
+        Assert.Equal("VioletCity", violet.MapId)
+        healAtPokemonCenter a2 travelPlan "VioletPokecenter1F" "VioletCity"
+        let violetCheckpoint = a2Route.Capture("violet-city")
+        assertTraceInvariants a2
+        store.VerifyChain([ "elm-starter"; "cherrygrove"; "violet-city" ]) |> ignore
+
+    finally
+        if System.IO.Directory.Exists(checkpointRoot) then
+            System.IO.Directory.Delete(checkpointRoot, true)
 
 // ---------------------------------------------------------------------------
 // A6 — Ilex Forest: Farfetch'd chase; HM01; Cut tree gate on Route 34 side
