@@ -42,7 +42,9 @@ Named branch tests cover locked-action player move history, switch candidate mas
 categories, Perish/tier probabilities, both good-weather type branches, and X-item rolls. A
 legal-party component acceptance matrix covers wild,
 ordinary trainer, gym, Elite Four, and Red battle paths; extending the continuous Red route
-remains the next critical path.
+remains the next critical path. The passing fresh-save continuous runtime proof now reaches
+an earned Violet City checkpoint through A2; a focused rival-loss regression remains before
+A2 closes, and A3-A5 remain integration work.
 
 ---
 
